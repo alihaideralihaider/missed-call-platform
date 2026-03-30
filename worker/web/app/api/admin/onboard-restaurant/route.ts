@@ -26,6 +26,22 @@ export async function POST(req: Request) {
     const contactPhone = (body.contactPhone || "").trim();
     const contactEmail = (body.contactEmail || "").trim();
 
+    // ✅ ADD THESE
+    const salesTaxRateRaw = body.salesTaxRate;
+    const taxMode = (body.taxMode || "exclusive").trim();
+    const taxLabel = (body.taxLabel || "Sales Tax").trim();
+
+    let salesTaxRate = Number(salesTaxRateRaw);
+
+    if (!Number.isFinite(salesTaxRate)) {
+      salesTaxRate = 0;
+    }
+
+    // normalize percent vs decimal
+    if (salesTaxRate > 1) {
+      salesTaxRate = salesTaxRate / 100;
+    }
+
     if (!name) {
       return NextResponse.json(
         { error: "Restaurant name is required" },
@@ -37,15 +53,18 @@ export async function POST(req: Request) {
       slug = slugify(name);
     }
 
-    const { data: existingRestaurant, error: existingRestaurantError } = await supabase
-      .schema("food_ordering")
-      .from("restaurants")
-      .select("id")
-      .eq("slug", slug)
-      .maybeSingle();
+    const { data: existingRestaurant, error: existingRestaurantError } =
+      await supabase
+        .schema("food_ordering")
+        .from("restaurants")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle();
 
     if (existingRestaurantError) {
-      throw new Error(`Restaurant lookup failed: ${existingRestaurantError.message}`);
+      throw new Error(
+        `Restaurant lookup failed: ${existingRestaurantError.message}`
+      );
     }
 
     if (existingRestaurant) {
@@ -73,7 +92,26 @@ export async function POST(req: Request) {
 
     if (restaurantError || !restaurant) {
       throw new Error(
-        `Failed to create restaurant: ${restaurantError?.message ?? "unknown error"}`
+        `Failed to create restaurant: ${
+          restaurantError?.message ?? "unknown error"
+        }`
+      );
+    }
+
+    // ✅ ADD THIS BLOCK (core fix)
+    const { error: taxError } = await supabase
+      .schema("food_ordering")
+      .from("tax_settings")
+      .upsert({
+        restaurant_id: restaurant.id,
+        sales_tax_rate: salesTaxRate,
+        tax_mode: taxMode,
+        tax_label: taxLabel,
+      });
+
+    if (taxError) {
+      throw new Error(
+        `Failed to create tax settings: ${taxError.message}`
       );
     }
 
@@ -105,7 +143,9 @@ export async function POST(req: Request) {
       .insert(categoryPayload);
 
     if (categoryError) {
-      throw new Error(`Failed to create categories: ${categoryError.message}`);
+      throw new Error(
+        `Failed to create categories: ${categoryError.message}`
+      );
     }
 
     return NextResponse.json({

@@ -15,6 +15,10 @@ function toNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 export async function POST(req: Request, context: RouteContext) {
   try {
     const { slug } = await context.params;
@@ -23,7 +27,12 @@ export async function POST(req: Request, context: RouteContext) {
     const categoryId = String(body.categoryId || "").trim();
     const name = String(body.name || "").trim();
     const description = String(body.description || "").trim();
-    const price = toNumber(body.price);
+
+    const hasBasePrice =
+      body.base_price !== undefined && body.base_price !== null;
+
+    const rawPrice = hasBasePrice ? body.base_price : body.price;
+    const basePrice = roundMoney(toNumber(rawPrice));
 
     if (!slug) {
       return NextResponse.json(
@@ -46,7 +55,7 @@ export async function POST(req: Request, context: RouteContext) {
       );
     }
 
-    if (price < 0) {
+    if (basePrice < 0) {
       return NextResponse.json(
         { error: "Price must be zero or greater." },
         { status: 400 }
@@ -113,17 +122,25 @@ export async function POST(req: Request, context: RouteContext) {
     const nextSortOrder =
       typeof lastItem?.sort_order === "number" ? lastItem.sort_order + 1 : 0;
 
+    const insertPayload = {
+      category_id: categoryId,
+      name,
+      description: description || null,
+      base_price: basePrice,
+      price: basePrice,
+      sort_order: nextSortOrder,
+      is_active: true,
+      is_available: true,
+      is_sold_out: false,
+    };
+
     const { data: insertedItem, error: insertError } = await supabase
       .schema("food_ordering")
       .from("menu_items")
-      .insert({
-        category_id: categoryId,
-        name,
-        description: description || null,
-        price,
-        sort_order: nextSortOrder,
-      })
-      .select("id, category_id, name, description, price, sort_order")
+      .insert(insertPayload)
+      .select(
+        "id, category_id, name, description, base_price, price, sort_order, is_active, is_available, is_sold_out"
+      )
       .single();
 
     if (insertError || !insertedItem) {
@@ -139,8 +156,12 @@ export async function POST(req: Request, context: RouteContext) {
         category_id: insertedItem.category_id,
         name: insertedItem.name,
         description: insertedItem.description,
-        price: Number(insertedItem.price ?? 0),
+        base_price: Number(insertedItem.base_price ?? 0),
+        price: Number(insertedItem.base_price ?? insertedItem.price ?? 0),
         sort_order: insertedItem.sort_order,
+        is_active: insertedItem.is_active,
+        is_available: insertedItem.is_available,
+        is_sold_out: insertedItem.is_sold_out,
       },
     });
   } catch (error) {

@@ -64,13 +64,17 @@ export async function GET(_: Request, context: RouteContext) {
       description: string | null;
       price: number;
       sort_order: number | null;
+      is_sold_out: boolean;
+      image_url: string | null;
     }> = [];
 
     if (categoryIds.length > 0) {
       const { data: itemRows, error: itemsError } = await supabase
         .schema("food_ordering")
         .from("menu_items")
-        .select("id, category_id, name, description, price, sort_order")
+        .select(
+          "id, category_id, name, description, price, sort_order, is_sold_out, image_url"
+        )
         .in("category_id", categoryIds)
         .order("sort_order", { ascending: true });
 
@@ -86,6 +90,8 @@ export async function GET(_: Request, context: RouteContext) {
           description: item.description,
           price: Number(item.price ?? 0),
           sort_order: item.sort_order,
+          is_sold_out: item.is_sold_out ?? false,
+          image_url: item.image_url ?? null,
         })) || [];
     }
 

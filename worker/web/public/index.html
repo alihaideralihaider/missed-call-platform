@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Saana | Missed Call Recovery for Restaurants</title>
+  <meta name="description" content="Saana helps restaurants turn missed calls into real orders with a fast recovery path that works with their existing setup and current ordering flow." />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#081120" />
+  <meta name="author" content="Saana Systems" />
+  <link rel="canonical" href="https://saanaos.com/" />
+
+  <meta property="og:site_name" content="Saana" />
+  <meta property="og:title" content="Saana | Missed Call Recovery for Restaurants" />
+  <meta property="og:description" content="Turn missed calls into real orders. Saana helps restaurants recover lost demand without replacing their current setup." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://saanaos.com/" />
+  <meta property="og:image" content="https://saanaos.com/og-image.jpg" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Saana | Missed Call Recovery for Restaurants" />
+  <meta name="twitter:description" content="Turn missed calls into real orders with Saana." />
+  <meta name="twitter:image" content="https://saanaos.com/og-image.jpg" />
+  <meta name="twitter:url" content="https://saanaos.com/" />
+
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="apple-touch-icon" href="/favicon.svg" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "name": "Saana Systems",
+        "url": "https://saanaos.com/",
+        "logo": "https://saanaos.com/logo.svg",
+        "brand": {
+          "@type": "Brand",
+          "name": "Saana"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "name": "Saana",
+        "url": "https://saanaos.com/"
+      },
+      {
+        "@type": "Service",
+        "serviceType": "Missed call recovery for restaurants",
+        "name": "Saana",
+        "provider": {
+          "@type": "Organization",
+          "name": "Saana Systems"
+        },
+        "areaServed": "US",
+        "audience": {
+          "@type": "Audience",
+          "audienceType": "Restaurants"
+        },
+        "description": "Saana helps restaurants turn missed calls into real orders with a fast recovery path that works with their existing setup and current ordering flow."
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    :root{
+      --bg:#081120;
+      --bg-soft:#0e1b33;
+      --panel:#101d36;
+      --panel-2:#162544;
+      --line:rgba(255,255,255,.10);
+      --text:#e7eef9;
+      --muted:#a7b6cc;
+      --accent:#ff8a3d;
+      --accent-2:#80efe2;
+      --white:#f8fbff;
+      --shadow:0 18px 60px rgba(0,0,0,.28);
+      --radius:22px;
+      --max:1140px;
+    }
+
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      font:16px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(31,59,109,.55), transparent 34%),
+        radial-gradient(circle at left top, rgba(255,138,61,.08), transparent 28%),
+        var(--bg);
+    }
+
+    a{text-decoration:none;color:inherit}
+    img{max-width:100%;display:block}
+    .wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
+
+    .nav{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:22px 0;
+      gap:16px;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      min-width:0;
+    }
+
+    .brand-mark{
+      width:44px;
+      height:44px;
+      border-radius:14px;
+      overflow:hidden;
+      flex:0 0 auto;
+      box-shadow:0 8px 20px rgba(0,0,0,.18);
+      border:1px solid rgba(255,255,255,.08);
+      background:#10203a;
+    }
+
+    .brand-mark img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+
+    .brand-copy{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+
+    .brand-copy strong{
+      color:var(--white);
+      font-size:18px;
+      line-height:1.1;
+      letter-spacing:-.02em;
+    }
+
+    .brand-copy span{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:700;
+      letter-spacing:.02em;
+    }
+
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:13px 18px;
+      border-radius:14px;
+      border:1px solid transparent;
+      font-weight:800;
+      transition:.18s ease;
+      cursor:pointer;
+      font:inherit;
+    }
+
+    .btn:hover{transform:translateY(-1px)}
+    .btn.primary{
+      background:var(--accent);
+      color:#211307;
+      box-shadow:0 12px 28px rgba(255,138,61,.24);
+    }
+    .btn.secondary{
+      background:rgba(255,255,255,.03);
+      border-color:rgba(255,255,255,.12);
+      color:var(--text);
+    }
+
+    main{display:block}
+    .hero{padding:26px 0 64px}
+    .hero-grid{
+      display:grid;
+      grid-template-columns:1.03fr .97fr;
+      gap:28px;
+      align-items:center;
+    }
+
+    .eyebrow{
+      display:inline-flex;
+      align-items:center;
+      padding:7px 11px;
+      border-radius:999px;
+      background:rgba(255,138,61,.12);
+      border:1px solid rgba(255,138,61,.20);
+      color:#ffc8a2;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-size:12px;
+      font-weight:900;
+    }
+
+    h1{
+      margin:18px 0 14px;
+      font-size:60px;
+      line-height:1.02;
+      letter-spacing:-.045em;
+      color:var(--white);
+    }
+
+    .sub{
+      margin:0 0 24px;
+      font-size:20px;
+      color:var(--muted);
+      max-width:680px;
+    }
+
+    .cta-row{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      margin-bottom:22px;
+    }
+
+    .proof-strip,
+    .grid3,
+    .grid4,
+    .how,
+    .pricing,
+    .faq,
+    .kpi-strip{
+      display:grid;
+      gap:16px;
+    }
+
+    .proof-strip{grid-template-columns:repeat(3,1fr)}
+    .grid3{grid-template-columns:repeat(3,1fr)}
+    .grid4{grid-template-columns:repeat(4,1fr)}
+    .how{grid-template-columns:repeat(4,1fr)}
+    .pricing{grid-template-columns:repeat(4,1fr)}
+    .faq{grid-template-columns:repeat(2,1fr)}
+    .kpi-strip{grid-template-columns:repeat(3,1fr)}
+
+    .card,
+    .proof-item,
+    .kpi{
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+    }
+
+    .proof-item{padding:18px}
+    .proof-item strong{
+      display:block;
+      color:var(--white);
+      margin-bottom:5px;
+      font-size:15px;
+    }
+
+    .hero-panel{
+      position:relative;
+      overflow:hidden;
+      border-radius:28px;
+      padding:22px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      box-shadow:var(--shadow);
+    }
+
+    .hero-panel:before,
+    .hero-panel:after{
+      content:"";
+      position:absolute;
+      border-radius:999px;
+      filter:blur(28px);
+      opacity:.55;
+      pointer-events:none;
+    }
+
+    .hero-panel:before{
+      width:170px;
+      height:170px;
+      right:-34px;
+      top:-24px;
+      background:rgba(255,138,61,.22);
+    }
+
+    .hero-panel:after{
+      width:130px;
+      height:130px;
+      left:-20px;
+      bottom:-20px;
+      background:rgba(128,239,226,.14);
+    }
+
+    .flow{
+      position:relative;
+      z-index:1;
+      display:grid;
+      gap:14px;
+    }
+
+    .flow-step{
+      display:grid;
+      grid-template-columns:58px 1fr;
+      gap:14px;
+      align-items:center;
+      padding:16px;
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(8,17,32,.74);
+    }
+
+    .num{
+      display:grid;
+      place-items:center;
+      width:58px;
+      height:58px;
+      border-radius:18px;
+      font-weight:900;
+      background:linear-gradient(180deg,#1a2745,#0f172b);
+      border:1px solid rgba(255,255,255,.08);
+      color:var(--white);
+    }
+
+    .num.accent{
+      background:linear-gradient(180deg,#ff9f60,#ff8a3d);
+      color:#24150a;
+    }
+
+    .flow-step strong{
+      display:block;
+      color:var(--white);
+      margin-bottom:2px;
+      font-size:18px;
+    }
+
+    section{padding:18px 0 56px}
+
+    h2{
+      margin:0 0 12px;
+      font-size:36px;
+      line-height:1.08;
+      letter-spacing:-.03em;
+      color:var(--white);
+    }
+
+    h3{
+      margin:0 0 8px;
+      font-size:20px;
+      color:var(--white);
+      letter-spacing:-.02em;
+    }
+
+    .section-sub{
+      max-width:780px;
+      color:var(--muted);
+      margin:0 0 24px;
+    }
+
+    .card{padding:22px}
+    .muted{color:var(--muted)}
+
+    .tag{
+      display:inline-flex;
+      align-items:center;
+      padding:5px 9px;
+      border-radius:999px;
+      background:rgba(128,239,226,.10);
+      border:1px solid rgba(128,239,226,.18);
+      color:#9af1e6;
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      margin-bottom:12px;
+    }
+
+    .callout{
+      margin-top:18px;
+      padding:14px 16px;
+      border-radius:16px;
+      border-left:4px solid var(--accent);
+      background:rgba(255,138,61,.08);
+      color:#f4ccb0;
+    }
+
+    .kpi{padding:18px}
+    .kpi strong{display:block;font-size:15px;margin-bottom:4px}
+
+    .price-card{position:relative}
+    .price-card.featured{
+      border-color:rgba(128,239,226,.24);
+      background:linear-gradient(180deg, rgba(23,36,66,.96), rgba(14,27,51,.98));
+    }
+
+    .price{
+      font-size:42px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:-.04em;
+      margin:10px 0 4px;
+      color:var(--white);
+    }
+
+    .price.custom{font-size:32px}
+
+    ul{padding-left:18px;margin:14px 0 0}
+    li{margin:8px 0;color:var(--muted)}
+
+    .demo-card{padding:30px}
+
+    .demo-form{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:14px;
+      margin-top:18px;
+    }
+
+    .demo-form .full{grid-column:1 / -1}
+
+    .field{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .field label{
+      font-size:14px;
+      font-weight:800;
+      color:var(--white);
+    }
+
+    .field input,
+    .field textarea,
+    .field select{
+      width:100%;
+      padding:14px 14px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.03);
+      color:var(--text);
+      font:inherit;
+      outline:none;
+      appearance:none;
+    }
+
+    .field input::placeholder,
+    .field textarea::placeholder{
+      color:#8fa0bb;
+    }
+
+    .field input:focus,
+    .field textarea:focus,
+    .field select:focus{
+      border-color:rgba(128,239,226,.45);
+      box-shadow:0 0 0 3px rgba(128,239,226,.10);
+    }
+
+    .field textarea{
+      min-height:120px;
+      resize:vertical;
+    }
+
+    .form-actions{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-top:6px;
+    }
+
+    .form-note{
+      margin-top:12px;
+      color:var(--muted);
+      font-size:14px;
+    }
+
+    .success-message{
+      display:none;
+      margin-top:14px;
+      padding:16px 18px;
+      border-radius:14px;
+      background:rgba(128,239,226,.10);
+      border:1px solid rgba(128,239,226,.18);
+      color:#a7f3eb;
+      font-weight:800;
+    }
+
+    .footer{
+      padding:20px 0 40px;
+      color:#8796ad;
+      font-size:14px;
+    }
+
+    @media (max-width:1020px){
+      .hero-grid,.grid3,.grid4,.faq,.pricing,.how,.kpi-strip,.proof-strip{
+        grid-template-columns:1fr;
+      }
+    }
+
+    @media (max-width:760px){
+      .nav{padding:16px 0}
+      .brand-copy span{font-size:11px}
+      .hero{padding:18px 0 46px}
+      h1{font-size:44px}
+      .sub{font-size:18px}
+      .hero-panel{padding:18px}
+      .flow-step{grid-template-columns:48px 1fr}
+      .num{width:48px;height:48px;border-radius:14px}
+      .btn{width:100%}
+      .cta-row{display:grid;grid-template-columns:1fr}
+      .nav .btn{width:auto}
+      .demo-form{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="nav">
+      <a class="brand" href="#top" aria-label="Saana home">
+        <div class="brand-mark">
+          <img src="/logo.svg" alt="Saana logo" />
+        </div>
+        <div class="brand-copy">
+          <strong>Saana</strong>
+          <span>Restaurant Missed Call Recovery</span>
+        </div>
+      </a>
+      <a href="#demo" class="btn primary">Book a demo</a>
+    </nav>
+
+    <main>
+      <header class="hero" id="top">
+        <div class="hero-grid">
+          <div>
+            <div class="eyebrow">Missed-call recovery for restaurants</div>
+            <h1>Miss a call. Lose an order. We fix that.</h1>
+            <p class="sub">When your restaurant can’t answer the phone, Saana gives customers a fast way to still place their order instead of ordering somewhere else.</p>
+
+            <div class="cta-row">
+              <a href="#demo" class="btn primary">Book a demo</a>
+              <a href="#how" class="btn secondary">See how it works</a>
+            </div>
+
+            <div class="proof-strip">
+              <div class="proof-item">
+                <strong>Missed calls = lost orders</strong>
+                <div class="muted">Catch customers who already had buying intent.</div>
+              </div>
+              <div class="proof-item">
+                <strong>Recover revenue you already earned</strong>
+                <div class="muted">Turn phone misses into another chance to buy.</div>
+              </div>
+              <div class="proof-item">
+                <strong>Works with your current setup</strong>
+                <div class="muted">Start without replacing your POS or entire stack.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-panel" aria-label="How Saana works summary">
+            <div class="flow">
+              <div class="flow-step">
+                <div class="num">1</div>
+                <div>
+                  <strong>Customer calls</strong>
+                  <div class="muted">They are ready to order right now.</div>
+                </div>
+              </div>
+
+              <div class="flow-step">
+                <div class="num">2</div>
+                <div>
+                  <strong>You miss the call</strong>
+                  <div class="muted">Busy line, short staff, or after hours.</div>
+                </div>
+              </div>
+
+              <div class="flow-step">
+                <div class="num accent">3</div>
+                <div>
+                  <strong>Saana steps in</strong>
+                  <div class="muted">Customer gets a fast ordering path instead of bouncing.</div>
+                </div>
+              </div>
+
+              <div class="flow-step">
+                <div class="num">4</div>
+                <div>
+                  <strong>Order captured</strong>
+                  <div class="muted">You keep the business and track the result.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section>
+        <h2>You’re losing orders without realizing it</h2>
+        <p class="section-sub">During busy hours, the phone keeps ringing. Staff cannot answer every call. Customers do not wait. They move on. These lost orders are invisible until you recover them.</p>
+
+        <div class="grid3">
+          <article class="card">
+            <h3>During the rush</h3>
+            <p class="muted">Phones ring while staff are already serving guests, working expo, or managing the kitchen. Saana gives those callers another way to buy.</p>
+          </article>
+
+          <article class="card">
+            <h3>After hours</h3>
+            <p class="muted">A missed call late in the day can still become an order if the customer gets a clear path instead of a dead end.</p>
+          </article>
+
+          <article class="card">
+            <h3>No visibility</h3>
+            <p class="muted">Most owners never see how many orders disappear because the phone was not answered. Saana makes that measurable.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="how">
+        <h2>How it works</h2>
+        <p class="section-sub">Saana stays focused on one sharp loop: missed call to recovered order. That keeps the value clear and the setup simple.</p>
+
+        <div class="how">
+          <article class="card">
+            <div class="tag">Step 1</div>
+            <h3>Catch the missed call</h3>
+            <p class="muted">Saana records the inbound event when the restaurant does not answer.</p>
+          </article>
+
+          <article class="card">
+            <div class="tag">Step 2</div>
+            <h3>Send the recovery path</h3>
+            <p class="muted">The customer gets pushed into a clean digital ordering experience instead of disappearing to a competitor.</p>
+          </article>
+
+          <article class="card">
+            <div class="tag">Step 3</div>
+            <h3>Capture the order</h3>
+            <p class="muted">The guest completes the order in your current flow or in a Saana-powered ordering path.</p>
+          </article>
+
+          <article class="card">
+            <div class="tag">Step 4</div>
+            <h3>Track the outcome</h3>
+            <p class="muted">Measure missed calls, recovered orders, and the revenue that would have been lost.</p>
+          </article>
+        </div>
+
+        <div class="callout">Early-stage reality: if automated messaging is not yet cleared, Saana can still run a demo or manual recovery path to prove the ordering loop before scaling.</div>
+      </section>
+
+      <section>
+        <h2>What this means for your restaurant</h2>
+        <div class="kpi-strip">
+          <div class="kpi">
+            <strong>More orders</strong>
+            <div class="muted">Capture customers you are currently losing.</div>
+          </div>
+          <div class="kpi">
+            <strong>Less pressure</strong>
+            <div class="muted">Reduce phone load during peak hours.</div>
+          </div>
+          <div class="kpi">
+            <strong>Clear visibility</strong>
+            <div class="muted">Track missed calls and recovered revenue.</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Best fit for launch</h2>
+        <p class="section-sub">Start where the pain is obvious and where owners can feel the problem every day.</p>
+
+        <div class="grid4">
+          <article class="card">
+            <h3>Independent restaurants</h3>
+            <p class="muted">Fast decision cycles and less red tape.</p>
+          </article>
+          <article class="card">
+            <h3>Quick service</h3>
+            <p class="muted">High call volume and speed-sensitive orders.</p>
+          </article>
+          <article class="card">
+            <h3>Casual dining</h3>
+            <p class="muted">Strong takeout demand without enterprise complexity.</p>
+          </article>
+          <article class="card">
+            <h3>Small groups first</h3>
+            <p class="muted">One to three locations before larger rollouts.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="pricing">
+        <h2>Simple launch pricing</h2>
+        <p class="section-sub">Keep pricing easy to understand. Charge for the outcome, not telephony complexity.</p>
+
+        <div class="pricing">
+          <article class="card price-card">
+            <div class="tag">Pilot</div>
+            <div class="price">$49</div>
+            <div class="muted">first 30 days</div>
+            <ul>
+              <li>1 location</li>
+              <li>White-glove onboarding</li>
+              <li>Manual or demo recovery flow is okay</li>
+              <li>Goal: prove recovered orders</li>
+            </ul>
+          </article>
+
+          <article class="card price-card featured">
+            <div class="tag">Core</div>
+            <div class="price">$149</div>
+            <div class="muted">per month</div>
+            <ul>
+              <li>1 location</li>
+              <li>Missed-call capture</li>
+              <li>Recovery link or ordering handoff</li>
+              <li>Basic reporting and support</li>
+            </ul>
+          </article>
+
+          <article class="card price-card">
+            <div class="tag">Growth</div>
+            <div class="price">$299</div>
+            <div class="muted">per month</div>
+            <ul>
+              <li>Everything in Core</li>
+              <li>After-hours rules and branded flow</li>
+              <li>Priority support</li>
+              <li>Best once the loop is already working</li>
+            </ul>
+          </article>
+
+          <article class="card price-card">
+            <div class="tag">Multi-location</div>
+            <div class="price custom">Custom</div>
+            <div class="muted">from $799+</div>
+            <ul>
+              <li>Multiple stores</li>
+              <li>Central reporting</li>
+              <li>Rollout support</li>
+              <li>Deeper integrations later</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>Frequently asked questions</h2>
+        <div class="faq">
+          <article class="card">
+            <h3>Do I need to replace my POS?</h3>
+            <p class="muted">No. Saana can start by sending callers into your current ordering flow.</p>
+          </article>
+
+          <article class="card">
+            <h3>Is this another giant software suite?</h3>
+            <p class="muted">No. The point is to solve one sharp problem first: missed calls that become lost orders.</p>
+          </article>
+
+          <article class="card">
+            <h3>How long should setup take?</h3>
+            <p class="muted">The first version should be quick and white-glove. Complexity should stay on Saana’s side, not the restaurant’s.</p>
+          </article>
+
+          <article class="card">
+            <h3>What should we measure?</h3>
+            <p class="muted">Missed calls, recovered orders, recovered revenue, and the share of callers who complete the recovery path.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="demo">
+        <div class="card demo-card">
+          <h2>Stop losing orders you already earned</h2>
+          <p class="section-sub">Book a pilot demo and see how many missed calls your restaurant gets and how many Saana can turn into real orders.</p>
+
+          <form id="demoForm" class="demo-form">
+            <div class="field">
+              <label for="name">Your name</label>
+              <input id="name" name="name" type="text" placeholder="Owner or manager name" required>
+            </div>
+
+            <div class="field">
+              <label for="restaurant">Restaurant name</label>
+              <input id="restaurant" name="restaurant" type="text" placeholder="Restaurant name" required>
+            </div>
+
+            <div class="field">
+              <label for="phone">Phone number</label>
+              <input id="phone" name="phone" type="tel" placeholder="(555) 555-5555" required>
+            </div>
+
+            <div class="field">
+              <label for="email">Email address</label>
+              <input id="email" name="email" type="email" placeholder="you@restaurant.com" required>
+            </div>
+
+            <div class="field">
+              <label for="locations">Number of locations</label>
+              <select id="locations" name="locations" required>
+                <option value="">Select one</option>
+                <option>1 location</option>
+                <option>2–3 locations</option>
+                <option>4–10 locations</option>
+                <option>10+ locations</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="volume">Missed call pain today</label>
+              <select id="volume" name="volume" required>
+                <option value="">Select one</option>
+                <option>We miss calls during rush</option>
+                <option>We miss after-hours calls</option>
+                <option>We are not sure how many calls we miss</option>
+                <option>We want a better direct ordering path</option>
+              </select>
+            </div>
+
+            <div class="field full">
+              <label for="notes">Anything we should know?</label>
+              <textarea id="notes" name="notes" placeholder="Current ordering setup, busy hours, call volume, or anything else helpful"></textarea>
+            </div>
+
+            <div class="field full">
+              <div class="form-actions">
+                <button type="submit" class="btn primary">Request demo</button>
+              </div>
+              <p class="form-note">Share your details and the Saana team will follow up shortly.</p>
+              <div id="successMessage" class="success-message">
+                Thank you. We received your request.<br><br>
+                A member of the Saana team will contact you shortly.<br><br>
+                <a href="https://youtube.com/YOUR_DEMO_VIDEO" target="_blank" class="btn secondary">Watch 2-minute demo</a>
+              </div>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <footer class="footer">Saana Systems — Restaurant communication, reimagined</footer>
+    </main>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://rqungzymxypijmlwacii.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJxdW5nenlteHlwaWptbHdhY2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNjI5ODMsImV4cCI6MjA4ODkzODk4M30.XWWiC9Gk8NCRDzklxM2I9H-imxsaYCi3K7dRA0Qk7DM";
+
+    const form = document.getElementById("demoForm");
+    const successMessage = document.getElementById("successMessage");
+
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const submitButton = form.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      submitButton.textContent = "Submitting...";
+
+      const data = {
+        name: document.getElementById("name").value.trim(),
+        restaurant: document.getElementById("restaurant").value.trim(),
+        phone: document.getElementById("phone").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        locations: document.getElementById("locations").value,
+        volume: document.getElementById("volume").value,
+        notes: document.getElementById("notes").value.trim()
+      };
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+            "Accept-Profile": "marketing",
+            "Content-Profile": "marketing",
+            "Prefer": "return=minimal"
+          },
+          body: JSON.stringify(data)
+        });
+
+        if (!res.ok) {
+          const error = await res.text();
+          throw new Error(error);
+        }
+
+        form.reset();
+        form.style.display = "none";
+        successMessage.style.display = "block";
+      } catch (err) {
+        console.error("Lead form error:", err);
+        alert("Something went wrong. Please try again.");
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "Request demo";
+      }
+    });
+  </script>
+</body>
+</html>
