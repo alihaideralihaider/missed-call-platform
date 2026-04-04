@@ -3,6 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 type Env = {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  TWILIO_ACCOUNT_SID?: string;
+  TWILIO_AUTH_TOKEN?: string;
+  TWILIO_FROM_NUMBER?: string;
+  APP_BASE_URL?: string;
 };
 
 type OrderItemInput = {
@@ -17,6 +21,8 @@ type CreateOrderPayload = {
   customerName: string;
   customerPhone: string;
   pickupTime?: string;
+  pickupTimeLabel?: string;
+  pickupAt?: string;
   notes?: string;
   items: OrderItemInput[];
 };
@@ -26,6 +32,15 @@ type JsonRecord = Record<string, unknown>;
 type RestaurantRow = {
   id: string;
   slug: string;
+  timezone?: string | null;
+  name?: string | null;
+};
+
+type RestaurantHourRow = {
+  day_of_week: number;
+  open_time: string | null;
+  close_time: string | null;
+  is_closed: boolean | null;
 };
 
 type MenuItemRow = {
@@ -36,6 +51,8 @@ type MenuItemRow = {
   is_sold_out: boolean | null;
   category_id: string;
 };
+
+const ASAP_PREP_MINUTES = 20;
 
 function jsonResponse(data: JsonRecord, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -71,6 +88,15 @@ function handleOptions() {
   });
 }
 
+function xmlResponse(xml: string, status = 200) {
+  return new Response(xml, {
+    status,
+    headers: {
+      "content-type": "text/xml; charset=utf-8",
+    },
+  });
+}
+
 function normalizePhone(input: string): string {
   return (input || "").replace(/\D/g, "");
 }
@@ -95,6 +121,257 @@ function sanitizeSlug(input: string): string {
     .replace(/[^a-z0-9-]/g, "")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function getNowInTimeZone(timeZone?: string | null): Date {
+  return new Date(
+    new Date().toLocaleString("en-US", {
+      timeZone: timeZone || "America/New_York",
+    })
+  );
+}
+
+function buildTimeForToday(now: Date, timeValue: string) {
+  const [hour, minute] = timeValue.split(":").map(Number);
+  const result = new Date(now);
+  result.setHours(hour, minute, 0, 0);
+  return result;
+}
+
+function addMinutes(date: Date, minutes: number): Date {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+function parsePickupLeadMinutes(pickupTime: string): number | null {
+  const value = String(pickupTime || "").trim();
+
+  if (!value || value.toUpperCase() === "ASAP") {
+    return ASAP_PREP_MINUTES;
+  }
+
+  const match = value.match(/^(\d+)\s*minutes?$/i);
+  if (!match) {
+    return null;
+  }
+
+  const minutes = Number(match[1]);
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    return null;
+  }
+
+  return minutes;
+}
+
+function getRequestedPickupDate(
+  pickupTime: string,
+  now: Date
+): Date | null {
+  const leadMinutes = parsePickupLeadMinutes(pickupTime);
+  if (leadMinutes === null) {
+    return null;
+  }
+
+  return addMinutes(now, leadMinutes);
+}
+
+function parsePickupAt(value: string): Date | null {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return null;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function isAsapPickup(pickupTime: string): boolean {
+  const value = String(pickupTime || "").trim();
+  return !value || value.toUpperCase() === "ASAP";
+}
+
+function isRestaurantOpenNow(hours: RestaurantHourRow[], now = new Date()): boolean {
+  const currentDay = now.getDay();
+  const previousDay = currentDay === 0 ? 6 : currentDay - 1;
+
+  const today = hours.find((row) => Number(row.day_of_week) === currentDay);
+  const yesterday = hours.find((row) => Number(row.day_of_week) === previousDay);
+
+  if (today && !today.is_closed && today.open_time && today.close_time) {
+    const openAt = buildTimeForToday(now, today.open_time);
+    const closeAt = buildTimeForToday(now, today.close_time);
+
+    if (closeAt <= openAt) {
+      closeAt.setDate(closeAt.getDate() + 1);
+    }
+
+    if (now >= openAt && now <= closeAt) {
+      return true;
+    }
+  }
+
+  if (
+    yesterday &&
+    !yesterday.is_closed &&
+    yesterday.open_time &&
+    yesterday.close_time
+  ) {
+    const yesterdayOpenAt = buildTimeForToday(now, yesterday.open_time);
+    yesterdayOpenAt.setDate(yesterdayOpenAt.getDate() - 1);
+
+    const yesterdayCloseAt = buildTimeForToday(now, yesterday.close_time);
+
+    const yesterdayIsOvernight =
+      yesterday.close_time <= yesterday.open_time;
+
+    if (yesterdayIsOvernight && now <= yesterdayCloseAt) {
+      if (now >= yesterdayOpenAt) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function formatPickupTimeForSms(
+  pickupAt: Date,
+  timeZone?: string | null
+): string {
+  const smsNow = getNowInTimeZone(timeZone);
+  const smsPickup = new Date(
+    pickupAt.toLocaleString("en-US", {
+      timeZone: timeZone || "America/New_York",
+    })
+  );
+
+  const today = new Date(smsNow);
+  today.setHours(0, 0, 0, 0);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const pickupDay = new Date(smsPickup);
+  pickupDay.setHours(0, 0, 0, 0);
+
+  const timeText = pickupAt.toLocaleTimeString("en-US", {
+    timeZone: timeZone || "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (pickupDay.getTime() === today.getTime()) {
+    return `today at ${timeText}`;
+  }
+
+  if (pickupDay.getTime() === tomorrow.getTime()) {
+    return `tomorrow at ${timeText}`;
+  }
+
+  const dateText = pickupAt.toLocaleDateString("en-US", {
+    timeZone: timeZone || "America/New_York",
+    month: "short",
+    day: "numeric",
+  });
+
+  return `${dateText} at ${timeText}`;
+}
+
+function buildStorefrontUrl(requestUrl: URL, slug: string, env: Env): string {
+  const baseUrl = String(env.APP_BASE_URL || "").trim() || requestUrl.origin;
+  return `${baseUrl.replace(/\/$/, "")}/r/${slug}`;
+}
+
+async function sendOrderConfirmationSms(args: {
+  env: Env;
+  to: string;
+  restaurantName: string;
+  orderNumber: string;
+  pickupText: string;
+}) {
+  const { env, to, restaurantName, orderNumber, pickupText } = args;
+
+  if (
+    !env.TWILIO_ACCOUNT_SID ||
+    !env.TWILIO_AUTH_TOKEN ||
+    !env.TWILIO_FROM_NUMBER
+  ) {
+    console.log("Skipping SMS confirmation: missing Twilio env vars");
+    return;
+  }
+
+  const body = new URLSearchParams();
+  body.set("To", to);
+  body.set("From", env.TWILIO_FROM_NUMBER);
+  body.set(
+    "Body",
+    `Thanks for your order from ${restaurantName}. Your order ${orderNumber} is scheduled for pickup ${pickupText}.`
+  );
+
+  const auth = btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`);
+
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: body.toString(),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Twilio SMS failed: ${response.status} ${errorText}`);
+  }
+}
+
+async function sendMissedCallLinkSms(args: {
+  env: Env;
+  to: string;
+  restaurantName: string;
+  storefrontUrl: string;
+}) {
+  const { env, to, restaurantName, storefrontUrl } = args;
+
+  if (
+    !env.TWILIO_ACCOUNT_SID ||
+    !env.TWILIO_AUTH_TOKEN ||
+    !env.TWILIO_FROM_NUMBER
+  ) {
+    console.log("Skipping missed-call SMS: missing Twilio env vars");
+    return;
+  }
+
+  const body = new URLSearchParams();
+  body.set("To", to);
+  body.set("From", env.TWILIO_FROM_NUMBER);
+  body.set(
+    "Body",
+    `Thanks for calling ${restaurantName}. Order here for pickup: ${storefrontUrl}`
+  );
+
+  const auth = btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`);
+
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: body.toString(),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Twilio missed-call SMS failed: ${response.status} ${errorText}`);
+  }
 }
 
 async function generateOrderNumber(
@@ -177,6 +454,76 @@ export default {
       return jsonResponse({ success: true, ok: true });
     }
 
+    if (
+      request.method === "POST" &&
+      url.pathname.startsWith("/twilio/voice/")
+    ) {
+      try {
+        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+          return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`, 200);
+        }
+
+        const slug = sanitizeSlug(
+          url.pathname.split("/twilio/voice/")[1] || ""
+        );
+
+        if (!slug) {
+          return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`, 200);
+        }
+
+        const form = await request.formData();
+        const fromPhone = normalizePhone(String(form.get("From") || ""));
+
+        if (!fromPhone || !isValidPhone(fromPhone)) {
+          return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`, 200);
+        }
+
+        const supabase = createClient(
+          env.SUPABASE_URL,
+          env.SUPABASE_SERVICE_ROLE_KEY
+        );
+
+        const { data: restaurant, error: restaurantError } = await supabase
+          .schema("food_ordering")
+          .from("restaurants")
+          .select("id, slug, name")
+          .eq("slug", slug)
+          .single<RestaurantRow>();
+
+        if (restaurantError || !restaurant) {
+          console.error("Twilio voice webhook restaurant lookup failed:", {
+            slug,
+            error: restaurantError?.message,
+          });
+
+          return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`, 200);
+        }
+
+        try {
+          const smsRestaurantName =
+            String(restaurant.name || "").trim() || restaurant.slug || "the restaurant";
+          const storefrontUrl = buildStorefrontUrl(url, restaurant.slug, env);
+
+          await sendMissedCallLinkSms({
+            env,
+            to: fromPhone,
+            restaurantName: smsRestaurantName,
+            storefrontUrl,
+          });
+        } catch (smsError) {
+          console.error("Missed-call SMS failed:", smsError);
+        }
+
+        return xmlResponse(
+          `<?xml version="1.0" encoding="UTF-8"?><Response><Pause length="1"/><Hangup/></Response>`,
+          200
+        );
+      } catch (error) {
+        console.error("Twilio voice webhook failed:", error);
+        return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`, 200);
+      }
+    }
+
     if (request.method === "POST" && url.pathname === "/api/orders") {
       console.log("POST /api/orders hit");
 
@@ -196,6 +543,8 @@ export default {
         const customerName = (body.customerName || "").trim();
         const customerPhone = normalizePhone(body.customerPhone || "");
         const pickupTime = (body.pickupTime || "ASAP").trim();
+        const pickupTimeLabel = (body.pickupTimeLabel || "").trim();
+        const pickupAtInput = (body.pickupAt || "").trim();
         const notes = (body.notes || "").trim();
         const items = Array.isArray(body.items) ? body.items : [];
 
@@ -209,7 +558,7 @@ export default {
         const { data: restaurant, error: restaurantError } = await supabase
           .schema("food_ordering")
           .from("restaurants")
-          .select("id, slug")
+          .select("id, slug, timezone, name")
           .eq("slug", restaurantSlug)
           .single<RestaurantRow>();
 
@@ -219,6 +568,51 @@ export default {
 
         if (!restaurant) {
           return jsonError("Restaurant not found.", 404);
+        }
+
+        const { data: restaurantHours, error: restaurantHoursError } = await supabase
+          .schema("food_ordering")
+          .from("restaurant_hours")
+          .select("day_of_week, open_time, close_time, is_closed")
+          .eq("restaurant_id", restaurant.id);
+
+        if (restaurantHoursError) {
+          throw new Error(
+            `Failed to load restaurant hours: ${restaurantHoursError.message}`
+          );
+        }
+
+        const hours = (restaurantHours as RestaurantHourRow[] | null) || [];
+        const now = getNowInTimeZone(restaurant.timezone);
+
+        const requestedPickupDate =
+          parsePickupAt(pickupAtInput) || getRequestedPickupDate(pickupTime, now);
+
+        if (!requestedPickupDate) {
+          return jsonError("Invalid pickup time selected.", 400, {
+            code: "INVALID_PICKUP_TIME",
+          });
+        }
+
+        if (isAsapPickup(pickupTime)) {
+          const isOpenNow = isRestaurantOpenNow(hours, now);
+
+          if (!isOpenNow) {
+            return jsonError("Restaurant is currently closed.", 409, {
+              code: "RESTAURANT_CLOSED",
+            });
+          }
+        }
+
+        const isOpenAtRequestedPickupTime = isRestaurantOpenNow(
+          hours,
+          requestedPickupDate
+        );
+
+        if (!isOpenAtRequestedPickupTime) {
+          return jsonError("Selected pickup time is outside restaurant hours.", 409, {
+            code: "INVALID_PICKUP_TIME",
+          });
         }
 
         const normalizedItems = items.map((item) => ({
@@ -355,7 +749,12 @@ export default {
             total,
             source: "web",
             pickup_time: pickupTime,
-            notes: notes || null,
+            pickup_time_label: pickupTimeLabel || null,
+            pickup_at: requestedPickupDate.toISOString(),
+            notes:
+              [pickupTimeLabel ? `Pickup: ${pickupTimeLabel}` : "", notes]
+                .filter(Boolean)
+                .join("\n") || null,
             tax,
             payment_status: "unpaid",
             payment_method: "cash",
@@ -390,6 +789,25 @@ export default {
 
         if (orderItemsError) {
           throw new Error(`Order items creation failed: ${orderItemsError.message}`);
+        }
+
+        try {
+          const smsRestaurantName =
+            String(restaurant.name || "").trim() || restaurant.slug || "the restaurant";
+          const pickupText = formatPickupTimeForSms(
+            requestedPickupDate,
+            restaurant.timezone
+          );
+
+          await sendOrderConfirmationSms({
+            env,
+            to: customerPhone,
+            restaurantName: smsRestaurantName,
+            orderNumber: insertedOrder.order_number,
+            pickupText,
+          });
+        } catch (smsError) {
+          console.error("Order confirmation SMS failed:", smsError);
         }
 
         for (const item of cleanedItems) {

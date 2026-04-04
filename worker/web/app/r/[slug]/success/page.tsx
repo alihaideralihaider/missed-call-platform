@@ -42,10 +42,29 @@ function formatFallbackOrderRef(orderId: string | null, slug: string): string | 
   return `${code}-${suffix}`;
 }
 
+function formatPickupDateTime(value?: string | null): string | null {
+  if (!value) return null;
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export default function SuccessPage({ params }: PageProps) {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
   const orderNumber = searchParams.get("orderNumber");
+  const pickupLabel = searchParams.get("pickupLabel");
+  const pickupAt = searchParams.get("pickupAt");
   const [slug, setSlug] = useState("");
 
   useEffect(() => {
@@ -64,6 +83,32 @@ export default function SuccessPage({ params }: PageProps) {
 
     return formatFallbackOrderRef(orderId, slug);
   }, [orderNumber, orderId, slug]);
+
+  const formattedPickupAt = useMemo(
+    () => formatPickupDateTime(pickupAt),
+    [pickupAt]
+  );
+
+  const displayPickupText = useMemo(() => {
+    const cleanPickupLabel = String(pickupLabel ?? "").trim();
+    if (cleanPickupLabel) {
+      return cleanPickupLabel;
+    }
+
+    if (formattedPickupAt) {
+      return formattedPickupAt;
+    }
+
+    return "20–30 minutes";
+  }, [pickupLabel, formattedPickupAt]);
+
+  const pickupHelperText = useMemo(() => {
+    if (String(pickupLabel ?? "").trim() || formattedPickupAt) {
+      return "Please head to the restaurant at your selected pickup time.";
+    }
+
+    return "Please head to the restaurant at your selected pickup time.";
+  }, [pickupLabel, formattedPickupAt]);
 
   return (
     <main className="min-h-screen bg-neutral-100">
@@ -87,15 +132,15 @@ export default function SuccessPage({ params }: PageProps) {
 
           <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
             <p className="text-xs font-medium uppercase tracking-wide text-amber-700">
-                Estimated ready time
+              Estimated ready time
             </p>
             <p className="mt-1 text-lg font-bold text-amber-900">
-                20–30 minutes
+              {displayPickupText}
             </p>
-           </div>
+          </div>
 
           <p className="mt-2 text-sm text-neutral-500">
-            Please head to the restaurant at your selected pickup time.
+            {pickupHelperText}
           </p>
 
           {displayOrderRef ? (

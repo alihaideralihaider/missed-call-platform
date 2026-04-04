@@ -9,7 +9,10 @@
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
+		"@tailwindcss/postcss": "^4.2.2",
 		"@types/node": "^25.5.0",
+		"postcss": "^8.5.8",
+		"tailwindcss": "^4.2.2",
 		"typescript": "^5.5.2",
 		"wrangler": "^4.73.0"
 	},

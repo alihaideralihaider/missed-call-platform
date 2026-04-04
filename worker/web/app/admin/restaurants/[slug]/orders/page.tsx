@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type PageProps = {
@@ -10,6 +11,7 @@ type Restaurant = {
   id: string;
   name: string;
   slug: string;
+  profile_completed?: boolean | null;
 };
 
 type OrderItem = {
@@ -31,6 +33,8 @@ type Order = {
   tax: number;
   total: number;
   pickup_time: string;
+  pickup_time_label?: string | null;
+  pickup_at?: string | null;
   notes: string;
   payment_status: string;
   payment_method: string;
@@ -78,6 +82,18 @@ function formatPhone(value?: string | null): string {
   }
 
   return value || "—";
+}
+
+function formatPickupDisplay(order: Order): string {
+  if (order.pickup_time_label) {
+    return order.pickup_time_label;
+  }
+
+  if (order.pickup_at) {
+    return formatDateTime(order.pickup_at);
+  }
+
+  return order.pickup_time || "ASAP";
 }
 
 function statusPillClass(status: string): string {
@@ -195,6 +211,12 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
+
+  useEffect(() => {
+    if (!loading && restaurant && restaurant.profile_completed === false && slug) {
+      window.location.replace(`/admin/restaurants/${slug}/setup`);
+    }
+  }, [loading, restaurant, slug]);
 
   const orderCount = orders.length;
   const totalSales = useMemo(
@@ -325,11 +347,157 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
               <p className="mt-2 text-sm text-neutral-600">{loadingError}</p>
             </div>
           ) : orders.length === 0 ? (
-            <div>
-              <h2 className="text-lg font-bold text-neutral-900">No orders yet</h2>
-              <p className="mt-2 text-sm text-neutral-500">
-                When customers place orders, they will show here.
-              </p>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-neutral-900">
+                  Welcome to Saana
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm text-neutral-600">
+                  Your orders dashboard is live, but nothing has come in yet.
+                  Let’s get your restaurant set up so customers can place their
+                  first order.
+                </p>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5">
+                  <h3 className="text-base font-bold text-neutral-900">
+                    Start here
+                  </h3>
+
+                  <div className="mt-4 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-sm font-bold text-white">
+                        1
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-neutral-900">
+                          Upload or build your menu
+                        </p>
+                        <p className="mt-1 text-sm text-neutral-600">
+                          Add your categories and items so your ordering page has
+                          something customers can buy.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-sm font-bold text-white">
+                        2
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-neutral-900">
+                          Add food photos or vibe images
+                        </p>
+                        <p className="mt-1 text-sm text-neutral-600">
+                          Give your storefront a stronger first impression with
+                          menu images and a branded visual header.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-sm font-bold text-white">
+                        3
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-neutral-900">
+                          Test your ordering flow
+                        </p>
+                        <p className="mt-1 text-sm text-neutral-600">
+                          Place a test order yourself and confirm everything looks
+                          right before sending traffic to customers.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 space-y-4">
+                    <div className="flex flex-wrap gap-3">
+                      <Link
+                        href={`/admin/restaurants/${slug}/menu`}
+                        className="inline-flex items-center justify-center rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white"
+                      >
+                        Upload Menu
+                      </Link>
+
+                      <Link
+                        href={`/admin/restaurants/${slug}/assets`}
+                        className="inline-flex items-center justify-center rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm font-semibold text-neutral-900"
+                      >
+                        Upload Images
+                      </Link>
+
+                      <Link
+                        href={`/admin/restaurants/${slug}/setup`}
+                        className="inline-flex items-center justify-center rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm font-semibold text-neutral-900"
+                      >
+                        Update Profile
+                      </Link>
+                    </div>
+
+                    <div className="rounded-xl border border-neutral-200 bg-white p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-neutral-900">
+                            Boost your storefront
+                          </p>
+                          <p className="mt-1 text-xs text-neutral-600">
+                            This is your money space. Promote visual upgrades,
+                            storefront polish, and future conversion tools here.
+                          </p>
+                        </div>
+
+                        <Link
+                          href={`/admin/restaurants/${slug}/assets`}
+                          className="inline-flex items-center justify-center rounded-lg bg-black px-4 py-2 text-xs font-semibold text-white"
+                        >
+                          Upgrade visuals
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+                  <h3 className="text-base font-bold text-neutral-900">
+                    What happens next
+                  </h3>
+
+                  <div className="mt-4 space-y-3 text-sm text-neutral-700">
+                    <p>
+                      Once your menu is ready and customers begin ordering, every
+                      new order will appear here in real time.
+                    </p>
+                    <p>
+                      You will be able to confirm orders, mark them ready,
+                      complete them, and track totals from this page.
+                    </p>
+                  </div>
+
+                  <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Quick reminder
+                    </p>
+                    <p className="mt-2 text-sm text-neutral-700">
+                      A new dashboard with no menu and no orders feels like a
+                      dead end. The fastest win is to get your menu in place
+                      first.
+                    </p>
+                  </div>
+
+                  {!loading && restaurant?.slug ? (
+                    <div className="mt-5 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                        Storefront slug
+                      </p>
+                      <p className="mt-2 break-all text-sm font-medium text-neutral-900">
+                        /r/{restaurant.slug}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
@@ -362,8 +530,13 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
                           Placed: {formatDateTime(order.created_at)}
                         </p>
                         <p className="mt-1 text-sm text-neutral-500">
-                          Pickup time: {order.pickup_time || "ASAP"}
+                          Pickup time: {formatPickupDisplay(order)}
                         </p>
+                        {order.pickup_at ? (
+                          <p className="mt-1 text-sm text-neutral-500">
+                            Pickup at: {formatDateTime(order.pickup_at)}
+                          </p>
+                        ) : null}
                       </div>
 
                       <div className="text-right">
@@ -412,11 +585,15 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
 
                         <div className="mt-3 space-y-2 text-sm text-neutral-700">
                           <p>
-                            <span className="font-medium text-neutral-900">Name:</span>{" "}
+                            <span className="font-medium text-neutral-900">
+                              Name:
+                            </span>{" "}
                             {order.customer?.name || "—"}
                           </p>
                           <p>
-                            <span className="font-medium text-neutral-900">Phone:</span>{" "}
+                            <span className="font-medium text-neutral-900">
+                              Phone:
+                            </span>{" "}
                             {formatPhone(order.customer?.phone)}
                           </p>
                           <p>
@@ -438,7 +615,7 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
                             <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
                               Notes
                             </p>
-                            <p className="mt-1 text-sm text-neutral-700">
+                            <p className="mt-1 whitespace-pre-line text-sm text-neutral-700">
                               {order.notes}
                             </p>
                           </div>

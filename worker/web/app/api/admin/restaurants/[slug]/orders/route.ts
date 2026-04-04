@@ -56,7 +56,7 @@ export async function GET(_: Request, context: RouteContext) {
     const { data: restaurant, error: restaurantError } = await supabase
       .schema("food_ordering")
       .from("restaurants")
-      .select("id, name, slug")
+      .select("id, name, slug, profile_completed")
       .eq("slug", slug)
       .single();
 
@@ -137,7 +137,9 @@ export async function GET(_: Request, context: RouteContext) {
       orderItems = (orderItemsData || []) as OrderItemRow[];
     }
 
-    const customerMap = new Map(customers.map((customer) => [customer.id, customer]));
+    const customerMap = new Map(
+      customers.map((customer) => [customer.id, customer])
+    );
     const itemsByOrderId = new Map<string, OrderItemRow[]>();
 
     for (const item of orderItems) {

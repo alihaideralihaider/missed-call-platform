@@ -790,12 +790,33 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
                 </p>
               </div>
 
-              <p className="mt-4 text-sm text-neutral-500">
+                <p className="mt-4 text-sm text-neutral-500">
                 Accepted columns:
-                <span className="mt-2 block rounded bg-neutral-100 px-3 py-2 font-mono text-xs text-neutral-700">
-                  category_name,item_name,description,price,sort_order,is_active,is_sold_out,image_url
-                </span>
-              </p>
+                </p>
+
+                <div className="mt-2 rounded bg-neutral-100 px-3 py-2 font-mono text-xs text-neutral-700">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="font-sans text-xs text-neutral-500">
+                    CSV format
+                    </span>
+
+                    <button
+                    type="button"
+                    onClick={() => {
+                        navigator.clipboard.writeText(
+                        "category_name,item_name,description,price,sort_order,is_active,is_sold_out,image_url"
+                        );
+                    }}
+                    className="text-xs font-medium text-blue-600 hover:underline"
+                    >
+                    Copy
+                    </button>
+                </div>
+
+                <div className="break-all">
+                    category_name,item_name,description,price,sort_order,is_active,is_sold_out,image_url
+                </div>
+                </div>
 
               <form onSubmit={handlePreviewImport} className="mt-4 space-y-4">
                 <div>

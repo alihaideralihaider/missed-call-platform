@@ -283,6 +283,28 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
     }
   }
 
+  async function handleDeleteAsset(assetId: string) {
+    if (!confirm("Delete this image?")) return;
+
+    try {
+      const res = await fetch(`/api/admin/assets/${assetId}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setSubmitError(data?.error || "Failed to delete image.");
+        return;
+      }
+
+      setAssets((prev) => prev.filter((a) => a.id !== assetId));
+      setSuccessMessage("Image deleted.");
+    } catch {
+      setSubmitError("Failed to delete image.");
+    }
+  }
+
   async function handleSetAsVibe(imageUrl?: string | null) {
     if (!slug || !imageUrl || settingVibeUrl) return;
 
@@ -806,7 +828,7 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
                           : "border-neutral-200"
                       }`}
                     >
-                      <div className="aspect-square bg-white">
+                      <div className="relative aspect-square bg-white">
                         {asset.public_url ? (
                           <img
                             src={asset.public_url}
@@ -818,6 +840,15 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
                             No preview
                           </div>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAsset(asset.id)}
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-sm font-bold text-neutral-700 shadow"
+                          title="Delete image"
+                        >
+                          ×
+                        </button>
                       </div>
 
                       <div className="space-y-2 p-4">
@@ -847,10 +878,12 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
 
                         {linkedItem ? (
                           <p className="text-xs text-blue-700">
-                            Linked to: {linkedItem.name}
+                            Assigned to: <span className="font-medium">{linkedItem.name}</span>
                           </p>
                         ) : (
-                          <p className="text-xs text-neutral-500">Not linked yet</p>
+                          <p className="text-xs text-neutral-500">
+                            Not assigned — upload can be linked later
+                          </p>
                         )}
 
                         {asset.alt_text ? (
@@ -941,9 +974,7 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
                                     }
                                     className="w-full rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-800 disabled:opacity-60"
                                   >
-                                    {!restaurant?.has_menu_upgrade
-                                      ? "Menu upgrade required"
-                                      : isEnhancingMenuThis
+                                    {isEnhancingMenuThis
                                       ? "Enhancing as Menu..."
                                       : "Enhance as Menu"}
                                   </button>

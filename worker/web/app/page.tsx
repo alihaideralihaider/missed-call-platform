@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from "next/image";
@@ -32,7 +31,7 @@ export default function HomePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-    async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setIsSubmitting(true);
 
@@ -68,7 +67,10 @@ export default function HomePage() {
     }
   }
 
-  function updateField<K extends keyof LeadFormData>(key: K, value: LeadFormData[K]) {
+  function updateField<K extends keyof LeadFormData>(
+    key: K,
+    value: LeadFormData[K]
+  ) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -76,9 +78,19 @@ export default function HomePage() {
     <main className="min-h-screen bg-[#081120] text-[#e7eef9]">
       <div className="mx-auto max-w-[1140px] px-6">
         <nav className="flex items-center justify-between gap-4 py-5">
-          <Link href="#top" className="flex min-w-0 items-center gap-3" aria-label="Saana home">
+          <Link
+            href="#top"
+            className="flex min-w-0 items-center gap-3"
+            aria-label="Saana home"
+          >
             <div className="h-11 w-11 overflow-hidden rounded-[14px] border border-white/10 bg-[#10203a] shadow-[0_8px_20px_rgba(0,0,0,.18)]">
-              <Image src="/logo.svg" alt="Saana logo" width={44} height={44} className="h-full w-full object-cover" />
+              <Image
+                src="/logo.svg"
+                alt="Saana logo"
+                width={44}
+                height={44}
+                className="h-full w-full object-cover"
+              />
             </div>
             <div className="min-w-0">
               <div className="text-[18px] font-semibold leading-tight tracking-[-0.02em] text-[#f8fbff]">
@@ -90,12 +102,28 @@ export default function HomePage() {
             </div>
           </Link>
 
-          <a
-            href="#demo"
-            className="inline-flex items-center justify-center rounded-[14px] bg-[#ff8a3d] px-5 py-3 font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px]"
-          >
-            Book a demo
-          </a>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center rounded-[14px] border border-white/12 bg-white/[0.03] px-5 py-3 font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px]"
+            >
+              Login
+            </Link>
+
+            <Link
+              href="/onboard"
+              className="inline-flex items-center justify-center rounded-[14px] bg-[#ff8a3d] px-5 py-3 font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px]"
+            >
+              Try free
+            </Link>
+
+            <a
+              href="#demo"
+              className="inline-flex items-center justify-center rounded-[14px] border border-white/12 bg-white/[0.03] px-5 py-3 font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px]"
+            >
+              Book a demo
+            </a>
+          </div>
         </nav>
 
         <section
@@ -113,22 +141,35 @@ export default function HomePage() {
 
             <p className="mt-4 max-w-[680px] text-xl text-[#a7b6cc]">
               When your restaurant can’t answer the phone, Saana gives customers a
-              fast way to still place their order instead of ordering somewhere else.
+              fast way to still place their order instead of ordering somewhere
+              else.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                href="/onboard"
+                className="inline-flex items-center justify-center rounded-[14px] bg-[#ff8a3d] px-5 py-3 font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px]"
+              >
+                Try free for 30 days — no setup fees
+              </Link>
+
               <a
                 href="#demo"
-                className="inline-flex items-center justify-center rounded-[14px] bg-[#ff8a3d] px-5 py-3 font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px]"
+                className="inline-flex items-center justify-center rounded-[14px] border border-white/12 bg-white/[0.03] px-5 py-3 font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px]"
               >
                 Book a demo
               </a>
+
               <a
                 href="#how"
                 className="inline-flex items-center justify-center rounded-[14px] border border-white/12 bg-white/[0.03] px-5 py-3 font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px]"
               >
                 See how it works
               </a>
+            </div>
+
+            <div className="mt-3 text-sm text-[#a7b6cc]">
+              No setup fees. Cancel anytime.
             </div>
 
             <div className="mt-6 grid gap-4 md:grid-cols-3">
@@ -226,15 +267,20 @@ export default function HomePage() {
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-              <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">During the rush</h3>
+              <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">
+                During the rush
+              </h3>
               <p className="text-[#a7b6cc]">
                 Phones ring while staff are already serving guests, working expo,
-                or managing the kitchen. Saana gives those callers another way to buy.
+                or managing the kitchen. Saana gives those callers another way to
+                buy.
               </p>
             </div>
 
             <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-              <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">After hours</h3>
+              <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">
+                After hours
+              </h3>
               <p className="text-[#a7b6cc]">
                 A missed call late in the day can still become an order if the
                 customer gets a clear path instead of a dead end.
@@ -242,7 +288,9 @@ export default function HomePage() {
             </div>
 
             <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-              <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">No visibility</h3>
+              <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">
+                No visibility
+              </h3>
               <p className="text-[#a7b6cc]">
                 Most owners never see how many orders disappear because the phone
                 was not answered. Saana makes that measurable.
@@ -262,24 +310,46 @@ export default function HomePage() {
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
-              ["Step 1", "Catch the missed call", "Saana records the inbound event when the restaurant does not answer."],
-              ["Step 2", "Send the recovery path", "The customer gets pushed into a clean digital ordering experience instead of disappearing to a competitor."],
-              ["Step 3", "Capture the order", "The guest completes the order in your current flow or in a Saana-powered ordering path."],
-              ["Step 4", "Track the outcome", "Measure missed calls, recovered orders, and the revenue that would have been lost."],
+              [
+                "Step 1",
+                "Catch the missed call",
+                "Saana records the inbound event when the restaurant does not answer.",
+              ],
+              [
+                "Step 2",
+                "Send the recovery path",
+                "The customer gets pushed into a clean digital ordering experience instead of disappearing to a competitor.",
+              ],
+              [
+                "Step 3",
+                "Capture the order",
+                "The guest completes the order in your current flow or in a Saana-powered ordering path.",
+              ],
+              [
+                "Step 4",
+                "Track the outcome",
+                "Measure missed calls, recovered orders, and the revenue that would have been lost.",
+              ],
             ].map(([step, title, text]) => (
-              <div key={step} className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
+              <div
+                key={step}
+                className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]"
+              >
                 <div className="mb-3 inline-flex items-center rounded-full border border-[#80efe2]/20 bg-[#80efe2]/10 px-2.5 py-1 text-[12px] font-black uppercase tracking-[0.06em] text-[#9af1e6]">
                   {step}
                 </div>
-                <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">{title}</h3>
+                <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">
+                  {title}
+                </h3>
                 <p className="text-[#a7b6cc]">{text}</p>
               </div>
             ))}
           </div>
 
           <div className="mt-5 rounded-2xl border-l-4 border-[#ff8a3d] bg-[#ff8a3d]/10 px-4 py-3 text-[#f4ccb0]">
-            Early-stage reality: if automated messaging is not yet cleared, Saana can
-            still run a demo or manual recovery path to prove the ordering loop before scaling.
+            Early-stage reality: if automated messaging is not yet cleared, Saana
+            can still run a demo or manual recovery path to prove the ordering
+            loop before scaling.
           </div>
         </section>
 
@@ -290,16 +360,28 @@ export default function HomePage() {
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-              <div className="mb-1 text-[15px] font-semibold text-[#f8fbff]">More orders</div>
-              <div className="text-[#a7b6cc]">Capture customers you are currently losing.</div>
+              <div className="mb-1 text-[15px] font-semibold text-[#f8fbff]">
+                More orders
+              </div>
+              <div className="text-[#a7b6cc]">
+                Capture customers you are currently losing.
+              </div>
             </div>
             <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-              <div className="mb-1 text-[15px] font-semibold text-[#f8fbff]">Less pressure</div>
-              <div className="text-[#a7b6cc]">Reduce phone load during peak hours.</div>
+              <div className="mb-1 text-[15px] font-semibold text-[#f8fbff]">
+                Less pressure
+              </div>
+              <div className="text-[#a7b6cc]">
+                Reduce phone load during peak hours.
+              </div>
             </div>
             <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-              <div className="mb-1 text-[15px] font-semibold text-[#f8fbff]">Clear visibility</div>
-              <div className="text-[#a7b6cc]">Track missed calls and recovered revenue.</div>
+              <div className="mb-1 text-[15px] font-semibold text-[#f8fbff]">
+                Clear visibility
+              </div>
+              <div className="text-[#a7b6cc]">
+                Track missed calls and recovered revenue.
+              </div>
             </div>
           </div>
         </section>
@@ -309,18 +391,33 @@ export default function HomePage() {
             Best fit for launch
           </h2>
           <p className="mb-6 max-w-[780px] text-[#a7b6cc]">
-            Start where the pain is obvious and where owners can feel the problem every day.
+            Start where the pain is obvious and where owners can feel the problem
+            every day.
           </p>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
-              ["Independent restaurants", "Fast decision cycles and less red tape."],
+              [
+                "Independent restaurants",
+                "Fast decision cycles and less red tape.",
+              ],
               ["Quick service", "High call volume and speed-sensitive orders."],
-              ["Casual dining", "Strong takeout demand without enterprise complexity."],
-              ["Small groups first", "One to three locations before larger rollouts."],
+              [
+                "Casual dining",
+                "Strong takeout demand without enterprise complexity.",
+              ],
+              [
+                "Small groups first",
+                "One to three locations before larger rollouts.",
+              ],
             ].map(([title, text]) => (
-              <div key={title} className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-                <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">{title}</h3>
+              <div
+                key={title}
+                className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]"
+              >
+                <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">
+                  {title}
+                </h3>
                 <p className="text-[#a7b6cc]">{text}</p>
               </div>
             ))}
@@ -332,7 +429,8 @@ export default function HomePage() {
             Simple launch pricing
           </h2>
           <p className="mb-6 max-w-[780px] text-[#a7b6cc]">
-            Keep pricing easy to understand. Charge for the outcome, not telephony complexity.
+            Keep pricing easy to understand. Charge for the outcome, not
+            telephony complexity.
           </p>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -392,13 +490,30 @@ export default function HomePage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             {[
-              ["Do I need to replace my POS?", "No. Saana can start by sending callers into your current ordering flow."],
-              ["Is this another giant software suite?", "No. The point is to solve one sharp problem first: missed calls that become lost orders."],
-              ["How long should setup take?", "The first version should be quick and white-glove. Complexity should stay on Saana’s side, not the restaurant’s."],
-              ["What should we measure?", "Missed calls, recovered orders, recovered revenue, and the share of callers who complete the recovery path."],
+              [
+                "Do I need to replace my POS?",
+                "No. Saana can start by sending callers into your current ordering flow.",
+              ],
+              [
+                "Is this another giant software suite?",
+                "No. The point is to solve one sharp problem first: missed calls that become lost orders.",
+              ],
+              [
+                "How long should setup take?",
+                "The first version should be quick and white-glove. Complexity should stay on Saana’s side, not the restaurant’s.",
+              ],
+              [
+                "What should we measure?",
+                "Missed calls, recovered orders, recovered revenue, and the share of callers who complete the recovery path.",
+              ],
             ].map(([title, text]) => (
-              <div key={title} className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-                <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">{title}</h3>
+              <div
+                key={title}
+                className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]"
+              >
+                <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">
+                  {title}
+                </h3>
                 <p className="text-[#a7b6cc]">{text}</p>
               </div>
             ))}
@@ -411,7 +526,8 @@ export default function HomePage() {
               Stop losing orders you already earned
             </h2>
             <p className="mb-6 max-w-[780px] text-[#a7b6cc]">
-              Book a pilot demo and see how many missed calls your restaurant gets and how many Saana can turn into real orders.
+              Book a pilot demo and see how many missed calls your restaurant gets
+              and how many Saana can turn into real orders.
             </p>
 
             {!isSubmitted ? (
@@ -489,10 +605,18 @@ export default function HomePage() {
                     className="w-full rounded-[14px] border border-white/12 bg-white/[0.03] px-4 py-[14px] text-[#e7eef9] outline-none focus:border-[#80efe2]/45 focus:shadow-[0_0_0_3px_rgba(128,239,226,.10)]"
                   >
                     <option value="">Select one</option>
-                    <option value="We miss calls during rush">We miss calls during rush</option>
-                    <option value="We miss after-hours calls">We miss after-hours calls</option>
-                    <option value="We are not sure how many calls we miss">We are not sure how many calls we miss</option>
-                    <option value="We want a better direct ordering path">We want a better direct ordering path</option>
+                    <option value="We miss calls during rush">
+                      We miss calls during rush
+                    </option>
+                    <option value="We miss after-hours calls">
+                      We miss after-hours calls
+                    </option>
+                    <option value="We are not sure how many calls we miss">
+                      We are not sure how many calls we miss
+                    </option>
+                    <option value="We want a better direct ordering path">
+                      We want a better direct ordering path
+                    </option>
                   </select>
                 </Field>
 
@@ -596,7 +720,11 @@ function PricingCard({
         {tag}
       </div>
 
-      <div className={`${custom ? "text-[32px]" : "text-[42px]"} font-black leading-none tracking-[-0.04em] text-[#f8fbff]`}>
+      <div
+        className={`${
+          custom ? "text-[32px]" : "text-[42px]"
+        } font-black leading-none tracking-[-0.04em] text-[#f8fbff]`}
+      >
         {price}
       </div>
       <div className="mt-1 text-[#a7b6cc]">{subtitle}</div>
