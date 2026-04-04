@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 //import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -21,7 +21,7 @@ function getErrorMessage(error?: string | null) {
 
 type LoginMethod = "email" | "sms";
 
-export default function LoginPage() {
+function LoginPageContent() {
   //const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const searchParams = useSearchParams();
 
@@ -79,7 +79,7 @@ export default function LoginPage() {
     }
   }
 
-    async function handleSmsSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSmsSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (smsLoading) return;
@@ -89,71 +89,71 @@ export default function LoginPage() {
     setSent(false);
 
     try {
-        // STEP 1: send OTP
-        if (!smsSent) {
+      // STEP 1: send OTP
+      if (!smsSent) {
         if (!phone.trim()) {
-            setSubmitError("Phone number is required.");
-            setSmsLoading(false);
-            return;
+          setSubmitError("Phone number is required.");
+          setSmsLoading(false);
+          return;
         }
 
         const res = await fetch("/api/auth/send-otp", {
-            method: "POST",
-            headers: {
+          method: "POST",
+          headers: {
             "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
+          },
+          body: JSON.stringify({
             phone: phone.trim(),
-            }),
+          }),
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-            setSubmitError(data.error || "Failed to send code.");
-            setSmsLoading(false);
-            return;
+          setSubmitError(data.error || "Failed to send code.");
+          setSmsLoading(false);
+          return;
         }
 
         setSmsSent(true);
         setSmsLoading(false);
         return;
-        }
+      }
 
-        // STEP 2: verify OTP
-        if (!smsCode.trim()) {
+      // STEP 2: verify OTP
+      if (!smsCode.trim()) {
         setSubmitError("Enter the 6-digit code.");
         setSmsLoading(false);
         return;
-        }
+      }
 
-        const res = await fetch("/api/auth/verify-otp", {
+      const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: {
-            "Content-Type": "application/json",
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            phone: phone.trim(),
-            code: smsCode.trim(),
+          phone: phone.trim(),
+          code: smsCode.trim(),
         }),
-        });
+      });
 
-        const data = await res.json();
+      const data = await res.json();
 
-        if (!res.ok) {
+      if (!res.ok) {
         setSubmitError(data.error || "Invalid code.");
         setSmsLoading(false);
         return;
-        }
+      }
 
-        // SUCCESS → redirect to admin
-        window.location.replace(`/admin/restaurants/${data.slug}/orders`);
+      // SUCCESS → redirect to admin
+      window.location.replace(`/admin/restaurants/${data.slug}/orders`);
     } catch {
-        setSubmitError("Something went wrong with SMS login.");
+      setSubmitError("Something went wrong with SMS login.");
     } finally {
-        setSmsLoading(false);
+      setSmsLoading(false);
     }
-    }
+  }
 
   return (
     <main className="min-h-screen bg-neutral-100">
@@ -314,5 +314,13 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-neutral-100" />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
