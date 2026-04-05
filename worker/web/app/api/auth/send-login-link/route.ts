@@ -2,11 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 function getAppBaseUrl(): string {
@@ -19,7 +14,10 @@ function getAppBaseUrl(): string {
   return appUrl.replace(/\/+$/, "");
 }
 
-async function findAuthUserByEmail(email: string) {
+async function findAuthUserByEmail(
+  supabase: ReturnType<typeof createClient>,
+  email: string
+) {
   let page = 1;
   const perPage = 200;
 
@@ -53,6 +51,11 @@ async function findAuthUserByEmail(email: string) {
 }
 
 export async function POST(req: Request) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   try {
     const body = await req.json();
     const email = (body.email || "").trim().toLowerCase();
@@ -64,7 +67,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const authUser = await findAuthUserByEmail(email);
+    const authUser = await findAuthUserByEmail(supabase, email);
 
     if (!authUser) {
       return NextResponse.json(

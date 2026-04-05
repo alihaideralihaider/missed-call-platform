@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MENU_MODEL = process.env.OPENAI_MENU_MODEL || "gpt-5.4-nano";
 
@@ -166,7 +161,10 @@ function normalizeAssetMatchText(value: string): string {
     .trim();
 }
 
-async function loadRestaurantAssetMap(restaurantId: string) {
+async function loadRestaurantAssetMap(
+  supabase: ReturnType<typeof createClient>,
+  restaurantId: string
+) {
   const { data, error } = await supabase
     .schema("food_ordering")
     .from("menu_item_assets")
@@ -274,9 +272,6 @@ function parseCsvLine(line: string): string[] {
     String(value ?? "").replace(/^"(.*)"$/, "$1").trim()
   );
 
-  // Handle malformed CSV where the entire row was wrapped in one giant quoted cell.
-  // Example:
-  // "category_name,item_name,description,price"
   if (
     cleaned.length === 1 &&
     cleaned[0].includes(",") &&
@@ -382,7 +377,10 @@ function parseStructuredCsv(text: string): ParsedSourceRow[] {
   return rows;
 }
 
-async function loadRestaurantAndMenu(slug: string): Promise<{
+async function loadRestaurantAndMenu(
+  supabase: ReturnType<typeof createClient>,
+  slug: string
+): Promise<{
   restaurant: RestaurantRecord;
   menu: MenuRecord;
 }> {
@@ -416,6 +414,7 @@ async function loadRestaurantAndMenu(slug: string): Promise<{
 }
 
 async function loadRestaurantCategoryMap(
+  supabase: ReturnType<typeof createClient>,
   menuId: string
 ): Promise<Map<string, MenuCategoryRecord>> {
   const { data, error } = await supabase
@@ -438,6 +437,7 @@ async function loadRestaurantCategoryMap(
 }
 
 async function loadDescriptionLibraries(
+  supabase: ReturnType<typeof createClient>,
   categoryMap: Map<string, MenuCategoryRecord>
 ) {
   const categoryIds = Array.from(categoryMap.values()).map((value) => value.id);
@@ -596,14 +596,15 @@ async function generateAiDescriptions(
 }
 
 async function buildPreviewRows(
+  supabase: ReturnType<typeof createClient>,
   slug: string,
   parsedRows: ParsedSourceRow[]
 ): Promise<PreviewRow[]> {
-  const { restaurant, menu } = await loadRestaurantAndMenu(slug);
-  const assetMap = await loadRestaurantAssetMap(restaurant.id);
-  const categoryMap = await loadRestaurantCategoryMap(menu.id);
+  const { restaurant, menu } = await loadRestaurantAndMenu(supabase, slug);
+  const assetMap = await loadRestaurantAssetMap(supabase, restaurant.id);
+  const categoryMap = await loadRestaurantCategoryMap(supabase, menu.id);
   const { restaurantLibrary, globalLibrary } =
-    await loadDescriptionLibraries(categoryMap);
+    await loadDescriptionLibraries(supabase, categoryMap);
 
   const previewRows: PreviewRow[] = parsedRows.map((row) => {
     const normalizedName = normalizeItemName(row.itemName);
@@ -748,8 +749,12 @@ function sanitizeCommitRows(input: unknown): CommitRow[] {
   return rows;
 }
 
-async function commitRows(slug: string, rows: CommitRow[]) {
-  const { restaurant, menu } = await loadRestaurantAndMenu(slug);
+async function commitRows(
+  supabase: ReturnType<typeof createClient>,
+  slug: string,
+  rows: CommitRow[]
+) {
+  const { restaurant, menu } = await loadRestaurantAndMenu(supabase, slug);
 
   const { data: existingCategories, error: categoriesError } = await supabase
     .schema("food_ordering")
@@ -879,6 +884,11 @@ async function commitRows(slug: string, rows: CommitRow[]) {
 }
 
 export async function POST(req: NextRequest, { params }: RouteContext) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   try {
     const { slug } = await params;
     const contentType = req.headers.get("content-type") || "";
@@ -896,9 +906,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
       const text = await file.text();
       const parsedRows = parseStructuredCsv(text);
-      const previewRows = await buildPreviewRows(slug, parsedRows);
+      const previewRows = await buildPreviewRows(supabase, slug, parsedRows);
 
-      const { restaurant } = await loadRestaurantAndMenu(slug);
+      const { restaurant } = await loadRestaurantAndMenu(supabase, slug);
 
       const ip =
         req.headers.get("x-forwarded-for") ||
@@ -944,7 +954,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
 
     const rows = sanitizeCommitRows(body.rows);
-    const result = await commitRows(slug, rows);
+    const result = await commitRows(supabase, slug, rows);
 
     return NextResponse.json(result);
   } catch (error) {

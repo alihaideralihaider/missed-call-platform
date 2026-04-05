@@ -2,11 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 function slugify(input: string): string {
@@ -29,7 +24,10 @@ function getAppBaseUrl(): string {
   return appUrl.replace(/\/+$/, "");
 }
 
-async function findAuthUserByEmail(email: string) {
+async function findAuthUserByEmail(
+  supabase: ReturnType<typeof createClient>,
+  email: string
+) {
   let page = 1;
   const perPage = 200;
 
@@ -62,7 +60,10 @@ async function findAuthUserByEmail(email: string) {
   return null;
 }
 
-async function generateUniqueSlug(baseSlug: string): Promise<string> {
+async function generateUniqueSlug(
+  supabase: ReturnType<typeof createClient>,
+  baseSlug: string
+): Promise<string> {
   const normalizedBase = slugify(baseSlug) || "restaurant";
 
   let candidate = normalizedBase;
@@ -90,6 +91,11 @@ async function generateUniqueSlug(baseSlug: string): Promise<string> {
 }
 
 export async function POST(req: Request) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   try {
     const body = await req.json();
 
@@ -140,7 +146,7 @@ export async function POST(req: Request) {
       slug = slugify(name);
     }
 
-    slug = await generateUniqueSlug(slug);
+    slug = await generateUniqueSlug(supabase, slug);
 
     // Verify partner exists and is active
     const { data: partner, error: partnerError } = await supabase
@@ -310,7 +316,7 @@ export async function POST(req: Request) {
     }
 
     // 8) Create/find auth user
-    let authUser = await findAuthUserByEmail(contactEmail);
+    let authUser = await findAuthUserByEmail(supabase, contactEmail);
     let authUserCreated = false;
 
     if (!authUser) {

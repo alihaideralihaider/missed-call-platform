@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 type RouteContext = {
   params: Promise<{
     slug: string;
@@ -157,20 +152,23 @@ async function sendTwilioSms(args: {
   }
 }
 
-async function logMessage(args: {
-  restaurantId: string;
-  orderId: string;
-  customerId?: string | null;
-  eventType: string;
-  toPhone?: string | null;
-  fromPhone?: string | null;
-  messageBody?: string | null;
-  providerMessageSid?: string | null;
-  status: string;
-  errorCode?: string | null;
-  errorMessage?: string | null;
-  metadata?: Record<string, unknown>;
-}) {
+async function logMessage(
+  supabase: ReturnType<typeof createClient>,
+  args: {
+    restaurantId: string;
+    orderId: string;
+    customerId?: string | null;
+    eventType: string;
+    toPhone?: string | null;
+    fromPhone?: string | null;
+    messageBody?: string | null;
+    providerMessageSid?: string | null;
+    status: string;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    metadata?: Record<string, unknown>;
+  }
+) {
   const payload = {
     restaurant_id: args.restaurantId,
     order_id: args.orderId,
@@ -206,6 +204,11 @@ async function logMessage(args: {
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   try {
     const { slug, orderId } = await params;
     const body = await req.json();
@@ -320,7 +323,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
             smsSent = true;
             smsSid = smsResult.sid;
 
-            await logMessage({
+            await logMessage(supabase, {
               restaurantId: restaurant.id,
               orderId: updatedOrder.id,
               customerId: customer.id,
@@ -338,7 +341,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
             smsError = smsResult.error;
             smsSid = smsResult.sid || "";
 
-            await logMessage({
+            await logMessage(supabase, {
               restaurantId: restaurant.id,
               orderId: updatedOrder.id,
               customerId: customer.id,
@@ -366,7 +369,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
             ? "Customer phone could not be normalized to E.164."
             : "No SMS body generated for this status.";
 
-          await logMessage({
+          await logMessage(supabase, {
             restaurantId: restaurant.id,
             orderId: updatedOrder.id,
             customerId: customer.id,
@@ -389,7 +392,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       } else {
         smsError = "Customer phone not found.";
 
-        await logMessage({
+        await logMessage(supabase, {
           restaurantId: restaurant.id,
           orderId: updatedOrder.id,
           customerId: updatedOrder.customer_id,
@@ -405,7 +408,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     } else {
       smsError = "Customer not linked to order.";
 
-      await logMessage({
+      await logMessage(supabase, {
         restaurantId: restaurant.id,
         orderId: updatedOrder.id,
         eventType: `order_status_${nextStatus}`,

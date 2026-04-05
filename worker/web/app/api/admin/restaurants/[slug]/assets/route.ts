@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 type RouteContext = {
   params: Promise<{ slug: string }>;
 };
@@ -24,6 +19,11 @@ function getFileExtension(name: string): string {
 }
 
 export async function GET(_: NextRequest, context: RouteContext) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   try {
     const { slug } = await context.params;
 
@@ -83,6 +83,11 @@ export async function GET(_: NextRequest, context: RouteContext) {
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   try {
     const { slug } = await context.params;
 

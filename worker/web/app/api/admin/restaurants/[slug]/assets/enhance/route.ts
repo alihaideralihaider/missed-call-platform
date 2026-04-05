@@ -8,11 +8,6 @@ type RouteContext = {
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 type RequestBody = {
   imageUrl?: string;
   mode?: "vibe" | "menu";
@@ -88,7 +83,10 @@ function b64ToUint8Array(b64: string) {
   return new Uint8Array(binary);
 }
 
-async function loadRestaurantBySlug(slug: string): Promise<RestaurantRecord> {
+async function loadRestaurantBySlug(
+  supabase: ReturnType<typeof createClient>,
+  slug: string
+): Promise<RestaurantRecord> {
   const { data, error } = await supabase
     .schema("food_ordering")
     .from("restaurants")
@@ -104,6 +102,7 @@ async function loadRestaurantBySlug(slug: string): Promise<RestaurantRecord> {
 }
 
 async function loadMenuItemName(
+  supabase: ReturnType<typeof createClient>,
   menuItemId?: string | null
 ): Promise<string | null> {
   if (!menuItemId) return null;
@@ -120,7 +119,11 @@ async function loadMenuItemName(
   return (data as MenuItemRecord).name || null;
 }
 
-async function getNextVibeNumber(restaurantId: string, restaurantSlug: string) {
+async function getNextVibeNumber(
+  supabase: ReturnType<typeof createClient>,
+  restaurantId: string,
+  restaurantSlug: string
+) {
   const folder = `${restaurantId}/enhanced`;
   const prefix = `${restaurantSlug}-vibe-`;
 
@@ -151,17 +154,24 @@ async function getNextVibeNumber(restaurantId: string, restaurantSlug: string) {
   return maxNumber + 1;
 }
 
-async function buildEnhancedFileName(args: {
-  restaurantId: string;
-  restaurantSlug: string;
-  mode: "vibe" | "menu";
-  menuItemName?: string | null;
-  originalFileName?: string | null;
-}) {
+async function buildEnhancedFileName(
+  supabase: ReturnType<typeof createClient>,
+  args: {
+    restaurantId: string;
+    restaurantSlug: string;
+    mode: "vibe" | "menu";
+    menuItemName?: string | null;
+    originalFileName?: string | null;
+  }
+) {
   const timestamp = Date.now();
 
   if (args.mode === "vibe") {
-    const vibeNumber = await getNextVibeNumber(args.restaurantId, args.restaurantSlug);
+    const vibeNumber = await getNextVibeNumber(
+      supabase,
+      args.restaurantId,
+      args.restaurantSlug
+    );
     return `${args.restaurantSlug}-vibe-${vibeNumber}-${timestamp}.jpg`;
   }
 
@@ -174,6 +184,11 @@ async function buildEnhancedFileName(args: {
 }
 
 export async function POST(req: NextRequest, { params }: RouteContext) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   try {
     if (!OPENAI_API_KEY) {
       return NextResponse.json(
@@ -183,7 +198,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
 
     const { slug } = await params;
-    const restaurant = await loadRestaurantBySlug(slug);
+    const restaurant = await loadRestaurantBySlug(supabase, slug);
 
     const body = (await req.json()) as RequestBody;
     const imageUrl = String(body.imageUrl || "").trim();
@@ -252,9 +267,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
 
     const enhancedBytes = b64ToUint8Array(b64);
-    const menuItemName = await loadMenuItemName(menuItemId);
+    const menuItemName = await loadMenuItemName(supabase, menuItemId);
 
-    const displayFileName = await buildEnhancedFileName({
+    const displayFileName = await buildEnhancedFileName(supabase, {
       restaurantId: restaurant.id,
       restaurantSlug: slugify(restaurant.slug || restaurant.name),
       mode,
