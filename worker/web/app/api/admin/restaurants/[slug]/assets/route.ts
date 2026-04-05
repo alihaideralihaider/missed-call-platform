@@ -19,7 +19,7 @@ function getFileExtension(name: string): string {
 }
 
 export async function GET(_: NextRequest, context: RouteContext) {
-  const supabase = createClient(
+  const supabase = createClient<any>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -83,7 +83,7 @@ export async function GET(_: NextRequest, context: RouteContext) {
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
-  const supabase = createClient(
+  const supabase = createClient<any>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );

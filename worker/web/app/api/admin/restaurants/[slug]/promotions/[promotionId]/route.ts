@@ -128,7 +128,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       );
     }
 
-    const supabase = createClient(
+    const supabase = createClient<any>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
@@ -293,7 +293,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       );
     }
 
-    const supabase = createClient(
+    const supabase = createClient<any>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );

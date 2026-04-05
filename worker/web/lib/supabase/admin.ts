@@ -10,7 +10,7 @@ export function createSupabaseAdminClient(): SupabaseClient {
     );
   }
 
-  return createClient(url, serviceRoleKey, {
+  return createClient<any>(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

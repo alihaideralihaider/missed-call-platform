@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = createClient(
+    const supabase = createClient<any>(
       requiredEnv("SUPABASE_URL"),
       requiredEnv("SUPABASE_SERVICE_ROLE_KEY")
     );

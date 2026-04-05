@@ -6,7 +6,7 @@ type RouteContext = {
 };
 
 export async function POST(req: NextRequest, { params }: RouteContext) {
-  const supabase = createClient(
+  const supabase = createClient<any>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );

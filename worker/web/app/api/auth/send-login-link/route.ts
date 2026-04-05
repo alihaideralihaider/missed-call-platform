@@ -15,7 +15,7 @@ function getAppBaseUrl(): string {
 }
 
 async function findAuthUserByEmail(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   email: string
 ) {
   let page = 1;
@@ -33,7 +33,7 @@ async function findAuthUserByEmail(
 
     const users = data?.users ?? [];
     const match = users.find(
-      (user) => (user.email || "").trim().toLowerCase() === email
+    (user: any) => (user.email || "").trim().toLowerCase() === email
     );
 
     if (match) {
@@ -51,7 +51,7 @@ async function findAuthUserByEmail(
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient(
+  const supabase = createClient<any>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );

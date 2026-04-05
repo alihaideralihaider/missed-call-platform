@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MENU_MODEL = process.env.OPENAI_MENU_MODEL || "gpt-5.4-nano";
@@ -162,7 +162,7 @@ function normalizeAssetMatchText(value: string): string {
 }
 
 async function loadRestaurantAssetMap(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   restaurantId: string
 ) {
   const { data, error } = await supabase
@@ -378,7 +378,7 @@ function parseStructuredCsv(text: string): ParsedSourceRow[] {
 }
 
 async function loadRestaurantAndMenu(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   slug: string
 ): Promise<{
   restaurant: RestaurantRecord;
@@ -414,7 +414,7 @@ async function loadRestaurantAndMenu(
 }
 
 async function loadRestaurantCategoryMap(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   menuId: string
 ): Promise<Map<string, MenuCategoryRecord>> {
   const { data, error } = await supabase
@@ -437,7 +437,7 @@ async function loadRestaurantCategoryMap(
 }
 
 async function loadDescriptionLibraries(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   categoryMap: Map<string, MenuCategoryRecord>
 ) {
   const categoryIds = Array.from(categoryMap.values()).map((value) => value.id);
@@ -596,7 +596,7 @@ async function generateAiDescriptions(
 }
 
 async function buildPreviewRows(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   slug: string,
   parsedRows: ParsedSourceRow[]
 ): Promise<PreviewRow[]> {
@@ -750,7 +750,7 @@ function sanitizeCommitRows(input: unknown): CommitRow[] {
 }
 
 async function commitRows(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   slug: string,
   rows: CommitRow[]
 ) {
@@ -884,7 +884,7 @@ async function commitRows(
 }
 
 export async function POST(req: NextRequest, { params }: RouteContext) {
-  const supabase = createClient(
+  const supabase = createClient<any>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );

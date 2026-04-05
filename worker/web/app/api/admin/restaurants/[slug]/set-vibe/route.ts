@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       );
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabase = createClient<any>(supabaseUrl, serviceRoleKey);
 
     const { data: restaurant, error: findError } = await supabase
       .schema("food_ordering")
