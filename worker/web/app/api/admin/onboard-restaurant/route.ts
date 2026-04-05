@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -25,7 +25,7 @@ function getAppBaseUrl(): string {
 }
 
 async function findAuthUserByEmail(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   email: string
 ) {
   let page = 1;
@@ -61,7 +61,7 @@ async function findAuthUserByEmail(
 }
 
 async function generateUniqueSlug(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   baseSlug: string
 ): Promise<string> {
   const normalizedBase = slugify(baseSlug) || "restaurant";

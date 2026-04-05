@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -84,7 +84,7 @@ function b64ToUint8Array(b64: string) {
 }
 
 async function loadRestaurantBySlug(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   slug: string
 ): Promise<RestaurantRecord> {
   const { data, error } = await supabase
@@ -102,7 +102,7 @@ async function loadRestaurantBySlug(
 }
 
 async function loadMenuItemName(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   menuItemId?: string | null
 ): Promise<string | null> {
   if (!menuItemId) return null;
@@ -120,7 +120,7 @@ async function loadMenuItemName(
 }
 
 async function getNextVibeNumber(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   restaurantId: string,
   restaurantSlug: string
 ) {
@@ -155,7 +155,7 @@ async function getNextVibeNumber(
 }
 
 async function buildEnhancedFileName(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   args: {
     restaurantId: string;
     restaurantSlug: string;
