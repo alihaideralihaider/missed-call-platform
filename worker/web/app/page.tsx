@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { SiteFooter } from "./components/site-footer";
 
 const DEMO_VIDEO_URL = "https://youtube.com/YOUR_DEMO_VIDEO";
 
@@ -77,49 +78,52 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#081120] text-[#e7eef9]">
       <div className="mx-auto max-w-[1140px] px-6">
-        <nav className="flex items-center justify-between gap-4 py-5">
+        <nav className="flex flex-col gap-4 py-5 md:flex-row md:items-start md:justify-between">
           <Link
             href="#top"
-            className="flex min-w-0 items-center gap-3"
+            className="flex min-w-0 flex-col items-start gap-2"
             aria-label="Saana home"
           >
-            <div className="h-11 w-11 overflow-hidden rounded-[14px] border border-white/10 bg-[#10203a] shadow-[0_8px_20px_rgba(0,0,0,.18)]">
+            <div className="rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02))] px-3 py-2 shadow-[0_14px_34px_rgba(0,0,0,.22)]">
               <Image
                 src="/logo.svg"
                 alt="Saana logo"
-                width={44}
+                width={208}
                 height={44}
-                className="h-full w-full object-cover"
+                priority
+                className="h-auto w-[150px] md:w-[208px]"
               />
             </div>
-            <div className="min-w-0">
-              <div className="text-[18px] font-semibold leading-tight tracking-[-0.02em] text-[#f8fbff]">
-                Saana
-              </div>
-              <div className="text-[12px] font-bold tracking-[0.02em] text-[#a7b6cc]">
-                Restaurant Missed Call Recovery
-              </div>
+            <div className="pl-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#9cadc5] md:text-[12px]">
+              Restaurant Missed Call Recovery
             </div>
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:items-center md:gap-3">
+            <Link
+              href="/pricing"
+              className="inline-flex h-10 items-center justify-center rounded-[12px] border border-white/12 bg-white/[0.03] px-3 py-2 text-[13px] font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px] md:h-auto md:rounded-[14px] md:px-5 md:py-3 md:text-base"
+            >
+              Pricing
+            </Link>
+
             <Link
               href="/login"
-              className="inline-flex items-center justify-center rounded-[14px] border border-white/12 bg-white/[0.03] px-5 py-3 font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px]"
+              className="inline-flex h-10 items-center justify-center rounded-[12px] border border-white/12 bg-white/[0.03] px-3 py-2 text-[13px] font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px] md:h-auto md:rounded-[14px] md:px-5 md:py-3 md:text-base"
             >
               Login
             </Link>
 
             <Link
               href="/onboard"
-              className="inline-flex items-center justify-center rounded-[14px] bg-[#ff8a3d] px-5 py-3 font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px]"
+              className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#ff8a3d] px-3 py-2 text-[13px] font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px] md:h-auto md:rounded-[14px] md:px-5 md:py-3 md:text-base"
             >
               Try free
             </Link>
 
             <a
               href="#demo"
-              className="inline-flex items-center justify-center rounded-[14px] border border-white/12 bg-white/[0.03] px-5 py-3 font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px]"
+              className="inline-flex h-10 items-center justify-center rounded-[12px] border border-white/12 bg-white/[0.03] px-3 py-2 text-[13px] font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px] md:h-auto md:rounded-[14px] md:px-5 md:py-3 md:text-base"
             >
               Book a demo
             </a>
@@ -128,21 +132,28 @@ export default function HomePage() {
 
         <section
           id="top"
-          className="grid gap-7 py-8 pb-16 lg:grid-cols-[1.03fr_.97fr] lg:items-center"
+          className="grid gap-7 py-6 pb-16 md:py-8 lg:grid-cols-[1.03fr_.97fr] lg:items-center"
         >
           <div>
             <div className="inline-flex items-center rounded-full border border-[#ff8a3d]/20 bg-[#ff8a3d]/12 px-3 py-2 text-[12px] font-black uppercase tracking-[0.08em] text-[#ffc8a2]">
               Missed-call recovery for restaurants
             </div>
 
-            <h1 className="mt-5 text-5xl font-black leading-none tracking-[-0.045em] text-[#f8fbff] md:text-6xl">
-              Miss a call. Lose an order. We fix that.
+            <h1 className="mt-5 max-w-[11ch] text-[44px] font-black leading-[0.92] tracking-[-0.05em] text-[#f8fbff] md:max-w-none md:text-6xl md:leading-none md:tracking-[-0.045em]">
+              <span className="block md:hidden">Miss a call</span>
+              <span className="block md:hidden">Lose an order</span>
+              <span className="block md:hidden">We fix that</span>
+              <span className="hidden md:inline">
+                Miss a call. Lose an order. We fix that.
+              </span>
             </h1>
 
-            <p className="mt-4 max-w-[680px] text-xl text-[#a7b6cc]">
-              When your restaurant can’t answer the phone, Saana gives customers a
-              fast way to still place their order instead of ordering somewhere
-              else.
+            <p className="mt-4 max-w-[680px] text-lg text-[#a7b6cc] md:text-xl">
+              SaanaOS gives restaurants a practical restaurant missed call
+              recovery workflow so customers still have a fast way to place an
+              order instead of ordering somewhere else. It combines missed call
+              ordering with a streamlined SMS ordering system for confirmations,
+              status updates, and recovery after a missed call.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3">
@@ -255,14 +266,63 @@ export default function HomePage() {
           </div>
         </section>
 
+        <section id="pricing" className="pb-5">
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
+            <div className="inline-flex items-center rounded-full border border-[#ff8a3d]/20 bg-[#ff8a3d]/12 px-3 py-2 text-[12px] font-black uppercase tracking-[0.08em] text-[#ffc8a2]">
+              Founding Pricing
+            </div>
+            <h2 className="mt-4 text-4xl font-black tracking-[-0.03em] text-[#f8fbff]">
+              Founding Pricing
+            </h2>
+            <p className="mt-3 max-w-[780px] text-[#a7b6cc]">
+              First 100 restaurants lock in pricing forever.
+            </p>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              {[
+                ["Basic", "$29/mo"],
+                ["Pro", "$39/mo"],
+                ["Pro Plus", "$49/mo"],
+              ].map(([plan, price], index) => (
+                <div
+                  key={plan}
+                  className={`rounded-[22px] border p-5 shadow-[0_18px_60px_rgba(0,0,0,.20)] ${
+                    index === 0
+                      ? "border-[#ff8a3d]/30 bg-[linear-gradient(180deg,rgba(255,138,61,.14),rgba(255,255,255,.05))]"
+                      : "border-white/10 bg-[rgba(8,17,32,.74)]"
+                  }`}
+                >
+                  <p className="text-sm font-black uppercase tracking-[0.08em] text-[#ffc8a2]">
+                    {plan}
+                  </p>
+                  <p className="mt-3 text-3xl font-black text-[#f8fbff]">
+                    {price}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6">
+              <Link
+                href="/pricing"
+                className="inline-flex items-center justify-center rounded-[14px] bg-[#ff8a3d] px-5 py-3 font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px]"
+              >
+                View Pricing
+              </Link>
+            </div>
+          </div>
+        </section>
+
         <section className="py-5">
           <h2 className="mb-3 text-4xl font-black tracking-[-0.03em] text-[#f8fbff]">
-            You’re losing orders without realizing it
+            Why restaurants lose orders from missed calls
           </h2>
           <p className="mb-6 max-w-[780px] text-[#a7b6cc]">
-            During busy hours, the phone keeps ringing. Staff cannot answer every
-            call. Customers do not wait. They move on. These lost orders are
-            invisible until you recover them.
+            During busy hours, the phone keeps ringing and staff cannot answer
+            every call. Customers do not wait, and those missed calls quickly
+            turn into lost pickup and takeout revenue. Without restaurant missed
+            call recovery, owners often never see how much business disappears
+            before a customer reaches a competitor.
           </p>
 
           <div className="grid gap-4 md:grid-cols-3">
@@ -304,8 +364,11 @@ export default function HomePage() {
             How it works
           </h2>
           <p className="mb-6 max-w-[780px] text-[#a7b6cc]">
-            Saana stays focused on one sharp loop: missed call to recovered order.
-            That keeps the value clear and the setup simple.
+            SaanaOS stays focused on one sharp loop: missed call to recovered
+            order. That keeps the value clear and the setup simple, while
+            turning missed call ordering into a repeatable process supported by
+            an SMS ordering system customers can actually complete on their
+            phone.
           </p>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -355,8 +418,15 @@ export default function HomePage() {
 
         <section className="py-5">
           <h2 className="mb-5 text-4xl font-black tracking-[-0.03em] text-[#f8fbff]">
-            What this means for your restaurant
+            How SaanaOS solves missed call recovery
           </h2>
+          <p className="mb-6 max-w-[780px] text-[#a7b6cc]">
+            SaanaOS helps restaurants recover missed call revenue by giving each
+            caller a clear next step instead of a dead end. The platform is
+            built for restaurant missed call recovery, missed call ordering, and
+            SMS ordering system workflows that keep ordering simple for guests
+            and measurable for operators.
+          </p>
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
@@ -421,65 +491,6 @@ export default function HomePage() {
                 <p className="text-[#a7b6cc]">{text}</p>
               </div>
             ))}
-          </div>
-        </section>
-
-        <section id="pricing" className="py-5">
-          <h2 className="mb-3 text-4xl font-black tracking-[-0.03em] text-[#f8fbff]">
-            Simple launch pricing
-          </h2>
-          <p className="mb-6 max-w-[780px] text-[#a7b6cc]">
-            Keep pricing easy to understand. Charge for the outcome, not
-            telephony complexity.
-          </p>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <PricingCard
-              tag="Pilot"
-              price="$49"
-              subtitle="first 30 days"
-              items={[
-                "1 location",
-                "White-glove onboarding",
-                "Manual or demo recovery flow is okay",
-                "Goal: prove recovered orders",
-              ]}
-            />
-            <PricingCard
-              tag="Core"
-              price="$149"
-              subtitle="per month"
-              featured
-              items={[
-                "1 location",
-                "Missed-call capture",
-                "Recovery link or ordering handoff",
-                "Basic reporting and support",
-              ]}
-            />
-            <PricingCard
-              tag="Growth"
-              price="$299"
-              subtitle="per month"
-              items={[
-                "Everything in Core",
-                "After-hours rules and branded flow",
-                "Priority support",
-                "Best once the loop is already working",
-              ]}
-            />
-            <PricingCard
-              tag="Multi-location"
-              price="Custom"
-              subtitle="from $799+"
-              custom
-              items={[
-                "Multiple stores",
-                "Central reporting",
-                "Rollout support",
-                "Deeper integrations later",
-              ]}
-            />
           </div>
         </section>
 
@@ -668,9 +679,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <footer className="pb-10 pt-5 text-sm text-[#8796ad]">
-          Saana Systems — Restaurant communication, reimagined
-        </footer>
+        <SiteFooter />
       </div>
     </main>
   );
@@ -690,50 +699,5 @@ function Field({
       <span className="text-sm font-extrabold text-[#f8fbff]">{label}</span>
       {children}
     </label>
-  );
-}
-
-function PricingCard({
-  tag,
-  price,
-  subtitle,
-  items,
-  featured = false,
-  custom = false,
-}: {
-  tag: string;
-  price: string;
-  subtitle: string;
-  items: string[];
-  featured?: boolean;
-  custom?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-[22px] border p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)] ${
-        featured
-          ? "border-[#80efe2]/24 bg-[linear-gradient(180deg,rgba(23,36,66,.96),rgba(14,27,51,.98))]"
-          : "border-white/10 bg-white/[0.04]"
-      }`}
-    >
-      <div className="mb-3 inline-flex items-center rounded-full border border-[#80efe2]/20 bg-[#80efe2]/10 px-2.5 py-1 text-[12px] font-black uppercase tracking-[0.06em] text-[#9af1e6]">
-        {tag}
-      </div>
-
-      <div
-        className={`${
-          custom ? "text-[32px]" : "text-[42px]"
-        } font-black leading-none tracking-[-0.04em] text-[#f8fbff]`}
-      >
-        {price}
-      </div>
-      <div className="mt-1 text-[#a7b6cc]">{subtitle}</div>
-
-      <ul className="mt-4 list-disc space-y-2 pl-5 text-[#a7b6cc]">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-    </div>
   );
 }

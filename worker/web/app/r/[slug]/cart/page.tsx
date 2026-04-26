@@ -45,14 +45,18 @@ export default function CartPage({ params }: PageProps) {
     params.then((resolved) => {
       setSlug(cleanSlug(resolved?.slug));
     });
-
-    refresh();
+    const refreshTimer = window.setTimeout(() => {
+      refresh();
+    }, 0);
 
     const unsubscribe = subscribeToCartUpdates(() => {
       refresh();
     });
 
-    return unsubscribe;
+    return () => {
+      window.clearTimeout(refreshTimer);
+      unsubscribe();
+    };
   }, [params]);
 
   const subtotal = useMemo(
@@ -77,17 +81,18 @@ export default function CartPage({ params }: PageProps) {
 
   const handleDecrease = (item: CartItem) => {
     const nextQuantity = item.quantity - 1;
+    const identifier = item.lineId || item.id;
 
     if (nextQuantity <= 0) {
-      removeFromCart(item.id);
+      removeFromCart(identifier);
       return;
     }
 
-    updateCartItemQuantity(item.id, nextQuantity);
+    updateCartItemQuantity(identifier, nextQuantity);
   };
 
   const handleIncrease = (item: CartItem) => {
-    updateCartItemQuantity(item.id, item.quantity + 1);
+    updateCartItemQuantity(item.lineId || item.id, item.quantity + 1);
   };
 
   const handleClearCart = () => {
@@ -198,7 +203,7 @@ export default function CartPage({ params }: PageProps) {
               <div className="space-y-3">
                 {items.map((item) => (
                   <div
-                    key={item.id}
+                    key={item.lineId || item.id}
                     className={`rounded-2xl border p-4 shadow-sm ${
                       item.is_sold_out
                         ? "border-red-200 bg-red-50"
@@ -210,6 +215,19 @@ export default function CartPage({ params }: PageProps) {
                         <p className="text-[15px] font-semibold text-neutral-900">
                           {item.name}
                         </p>
+
+                        {Array.isArray(item.modifiers) && item.modifiers.length > 0 ? (
+                          <div className="mt-2 space-y-1">
+                            {item.modifiers.map((modifier) => (
+                              <p
+                                key={`${modifier.groupId}-${modifier.optionId}`}
+                                className="text-xs text-neutral-600"
+                              >
+                                + {modifier.optionName}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
 
                         {item.is_sold_out ? (
                           <span className="mt-1 inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
@@ -223,7 +241,7 @@ export default function CartPage({ params }: PageProps) {
                       </div>
 
                       <button
-                        onClick={() => removeFromCart(item.id)}
+                        onClick={() => removeFromCart(item.lineId || item.id)}
                         className="text-sm font-medium text-neutral-500"
                       >
                         Remove

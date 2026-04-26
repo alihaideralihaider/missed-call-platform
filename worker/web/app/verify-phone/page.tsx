@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function VerifyPhonePage() {
   const [phone, setPhone] = useState("");
@@ -9,6 +10,25 @@ export default function VerifyPhonePage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+
+    async function ensureSession() {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        window.location.replace(
+          "/login?message=Your session expired. Please sign in again to verify your phone."
+        );
+      }
+    }
+
+    ensureSession();
+  }, []);
 
   async function sendCode(e: React.FormEvent) {
     e.preventDefault();
@@ -24,6 +44,13 @@ export default function VerifyPhonePage() {
       });
 
       const data = await res.json();
+
+      if (res.status === 401) {
+        window.location.replace(
+          "/login?message=Your session expired. Please sign in again to verify your phone."
+        );
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error || "Failed to send code.");
@@ -53,6 +80,13 @@ export default function VerifyPhonePage() {
       });
 
       const data = await res.json();
+
+      if (res.status === 401) {
+        window.location.replace(
+          "/login?message=Your session expired. Please sign in again to verify your phone."
+        );
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error || "Failed to verify code.");

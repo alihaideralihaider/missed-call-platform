@@ -1,25 +1,70 @@
-<svg width="1600" height="500" viewBox="0 0 1600 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg
+  width="1120"
+  height="220"
+  viewBox="20 78 1120 220"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
   <defs>
-    <linearGradient id="g1" x1="92" y1="52" x2="92" y2="236" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FF9D59"/>
-      <stop offset="1" stop-color="#FF8A3D"/>
+    <linearGradient
+      id="g1"
+      x1="92"
+      y1="52"
+      x2="92"
+      y2="236"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#FF9D59" />
+      <stop offset="1" stop-color="#FF8A3D" />
     </linearGradient>
-    <linearGradient id="g2" x1="28" y1="28" x2="156" y2="236" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#163056"/>
-      <stop offset="1" stop-color="#0A162B"/>
+    <linearGradient
+      id="g2"
+      x1="28"
+      y1="28"
+      x2="156"
+      y2="236"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#163056" />
+      <stop offset="1" stop-color="#0A162B" />
     </linearGradient>
-    <filter id="shadow" x="0" y="0" width="240" height="320" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000000" flood-opacity="0.22"/>
+    <filter
+      id="shadow"
+      x="0"
+      y="0"
+      width="240"
+      height="320"
+      filterUnits="userSpaceOnUse"
+      color-interpolation-filters="sRGB"
+    >
+      <feDropShadow
+        dx="0"
+        dy="18"
+        stdDeviation="20"
+        flood-color="#000000"
+        flood-opacity="0.22"
+      />
     </filter>
   </defs>
-  <rect width="1600" height="500" fill="white"/>
   <g filter="url(#shadow)" transform="translate(40 92)">
-    <rect x="0" y="0" width="184" height="184" rx="44" fill="url(#g2)"/>
-    <path d="M92 36C125.137 36 152 62.8629 152 96C152 105.095 149.971 113.715 146.343 121.435C139.204 136.721 123.691 147.333 105.667 147.333H70.8333C63.4695 147.333 57.5 153.303 57.5 160.667C57.5 168.03 63.4695 174 70.8333 174H135.333V196H70.3333C50.273 196 34 179.727 34 159.667C34 139.607 50.273 123.333 70.3333 123.333H105.667C120.946 123.333 133.333 110.946 133.333 95.6667C133.333 80.3878 120.946 68 105.667 68H49.3333V46H92V36Z" fill="url(#g1)"/>
-    <circle cx="128" cy="60" r="11" fill="#80EFE2"/>
+    <rect x="0" y="0" width="184" height="184" rx="44" fill="url(#g2)" />
+    <path
+      d="M92 36C125.137 36 152 62.8629 152 96C152 105.095 149.971 113.715 146.343 121.435C139.204 136.721 123.691 147.333 105.667 147.333H70.8333C63.4695 147.333 57.5 153.303 57.5 160.667C57.5 168.03 63.4695 174 70.8333 174H135.333V196H70.3333C50.273 196 34 179.727 34 159.667C34 139.607 50.273 123.333 70.3333 123.333H105.667C120.946 123.333 133.333 110.946 133.333 95.6667C133.333 80.3878 120.946 68 105.667 68H49.3333V46H92V36Z"
+      fill="url(#g1)"
+    />
+    <circle cx="128" cy="60" r="11" fill="#80EFE2" />
   </g>
-  <g transform="translate(280 126)">
-    <text x="0" y="120" font-family="Inter, Arial, sans-serif" font-size="128" font-weight="800" fill="#0C172C" letter-spacing="-4">SaanaOS</text>
-    <text x="4" y="184" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="600" fill="#51617B">Missed-call recovery for restaurants</text>
+  <g transform="translate(284 124)">
+    <text
+      x="0"
+      y="120"
+      font-family="Inter, Arial, sans-serif"
+      font-size="128"
+      font-weight="800"
+      fill="#F8FBFF"
+      letter-spacing="-4"
+    >
+      SaanaOS
+    </text>
   </g>
 </svg>

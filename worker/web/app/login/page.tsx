@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Suspense, useMemo, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 //import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -8,6 +8,8 @@ function getErrorMessage(error?: string | null) {
   switch (error) {
     case "not_authorized":
       return "This account is not linked to any restaurant admin access.";
+    case "platform_only":
+      return "This account only has Platform Admin access. Use /platform/login instead.";
     case "missing_code":
       return "The login link was incomplete. Please request a new one.";
     case "missing_token":
@@ -146,8 +148,10 @@ function LoginPageContent() {
         return;
       }
 
-      // SUCCESS → redirect to admin
-      window.location.replace(`/admin/restaurants/${data.slug}/orders`);
+      // SUCCESS → complete auth or redirect as instructed by the server
+      window.location.replace(
+        String(data.redirectTo || `/admin/restaurants/${data.slug}/orders`)
+      );
     } catch {
       setSubmitError("Something went wrong with SMS login.");
     } finally {

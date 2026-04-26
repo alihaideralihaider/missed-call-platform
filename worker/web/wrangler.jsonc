@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "web",
+  "workers_dev": true,
+  "compatibility_date": "2026-03-17",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "web"
+    },
+    {
+      "binding": "ORDER_API_SERVICE",
+      "service": "authtoolkit"
+    }
+  ],
+  "images": {
+    "binding": "IMAGES"
+  },
+  "vars": {
+    "NEXT_PUBLIC_APP_URL": "https://www.saanaos.com",
+    "NEXT_PUBLIC_SITE_URL": "https://www.saanaos.com",
+    "SITE_URL": "https://www.saanaos.com",
+    "PUBLIC_ORDER_BASE_URL": "https://www.saanaos.com",
+    "DEFAULT_RESTAURANT_SLUG": "demo-restaurant"
+  },
+  "routes": [
+    {
+      "pattern": "saanaos.com/*",
+      "zone_name": "saanaos.com"
+    },
+    {
+      "pattern": "www.saanaos.com/*",
+      "zone_name": "saanaos.com"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

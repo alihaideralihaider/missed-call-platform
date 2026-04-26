@@ -1,24 +1,12 @@
-export const runtime = "edge";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { getPlatformAccessForUserId } from "@/lib/platform/access";
+import { getAppBaseUrl } from "@/lib/app-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-function getAppBaseUrl(): string {
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.SITE_URL ||
-    "http://localhost:3000";
-
-  return appUrl.replace(/\/+$/, "");
-}
-
-async function findAuthUserByEmail(
-  supabase: any,
-  email: string
-) {
+async function findAuthUserByEmail(supabase: SupabaseClient, email: string) {
   let page = 1;
   const perPage = 200;
 
@@ -34,7 +22,7 @@ async function findAuthUserByEmail(
 
     const users = data?.users ?? [];
     const match = users.find(
-    (user: any) => (user.email || "").trim().toLowerCase() === email
+      (user) => (user.email || "").trim().toLowerCase() === email
     );
 
     if (match) {
@@ -52,7 +40,7 @@ async function findAuthUserByEmail(
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient<any>(
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -86,13 +74,38 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (membershipError || !membership?.restaurant_id) {
+      const platformAccess = await getPlatformAccessForUserId(authUser.id, email);
+
       return NextResponse.json(
-        { error: "This account is not linked to any restaurant admin access." },
+        {
+          error: platformAccess
+            ? "This account only has Platform Admin access. Use /platform/login."
+            : "This account is not linked to any restaurant admin access.",
+        },
         { status: 403 }
       );
     }
 
-    const redirectTo = `${getAppBaseUrl()}/auth/callback`;
+    const { data: restaurant, error: restaurantError } = await supabase
+      .schema("food_ordering")
+      .from("restaurants")
+      .select("id, onboarding_status")
+      .eq("id", membership.restaurant_id)
+      .maybeSingle();
+
+    if (
+      restaurantError ||
+      !restaurant ||
+      restaurant.onboarding_status === "closed_by_platform" ||
+      restaurant.onboarding_status === "rejected_fraud"
+    ) {
+      return NextResponse.json(
+        { error: "This account is not currently allowed to access restaurant admin." },
+        { status: 403 }
+      );
+    }
+
+    const redirectTo = `${getAppBaseUrl(req)}/auth/callback`;
 
     const { data: linkData, error: linkError } =
       await supabase.auth.admin.generateLink({

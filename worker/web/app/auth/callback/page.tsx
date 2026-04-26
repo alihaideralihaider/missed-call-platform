@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import type { EmailOtpType } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-export default function AuthCallbackPage() {
+function AuthCallbackPageContent() {
   const [message, setMessage] = useState("Signing you in...");
   const hasRunRef = useRef(false);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (hasRunRef.current) return;
@@ -15,39 +18,63 @@ export default function AuthCallbackPage() {
 
     async function handleCallback() {
       try {
+        const nextPath = searchParams.get("next") || "";
+        const platformLogin = nextPath.startsWith("/platform");
+        const loginPath = platformLogin ? "/platform/login" : "/login";
+        const code = searchParams.get("code");
+        const tokenHash = searchParams.get("token_hash");
+        const type = searchParams.get("type");
         const hash = window.location.hash;
-
-        if (!hash || !hash.includes("access_token")) {
-          window.location.replace("/login?error=missing_token");
-          return;
-        }
 
         setMessage("Verifying your login...");
 
-        const hashParams = new URLSearchParams(hash.substring(1));
-        const accessToken = hashParams.get("access_token");
-        const refreshToken = hashParams.get("refresh_token");
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+            code
+          );
 
-        if (!accessToken || !refreshToken) {
-          window.location.replace("/login?error=missing_token");
-          return;
-        }
+          if (exchangeError) {
+            console.error("Failed to exchange auth code:", exchangeError);
+            window.location.replace(`${loginPath}?error=auth_failed`);
+            return;
+          }
+        } else if (tokenHash && type) {
+          const { error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type as EmailOtpType,
+          });
 
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
+          if (verifyError) {
+            console.error("Failed to verify OTP token hash:", verifyError);
+            window.location.replace(`${loginPath}?error=auth_failed`);
+            return;
+          }
+        } else {
+          const hashParams = new URLSearchParams(hash.substring(1));
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
 
-        if (sessionError) {
-          console.error("Failed to set session:", sessionError);
-          window.location.replace("/login?error=auth_failed");
-          return;
+          if (!accessToken || !refreshToken) {
+            window.location.replace(`${loginPath}?error=missing_token`);
+            return;
+          }
+
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (sessionError) {
+            console.error("Failed to set session:", sessionError);
+            window.location.replace(`${loginPath}?error=auth_failed`);
+            return;
+          }
         }
 
         window.history.replaceState(
           null,
           document.title,
-          window.location.pathname + window.location.search
+          window.location.pathname
         );
 
         setMessage("Loading your restaurant access...");
@@ -59,40 +86,58 @@ export default function AuthCallbackPage() {
 
         if (userError || !user) {
           console.error("Failed to fetch user after session set:", userError);
-          window.location.replace("/login?error=auth_failed");
+          window.location.replace(`${loginPath}?error=auth_failed`);
           return;
         }
 
-        const res = await fetch("/api/auth/complete-login", {
+        const res = await fetch(
+          platformLogin
+            ? "/api/platform/auth/complete-login"
+            : "/api/auth/complete-login",
+          {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             userId: user.id,
+            email: user.email || "",
           }),
-        });
+          }
+        );
 
         const data = await res.json();
 
         if (!res.ok) {
           window.location.replace(
-            `/login?error=${data.error || "not_authorized"}`
+            `${loginPath}?error=${data.error || "not_authorized"}`
           );
           return;
         }
 
-        setMessage("Redirecting to your dashboard...");
+        setMessage(
+          platformLogin
+            ? "Redirecting to Platform Admin..."
+            : "Redirecting to your account..."
+        );
 
-        window.location.replace(`/admin/restaurants/${data.slug}/orders`);
+        const redirectTo = String(
+          data.redirectTo || (platformLogin ? nextPath : "/admin")
+        ).trim();
+
+        window.location.replace(redirectTo || (platformLogin ? nextPath : "/admin"));
       } catch (err) {
         console.error("Auth callback failed:", err);
-        window.location.replace("/login?error=auth_failed");
+        const nextPath = searchParams.get("next") || "";
+        const loginPath = nextPath.startsWith("/platform")
+          ? "/platform/login"
+          : "/login";
+        window.location.replace(`${loginPath}?error=auth_failed`);
       }
     }
 
     handleCallback();
-  }, []);
+  }, [searchParams]);
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-neutral-100">
@@ -100,5 +145,13 @@ export default function AuthCallbackPage() {
         {message}
       </div>
     </main>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-neutral-100" />}>
+      <AuthCallbackPageContent />
+    </Suspense>
   );
 }

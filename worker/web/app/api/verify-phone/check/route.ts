@@ -1,4 +1,3 @@
-export const runtime = "edge";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { CookieOptions } from "@supabase/ssr";
@@ -17,8 +16,8 @@ async function createSupabaseServerClient() {
           return cookieStore.getAll();
         },
         setAll(
-            cookiesToSet: { name: string; value: string; options: CookieOptions }[]
-            ) {
+          cookiesToSet: { name: string; value: string; options: CookieOptions }[]
+        ) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
@@ -106,28 +105,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: restaurantUser, error: slugError } = await admin
-      .schema("food_ordering")
-      .from("restaurants")
-      .select("slug, profile_completed")
-      .eq("id", membership.restaurant_id)
-      .single();
-
-    if (slugError || !restaurantUser?.slug) {
-      return NextResponse.json(
-        { ok: true, redirectTo: "/admin" },
-        { status: 200 }
-      );
-    }
-
-    const slug = restaurantUser.slug;
-    const profileCompleted = Boolean(restaurantUser.profile_completed);
-
     return NextResponse.json({
       ok: true,
-      redirectTo: profileCompleted
-        ? `/admin/restaurants/${slug}/orders`
-        : `/admin/restaurants/${slug}/setup`,
+      redirectTo: "/admin",
     });
   } catch (error) {
     console.error("verify-phone/check error", error);

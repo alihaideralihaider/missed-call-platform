@@ -28,6 +28,40 @@ type MenuItem = {
   sort_order: number | null;
   is_sold_out: boolean;
   image_url?: string | null;
+  modifier_groups?: ModifierGroup[];
+};
+
+type ModifierOption = {
+  id: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  sort_order: number;
+};
+
+type ModifierGroup = {
+  id: string;
+  name: string;
+  description?: string | null;
+  required: boolean;
+  min_select: number;
+  max_select: number | null;
+  sort_order: number;
+  options: ModifierOption[];
+};
+
+type ModifierDraftOption = {
+  name: string;
+  price: string;
+};
+
+type ModifierDraft = {
+  name: string;
+  required: boolean;
+  minSelect: string;
+  maxSelect: string;
+  options: ModifierDraftOption[];
+  attachGroupId: string;
 };
 
 type ImportPreviewRow = {
@@ -120,6 +154,36 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
     "all"
   );
   const [assigningAssetId, setAssigningAssetId] = useState("");
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
+  const [modifierDrafts, setModifierDrafts] = useState<Record<string, ModifierDraft>>(
+    {}
+  );
+  const [savingModifierItemId, setSavingModifierItemId] = useState("");
+
+  function emptyModifierDraft(): ModifierDraft {
+    return {
+      name: "",
+      required: false,
+      minSelect: "0",
+      maxSelect: "1",
+      options: [{ name: "", price: "0.00" }],
+      attachGroupId: "",
+    };
+  }
+
+  function getModifierDraft(itemId: string): ModifierDraft {
+    return modifierDrafts[itemId] || emptyModifierDraft();
+  }
+
+  function updateModifierDraft(
+    itemId: string,
+    updater: (draft: ModifierDraft) => ModifierDraft
+  ) {
+    setModifierDrafts((current) => ({
+      ...current,
+      [itemId]: updater(current[itemId] || emptyModifierDraft()),
+    }));
+  }
 
   async function loadAssets(targetSlug: string) {
     if (!targetSlug) return;
@@ -168,6 +232,7 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
       setRestaurant(data.restaurant);
       setCategories(data.categories || []);
       setItems(data.items || []);
+      setModifierGroups(data.modifierGroups || []);
 
       if (!categoryId && data.categories?.length) {
         setCategoryId(data.categories[0].id);
@@ -636,6 +701,110 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
     } catch {
       setSubmitError("Something went wrong while removing the image.");
       setAssigningAssetId("");
+    }
+  }
+
+  async function handleCreateModifierGroup(itemId: string) {
+    if (!slug || savingModifierItemId) return;
+
+    const draft = getModifierDraft(itemId);
+
+    setSubmitError("");
+    setSuccessMessage("");
+    setSavingModifierItemId(itemId);
+
+    try {
+      const res = await fetch(
+        `/api/admin/restaurants/${slug}/menu-items/${itemId}/modifiers`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "create_group",
+            name: draft.name.trim(),
+            required: draft.required,
+            minSelect: Number(draft.minSelect || 0),
+            maxSelect:
+              draft.maxSelect.trim() === "" ? null : Number(draft.maxSelect || 0),
+            options: draft.options.map((option) => ({
+              name: option.name.trim(),
+              price: option.price,
+            })),
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSubmitError(data?.error || "Failed to create modifier group.");
+        setSavingModifierItemId("");
+        return;
+      }
+
+      setSuccessMessage("Modifier group created and attached.");
+      setModifierDrafts((current) => ({
+        ...current,
+        [itemId]: emptyModifierDraft(),
+      }));
+      await loadPage(slug);
+      setSavingModifierItemId("");
+    } catch {
+      setSubmitError("Something went wrong while creating the modifier group.");
+      setSavingModifierItemId("");
+    }
+  }
+
+  async function handleAttachModifierGroup(itemId: string) {
+    if (!slug || savingModifierItemId) return;
+
+    const draft = getModifierDraft(itemId);
+    const groupId = draft.attachGroupId.trim();
+
+    if (!groupId) {
+      setSubmitError("Choose a modifier group to attach.");
+      return;
+    }
+
+    setSubmitError("");
+    setSuccessMessage("");
+    setSavingModifierItemId(itemId);
+
+    try {
+      const res = await fetch(
+        `/api/admin/restaurants/${slug}/menu-items/${itemId}/modifiers`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "attach_group",
+            groupId,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSubmitError(data?.error || "Failed to attach modifier group.");
+        setSavingModifierItemId("");
+        return;
+      }
+
+      setSuccessMessage("Modifier group attached.");
+      updateModifierDraft(itemId, (current) => ({
+        ...current,
+        attachGroupId: "",
+      }));
+      await loadPage(slug);
+      setSavingModifierItemId("");
+    } catch {
+      setSubmitError("Something went wrong while attaching the modifier group.");
+      setSavingModifierItemId("");
     }
   }
 
@@ -1222,6 +1391,317 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
                                       Image: {item.image_url}
                                     </p>
                                   ) : null}
+
+                                  <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                      <div>
+                                        <h4 className="text-sm font-semibold text-neutral-900">
+                                          Modifiers
+                                        </h4>
+                                        <p className="mt-1 text-xs text-neutral-500">
+                                          Create a new modifier group or attach an existing one.
+                                        </p>
+                                      </div>
+                                      <p className="text-xs font-medium text-neutral-500">
+                                        {(item.modifier_groups || []).length} attached
+                                      </p>
+                                    </div>
+
+                                    {(item.modifier_groups || []).length > 0 ? (
+                                      <div className="mt-3 space-y-3">
+                                        {(item.modifier_groups || []).map((group) => (
+                                          <div
+                                            key={group.id}
+                                            className="rounded-xl border border-neutral-200 bg-white p-3"
+                                          >
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <p className="text-sm font-semibold text-neutral-900">
+                                                  {group.name}
+                                                </p>
+                                                {group.required ? (
+                                                  <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                                                    Required
+                                                  </span>
+                                                ) : (
+                                                  <span className="rounded bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-700">
+                                                    Optional
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <p className="text-xs text-neutral-500">
+                                                Min {group.min_select} · Max{" "}
+                                                {group.max_select ?? group.options.length}
+                                              </p>
+                                            </div>
+
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                              {group.options.map((option) => (
+                                                <span
+                                                  key={option.id}
+                                                  className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] text-neutral-700"
+                                                >
+                                                  {option.name}{" "}
+                                                  {option.price > 0
+                                                    ? `(+${toCurrency(option.price)})`
+                                                    : "(+$0.00)"}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="mt-3 text-xs text-neutral-500">
+                                        No modifiers attached yet.
+                                      </p>
+                                    )}
+
+                                    <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
+                                      <p className="text-sm font-semibold text-neutral-900">
+                                        Attach existing group
+                                      </p>
+
+                                      <div className="mt-3 flex flex-col gap-3 md:flex-row">
+                                        <select
+                                          value={getModifierDraft(item.id).attachGroupId}
+                                          onChange={(e) =>
+                                            updateModifierDraft(item.id, (current) => ({
+                                              ...current,
+                                              attachGroupId: e.target.value,
+                                            }))
+                                          }
+                                          className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm outline-none focus:border-neutral-400"
+                                        >
+                                          <option value="">Select modifier group</option>
+                                          {modifierGroups
+                                            .filter(
+                                              (group) =>
+                                                !(item.modifier_groups || []).some(
+                                                  (attachedGroup) =>
+                                                    attachedGroup.id === group.id
+                                                )
+                                            )
+                                            .map((group) => (
+                                              <option key={group.id} value={group.id}>
+                                                {group.name}
+                                              </option>
+                                            ))}
+                                        </select>
+
+                                        <button
+                                          type="button"
+                                          disabled={savingModifierItemId === item.id}
+                                          onClick={() => handleAttachModifierGroup(item.id)}
+                                          className="rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm font-semibold text-neutral-700 disabled:opacity-60"
+                                        >
+                                          {savingModifierItemId === item.id
+                                            ? "Saving..."
+                                            : "Attach group"}
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
+                                      <p className="text-sm font-semibold text-neutral-900">
+                                        Create new group
+                                      </p>
+
+                                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                        <div className="md:col-span-2">
+                                          <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-neutral-500">
+                                            Group name
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={getModifierDraft(item.id).name}
+                                            onChange={(e) =>
+                                              updateModifierDraft(item.id, (current) => ({
+                                                ...current,
+                                                name: e.target.value,
+                                              }))
+                                            }
+                                            placeholder="Choose your protein"
+                                            className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+                                          />
+                                        </div>
+
+                                        <div>
+                                          <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-neutral-500">
+                                            Min select
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            value={getModifierDraft(item.id).minSelect}
+                                            onChange={(e) =>
+                                              updateModifierDraft(item.id, (current) => ({
+                                                ...current,
+                                                minSelect: e.target.value,
+                                              }))
+                                            }
+                                            className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none focus:border-neutral-400"
+                                          />
+                                        </div>
+
+                                        <div>
+                                          <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-neutral-500">
+                                            Max select
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            step="1"
+                                            value={getModifierDraft(item.id).maxSelect}
+                                            onChange={(e) =>
+                                              updateModifierDraft(item.id, (current) => ({
+                                                ...current,
+                                                maxSelect: e.target.value,
+                                              }))
+                                            }
+                                            className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none focus:border-neutral-400"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      <label className="mt-3 flex items-center gap-2 text-sm text-neutral-700">
+                                        <input
+                                          type="checkbox"
+                                          checked={getModifierDraft(item.id).required}
+                                          onChange={(e) =>
+                                            updateModifierDraft(item.id, (current) => ({
+                                              ...current,
+                                              required: e.target.checked,
+                                              minSelect: e.target.checked
+                                                ? current.minSelect === "0"
+                                                  ? "1"
+                                                  : current.minSelect
+                                                : current.minSelect,
+                                            }))
+                                          }
+                                        />
+                                        Required
+                                      </label>
+
+                                      <div className="mt-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <p className="text-sm font-semibold text-neutral-900">
+                                            Options
+                                          </p>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              updateModifierDraft(item.id, (current) => ({
+                                                ...current,
+                                                options: [
+                                                  ...current.options,
+                                                  { name: "", price: "0.00" },
+                                                ],
+                                              }))
+                                            }
+                                            className="rounded-full border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700"
+                                          >
+                                            Add option
+                                          </button>
+                                        </div>
+
+                                        <div className="mt-3 space-y-3">
+                                          {getModifierDraft(item.id).options.map(
+                                            (option, optionIndex) => (
+                                              <div
+                                                key={`${item.id}-option-${optionIndex}`}
+                                                className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_auto]"
+                                              >
+                                                <input
+                                                  type="text"
+                                                  value={option.name}
+                                                  onChange={(e) =>
+                                                    updateModifierDraft(
+                                                      item.id,
+                                                      (current) => ({
+                                                        ...current,
+                                                        options: current.options.map(
+                                                          (entry, entryIndex) =>
+                                                            entryIndex === optionIndex
+                                                              ? {
+                                                                  ...entry,
+                                                                  name: e.target.value,
+                                                                }
+                                                              : entry
+                                                        ),
+                                                      })
+                                                    )
+                                                  }
+                                                  placeholder="Extra cheese"
+                                                  className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+                                                />
+
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  step="0.01"
+                                                  value={option.price}
+                                                  onChange={(e) =>
+                                                    updateModifierDraft(
+                                                      item.id,
+                                                      (current) => ({
+                                                        ...current,
+                                                        options: current.options.map(
+                                                          (entry, entryIndex) =>
+                                                            entryIndex === optionIndex
+                                                              ? {
+                                                                  ...entry,
+                                                                  price: e.target.value,
+                                                                }
+                                                              : entry
+                                                        ),
+                                                      })
+                                                    )
+                                                  }
+                                                  placeholder="0.00"
+                                                  className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+                                                />
+
+                                                <button
+                                                  type="button"
+                                                  disabled={
+                                                    getModifierDraft(item.id).options.length <= 1
+                                                  }
+                                                  onClick={() =>
+                                                    updateModifierDraft(
+                                                      item.id,
+                                                      (current) => ({
+                                                        ...current,
+                                                        options: current.options.filter(
+                                                          (_, entryIndex) =>
+                                                            entryIndex !== optionIndex
+                                                        ),
+                                                      })
+                                                    )
+                                                  }
+                                                  className="rounded-xl border border-red-200 bg-white px-3 py-3 text-xs font-semibold text-red-700 disabled:opacity-40"
+                                                >
+                                                  Remove
+                                                </button>
+                                              </div>
+                                            )
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        disabled={savingModifierItemId === item.id}
+                                        onClick={() => handleCreateModifierGroup(item.id)}
+                                        className="mt-4 rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                                      >
+                                        {savingModifierItemId === item.id
+                                          ? "Saving..."
+                                          : "Create and attach group"}
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             </div>

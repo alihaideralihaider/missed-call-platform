@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import PlatformPromoCard from "@/components/admin/PlatformPromoCard";
+import { getPlatformPromotionsForPlacement } from "@/lib/platformPromotions";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -23,6 +25,11 @@ type OrderItem = {
   line_total: number;
   quantity: number;
   created_at?: string | null;
+  modifier_selections?: Array<{
+    group_name?: string | null;
+    option_name?: string | null;
+    price_delta?: number;
+  }>;
 };
 
 type Order = {
@@ -157,21 +164,19 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [updatingOrderId, setUpdatingOrderId] = useState("");
+  const emptyStatePromotions = getPlatformPromotionsForPlacement(
+    "restaurant_admin_orders_empty"
+  );
 
-  async function loadPage(nextSlugFromState?: string, isRefresh = false) {
+  async function loadPage(nextSlugFromState?: string) {
     const targetSlug = nextSlugFromState || slug;
 
     if (!targetSlug) return;
 
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+    setLoading(true);
 
     setLoadingError("");
 
@@ -185,18 +190,15 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
       if (!res.ok) {
         setLoadingError(data?.error || "Failed to load restaurant orders.");
         setLoading(false);
-        setRefreshing(false);
         return;
       }
 
       setRestaurant(data.restaurant || null);
       setOrders(data.orders || []);
       setLoading(false);
-      setRefreshing(false);
     } catch {
       setLoadingError("Something went wrong while loading orders.");
       setLoading(false);
-      setRefreshing(false);
     }
   }
 
@@ -211,12 +213,6 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
-
-  useEffect(() => {
-    if (!loading && restaurant && restaurant.profile_completed === false && slug) {
-      window.location.replace(`/admin/restaurants/${slug}/setup`);
-    }
-  }, [loading, restaurant, slug]);
 
   const orderCount = orders.length;
   const totalSales = useMemo(
@@ -261,12 +257,7 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
         return;
       }
 
-      setOrders((prev) =>
-        prev.map((order) =>
-          order.id === orderId ? { ...order, status: nextStatus } : order
-        )
-      );
-
+      await loadPage(slug);
       setActionMessage(data?.message || `Order moved to ${nextStatus}.`);
       setUpdatingOrderId("");
     } catch {
@@ -278,31 +269,6 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
   return (
     <main className="min-h-screen bg-neutral-100">
       <div className="mx-auto max-w-6xl p-6">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-              Restaurant orders admin
-            </p>
-            <h1 className="mt-1 text-2xl font-bold text-neutral-900">
-              {loading ? "Loading..." : restaurant?.name || "Orders"}
-            </h1>
-            {!loading && restaurant?.slug ? (
-              <p className="mt-1 text-sm text-neutral-500">
-                Slug: {restaurant.slug}
-              </p>
-            ) : null}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => loadPage(slug, true)}
-            disabled={loading || refreshing}
-            className="rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {refreshing ? "Refreshing..." : "Refresh orders"}
-          </button>
-        </div>
-
         {actionError ? (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {actionError}
@@ -314,6 +280,15 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
             {actionMessage}
           </div>
         ) : null}
+
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-neutral-900">Orders</h1>
+            <p className="mt-1 text-sm text-neutral-500">
+              Review incoming orders, update status, and track store activity.
+            </p>
+          </div>
+        </div>
 
         <div className="mb-6 grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
@@ -456,6 +431,14 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
                         </Link>
                       </div>
                     </div>
+
+                    {emptyStatePromotions.length > 0 ? (
+                      <div className="space-y-3">
+                        {emptyStatePromotions.map((promo) => (
+                          <PlatformPromoCard key={promo.slug} promo={promo} />
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -515,7 +498,7 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="text-lg font-bold text-neutral-900">
-                            {order.order_number}
+                            Order # {order.order_number}
                           </h2>
                           <span
                             className={`rounded-full px-3 py-1 text-xs font-semibold ${statusPillClass(
@@ -642,6 +625,21 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
                                   <p className="text-sm font-medium text-neutral-900">
                                     {item.item_name}
                                   </p>
+                                  {Array.isArray(item.modifier_selections) &&
+                                  item.modifier_selections.length > 0 ? (
+                                    <div className="mt-1 space-y-1 pl-3">
+                                      {item.modifier_selections.map(
+                                        (modifier, modifierIndex) => (
+                                          <p
+                                            key={`${item.id}-modifier-${modifierIndex}`}
+                                            className="text-xs text-neutral-500"
+                                          >
+                                            + {modifier.option_name || "Modifier"}
+                                          </p>
+                                        )
+                                      )}
+                                    </div>
+                                  ) : null}
                                   <p className="mt-1 text-xs text-neutral-500">
                                     Qty {item.quantity}
                                   </p>

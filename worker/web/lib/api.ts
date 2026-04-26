@@ -5,6 +5,7 @@ type CreateOrderInput = {
   customerName: string;
   customerPhone: string;
   pickupTime?: string;
+  smsOptIn?: boolean;
   notes?: string;
   items: CartItem[];
 };

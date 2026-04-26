@@ -29,3 +29,45 @@ body {
   margin: 0 auto;
   min-height: 100vh;
 }
+
+@media (max-width: 767px) {
+  .text-\[\#a7b6cc\] {
+    color: #bccbdd;
+  }
+
+  .text-\[\#8796ad\] {
+    color: #a4b4c9;
+  }
+
+  .text-\[\#9cadc5\] {
+    color: #b4c4d8;
+  }
+
+  .text-neutral-500 {
+    color: #5f6b7a;
+  }
+
+  .text-neutral-600 {
+    color: #4b5563;
+  }
+
+  .text-white\/80 {
+    color: rgb(255 255 255 / 0.9);
+  }
+
+  .text-white\/85 {
+    color: rgb(255 255 255 / 0.92);
+  }
+
+  .text-white\/90 {
+    color: rgb(255 255 255 / 0.96);
+  }
+
+  .placeholder\:text-\[\#8fa0bb\]::placeholder {
+    color: #aab9cd;
+  }
+
+  .placeholder\:text-neutral-400::placeholder {
+    color: #8b98a8;
+  }
+}

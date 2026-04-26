@@ -1,7 +1,7 @@
-export const runtime = "edge";
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { getAppBaseUrl } from "@/lib/app-url";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -15,14 +15,21 @@ function slugify(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function getAppBaseUrl(): string {
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.SITE_URL ||
-    "http://localhost:3000";
+function getRequestIp(req: Request): string {
+  const forwardedFor = req.headers.get("x-forwarded-for") || "";
+  const firstForwarded = forwardedFor.split(",")[0]?.trim();
 
-  return appUrl.replace(/\/+$/, "");
+  return (
+    firstForwarded ||
+    req.headers.get("cf-connecting-ip") ||
+    req.headers.get("x-real-ip") ||
+    ""
+  ).trim();
+}
+
+function isMissingColumnError(message: string, column: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes("schema cache") && normalized.includes(column);
 }
 
 async function findAuthUserByEmail(
@@ -92,13 +99,15 @@ async function generateUniqueSlug(
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient<any>(
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
   try {
     const body = await req.json();
+    const sourceIp = getRequestIp(req);
+    const userAgent = (req.headers.get("user-agent") || "").trim();
 
     const name = (body.name || "").trim();
     let slug = (body.slug || "").trim().toLowerCase();
@@ -136,61 +145,136 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!partnerId) {
-      return NextResponse.json(
-        { error: "partnerId is required" },
-        { status: 400 }
-      );
-    }
-
     if (!slug) {
       slug = slugify(name);
     }
 
+    if (sourceIp) {
+      const { data: blockedIp, error: blockedIpError } = await supabase
+        .from("platform_ip_watchlist")
+        .select("id")
+        .eq("ip_address", sourceIp)
+        .eq("status", "blocked")
+        .maybeSingle();
+
+      if (blockedIpError) {
+        console.warn("Optional IP watchlist lookup failed during onboarding:", {
+          ip: sourceIp,
+          message: blockedIpError.message,
+        });
+      } else if (blockedIp?.id) {
+        return NextResponse.json(
+          { error: "This onboarding request has been blocked." },
+          { status: 403 }
+        );
+      }
+    }
+
     slug = await generateUniqueSlug(supabase, slug);
 
-    // Verify partner exists and is active
-    const { data: partner, error: partnerError } = await supabase
-      .schema("partners")
-      .from("partners")
-      .select("id, name, status, office_id")
-      .eq("id", partnerId)
-      .maybeSingle();
+    // Verify partner exists and is active only when partnerId is provided
+    let partner: {
+      id: string;
+      name: string;
+      status: string;
+      office_id: string | null;
+    } | null = null;
 
-    if (partnerError) {
-      throw new Error(`Partner lookup failed: ${partnerError.message}`);
-    }
+    if (partnerId) {
+      const { data: partnerData, error: partnerError } = await supabase
+        .schema("partners")
+        .from("partners")
+        .select("id, name, status, office_id")
+        .eq("id", partnerId)
+        .maybeSingle();
 
-    if (!partner) {
-      return NextResponse.json(
-        { error: "Selected partner was not found" },
-        { status: 400 }
-      );
-    }
+      if (partnerError) {
+        throw new Error(`Partner lookup failed: ${partnerError.message}`);
+      }
 
-    if (partner.status !== "active") {
-      return NextResponse.json(
-        { error: "Selected partner is not active" },
-        { status: 400 }
-      );
+      if (!partnerData) {
+        return NextResponse.json(
+          { error: "Selected partner was not found" },
+          { status: 400 }
+        );
+      }
+
+      if (partnerData.status !== "active") {
+        return NextResponse.json(
+          { error: "Selected partner is not active" },
+          { status: 400 }
+        );
+      }
+
+      partner = partnerData;
     }
 
     // 1) Create restaurant
-    const { data: restaurant, error: restaurantError } = await supabase
+    const restaurantInsertPayload = {
+      name,
+      slug,
+      contact_name: contactName || null,
+      contact_phone: contactPhone || null,
+      contact_email: contactEmail,
+      is_active: true,
+      onboarding_status: "pending_owner_activation",
+      onboarding_source_ip: sourceIp || null,
+      onboarding_user_agent: userAgent || null,
+      default_prep_minutes: 25,
+    };
+
+    const restaurantInsertPayloadMutable = {
+      ...restaurantInsertPayload,
+    } as Record<string, string | boolean | number | null>;
+
+    let restaurantInsert = await supabase
       .schema("food_ordering")
       .from("restaurants")
-      .insert({
-        name,
-        slug,
-        contact_name: contactName || null,
-        contact_phone: contactPhone || null,
-        contact_email: contactEmail,
-        is_active: true,
-        onboarding_status: "pending_owner_activation",
-        default_prep_minutes: 25,
-      })
+      .insert(restaurantInsertPayloadMutable)
       .select("id, slug")
       .single();
+
+    while (restaurantInsert.error) {
+      const restaurantInsertMessage = restaurantInsert.error.message || "";
+      const missingOnboardingSourceIp = isMissingColumnError(
+        restaurantInsertMessage,
+        "onboarding_source_ip"
+      );
+      const missingOnboardingUserAgent = isMissingColumnError(
+        restaurantInsertMessage,
+        "onboarding_user_agent"
+      );
+
+      if (!missingOnboardingSourceIp && !missingOnboardingUserAgent) {
+        break;
+      }
+
+      console.warn(
+        "Optional onboarding metadata columns missing on restaurants insert; retrying without them.",
+        {
+          missingOnboardingSourceIp,
+          missingOnboardingUserAgent,
+          message: restaurantInsertMessage,
+        }
+      );
+
+      if (missingOnboardingSourceIp) {
+        delete restaurantInsertPayloadMutable.onboarding_source_ip;
+      }
+
+      if (missingOnboardingUserAgent) {
+        delete restaurantInsertPayloadMutable.onboarding_user_agent;
+      }
+
+      restaurantInsert = await supabase
+        .schema("food_ordering")
+        .from("restaurants")
+        .insert(restaurantInsertPayloadMutable)
+        .select("id, slug")
+        .single();
+    }
+
+    const { data: restaurant, error: restaurantError } = restaurantInsert;
 
     if (restaurantError || !restaurant) {
       throw new Error(
@@ -297,23 +381,25 @@ export async function POST(req: Request) {
       );
     }
 
-    // 7) Create partner attribution
-    const { error: attributionError } = await supabase
-      .schema("partners")
-      .from("business_partner_attribution")
-      .insert({
-        business_id: business.id,
-        partner_id: partner.id,
-        attribution_type: "owner",
-        is_active: true,
-        starts_at: new Date().toISOString(),
-        ends_at: null,
-      });
+    // 7) Create partner attribution only when partner is provided
+    if (partner) {
+      const { error: attributionError } = await supabase
+        .schema("partners")
+        .from("business_partner_attribution")
+        .insert({
+          business_id: business.id,
+          partner_id: partner.id,
+          attribution_type: "owner",
+          is_active: true,
+          starts_at: new Date().toISOString(),
+          ends_at: null,
+        });
 
-    if (attributionError) {
-      throw new Error(
-        `Failed to create partner attribution: ${attributionError.message}`
-      );
+      if (attributionError) {
+        throw new Error(
+          `Failed to create partner attribution: ${attributionError.message}`
+        );
+      }
     }
 
     // 8) Create/find auth user
@@ -388,7 +474,7 @@ export async function POST(req: Request) {
     }
 
     // 10) Generate magic link
-    const redirectTo = `${getAppBaseUrl()}/auth/callback`;
+    const redirectTo = `${getAppBaseUrl(req)}/auth/callback`;
 
     const { data: linkData, error: linkError } =
       await supabase.auth.admin.generateLink({
@@ -460,11 +546,13 @@ export async function POST(req: Request) {
       restaurantId: restaurant.id,
       menuId: menu.id,
       businessId: business.id,
-      partner: {
-        id: partner.id,
-        name: partner.name,
-        officeId: partner.office_id ?? null,
-      },
+      partner: partner
+        ? {
+            id: partner.id,
+            name: partner.name,
+            officeId: partner.office_id ?? null,
+          }
+        : null,
       owner: {
         email: contactEmail,
         authUserId: authUser.id,

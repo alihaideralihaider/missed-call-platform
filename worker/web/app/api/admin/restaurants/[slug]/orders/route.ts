@@ -1,4 +1,3 @@
-export const runtime = "edge";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -20,6 +19,8 @@ type OrderRow = {
   tax: number | string | null;
   total: number | string | null;
   pickup_time: string | null;
+  pickup_time_label: string | null;
+  pickup_at: string | null;
   notes: string | null;
   order_number: string | null;
   public_order_code: string | null;
@@ -40,13 +41,20 @@ type OrderItemRow = {
   created_at: string | null;
 };
 
+type OrderItemModifierSelectionRow = {
+  order_item_id: string;
+  group_name: string | null;
+  option_name: string | null;
+  price_delta: number | string | null;
+};
+
 function toMoney(value: number | string | null | undefined): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 }
 
 export async function GET(_: Request, context: RouteContext) {
-  const supabase = createClient<any>(
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -79,6 +87,8 @@ export async function GET(_: Request, context: RouteContext) {
         tax,
         total,
         pickup_time,
+        pickup_time_label,
+        pickup_at,
         notes,
         order_number,
         public_order_code,
@@ -121,6 +131,7 @@ export async function GET(_: Request, context: RouteContext) {
     }
 
     let orderItems: OrderItemRow[] = [];
+    let orderItemModifierSelections: OrderItemModifierSelectionRow[] = [];
     if (orderIds.length > 0) {
       const { data: orderItemsData, error: orderItemsError } = await supabase
         .schema("food_ordering")
@@ -136,17 +147,61 @@ export async function GET(_: Request, context: RouteContext) {
       }
 
       orderItems = (orderItemsData || []) as OrderItemRow[];
+
+      const orderItemIds = orderItems.map((item) => item.id);
+
+      if (orderItemIds.length > 0) {
+        const {
+          data: orderItemModifierSelectionsData,
+          error: orderItemModifierSelectionsError,
+        } = await supabase
+          .schema("food_ordering")
+          .from("order_item_modifier_selections")
+          .select("order_item_id, group_name, option_name, price_delta")
+          .in("order_item_id", orderItemIds);
+
+        if (orderItemModifierSelectionsError) {
+          throw new Error(
+            `Failed to load order item modifier selections: ${orderItemModifierSelectionsError.message}`
+          );
+        }
+
+        orderItemModifierSelections =
+          (orderItemModifierSelectionsData || []) as OrderItemModifierSelectionRow[];
+      }
     }
 
     const customerMap = new Map(
       customers.map((customer) => [customer.id, customer])
     );
     const itemsByOrderId = new Map<string, OrderItemRow[]>();
+    const modifierSelectionsByOrderItemId = new Map<
+      string,
+      Array<{
+        group_name: string | null;
+        option_name: string | null;
+        price_delta: number;
+      }>
+    >();
 
     for (const item of orderItems) {
       const existing = itemsByOrderId.get(item.order_id) || [];
       existing.push(item);
       itemsByOrderId.set(item.order_id, existing);
+    }
+
+    for (const modifierSelection of orderItemModifierSelections) {
+      const existing =
+        modifierSelectionsByOrderItemId.get(modifierSelection.order_item_id) || [];
+      existing.push({
+        group_name: modifierSelection.group_name,
+        option_name: modifierSelection.option_name,
+        price_delta: toMoney(modifierSelection.price_delta),
+      });
+      modifierSelectionsByOrderItemId.set(
+        modifierSelection.order_item_id,
+        existing
+      );
     }
 
     const hydratedOrders = orders.map((order) => ({
@@ -157,6 +212,8 @@ export async function GET(_: Request, context: RouteContext) {
       tax: toMoney(order.tax),
       total: toMoney(order.total),
       pickup_time: order.pickup_time || "ASAP",
+      pickup_time_label: order.pickup_time_label || null,
+      pickup_at: order.pickup_at || null,
       notes: order.notes || "",
       payment_status: order.payment_status || "",
       payment_method: order.payment_method || "",
@@ -173,6 +230,8 @@ export async function GET(_: Request, context: RouteContext) {
         line_total: toMoney(item.line_total),
         quantity: Number(item.quantity || 0),
         created_at: item.created_at,
+        modifier_selections:
+          modifierSelectionsByOrderItemId.get(item.id) || [],
       })),
     }));
 

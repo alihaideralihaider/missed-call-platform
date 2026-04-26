@@ -11,6 +11,7 @@ type Restaurant = {
   id: string;
   name: string;
   slug: string;
+  plan_key?: string | null;
   has_vibe_upgrade?: boolean;
   has_menu_upgrade?: boolean;
   vibe_image_url?: string | null;
@@ -74,6 +75,10 @@ function isEnhancedAsset(asset: Asset) {
   return String(asset.storage_path || "").includes("/enhanced/");
 }
 
+function hasPlanVisualUpgrades(planKey?: string | null) {
+  return planKey === "pro_monthly" || planKey === "pro_plus_monthly";
+}
+
 export default function RestaurantAssetsPage({ params }: PageProps) {
   const [slug, setSlug] = useState("");
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
@@ -82,10 +87,14 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState("");
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [menuItemId, setMenuItemId] = useState("");
   const [altText, setAltText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [submitError, setSubmitError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -100,6 +109,12 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
     original: string;
     enhanced: string;
   } | null>(null);
+
+  const hasVisualUpgrades = hasPlanVisualUpgrades(restaurant?.plan_key);
+  const canUseVibeUpgrade =
+    hasVisualUpgrades || Boolean(restaurant?.has_vibe_upgrade);
+  const canUseMenuUpgrade =
+    hasVisualUpgrades || Boolean(restaurant?.has_menu_upgrade);
 
   async function loadMenuItems(targetSlug: string) {
     const res = await fetch(`/api/admin/restaurants/${targetSlug}/menu`, {
@@ -217,42 +232,68 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
     setSubmitError("");
     setSuccessMessage("");
 
-    if (!selectedFile) {
-      setSubmitError("Please choose an image file.");
+    if (!selectedFiles.length) {
+      setSubmitError("Please choose at least one image file.");
+      return;
+    }
+
+    if (selectedFiles.length > 1 && menuItemId) {
+      setSubmitError(
+        "Linking to a menu item is only available for single-image uploads. Clear the link field or upload one image."
+      );
       return;
     }
 
     setSubmitting(true);
+    setUploadProgress({
+      current: 0,
+      total: selectedFiles.length,
+    });
 
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
+      for (const [index, file] of selectedFiles.entries()) {
+        setUploadProgress({
+          current: index + 1,
+          total: selectedFiles.length,
+        });
 
-      if (menuItemId) {
-        formData.append("menuItemId", menuItemId);
+        const formData = new FormData();
+        formData.append("file", file);
+
+        if (menuItemId) {
+          formData.append("menuItemId", menuItemId);
+        }
+
+        if (altText.trim()) {
+          formData.append("altText", altText.trim());
+        }
+
+        const res = await fetch(`/api/admin/restaurants/${slug}/assets`, {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setSubmitError(
+            data?.error ||
+              `Failed to upload image ${index + 1} of ${selectedFiles.length}.`
+          );
+          setSubmitting(false);
+          setUploadProgress(null);
+          return;
+        }
       }
 
-      if (altText.trim()) {
-        formData.append("altText", altText.trim());
-      }
-
-      const res = await fetch(`/api/admin/restaurants/${slug}/assets`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setSubmitError(data?.error || "Failed to upload image.");
-        setSubmitting(false);
-        return;
-      }
-
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setMenuItemId("");
       setAltText("");
-      setSuccessMessage("Image uploaded successfully.");
+      setSuccessMessage(
+        selectedFiles.length === 1
+          ? "Image uploaded successfully."
+          : `${selectedFiles.length} images uploaded successfully.`
+      );
 
       const fileInput = document.getElementById(
         "asset-file-input"
@@ -261,9 +302,11 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
 
       await loadAssetsPage(slug, true);
       setSubmitting(false);
+      setUploadProgress(null);
     } catch {
       setSubmitError("Something went wrong while uploading the image.");
       setSubmitting(false);
+      setUploadProgress(null);
     }
   }
 
@@ -630,8 +673,9 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
             {restaurant ? (
               <RestaurantVisualUpgrades
                 slug={restaurant.slug}
-                hasVibeUpgrade={restaurant.has_vibe_upgrade ?? false}
-                hasMenuUpgrade={restaurant.has_menu_upgrade ?? false}
+                hasVisualUpgrades={hasVisualUpgrades}
+                hasVibeUpgrade={canUseVibeUpgrade}
+                hasMenuUpgrade={canUseMenuUpgrade}
               />
             ) : null}
 
@@ -651,9 +695,16 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
                     id="asset-file-input"
                     type="file"
                     accept="image/*"
-                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                    multiple
+                    onChange={(e) =>
+                      setSelectedFiles(Array.from(e.target.files || []))
+                    }
                     className="block w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm"
                   />
+                  <p className="mt-2 text-xs text-neutral-500">
+                    You can select multiple images at once. Menu item linking is
+                    available for single-image uploads.
+                  </p>
                 </div>
 
                 <div>
@@ -705,7 +756,13 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
                   disabled={submitting}
                   className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  {submitting ? "Uploading..." : "Upload image"}
+                  {submitting
+                    ? uploadProgress
+                      ? `Uploading ${uploadProgress.current} of ${uploadProgress.total}...`
+                      : "Uploading..."
+                    : selectedFiles.length > 1
+                      ? `Upload ${selectedFiles.length} images`
+                      : "Upload image"}
                 </button>
               </form>
             </div>
@@ -951,12 +1008,12 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
                                     disabled={
                                       isSettingMenuThis ||
                                       isEnhancingMenuThis ||
-                                      !restaurant?.has_menu_upgrade
+                                      !canUseMenuUpgrade
                                     }
                                     className="w-full rounded-xl bg-blue-600 px-4 py-3 text-xs font-semibold text-white disabled:opacity-60"
                                   >
-                                    {!restaurant?.has_menu_upgrade
-                                      ? "Menu upgrade required"
+                                    {!canUseMenuUpgrade
+                                      ? "Upgrade plan required"
                                       : isSettingMenuThis
                                       ? "Saving menu image..."
                                       : isCurrentMenuImage
@@ -970,11 +1027,13 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
                                     disabled={
                                       isEnhancingMenuThis ||
                                       isEnhancingVibeThis ||
-                                      !restaurant?.has_menu_upgrade
+                                      !canUseMenuUpgrade
                                     }
                                     className="w-full rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-800 disabled:opacity-60"
                                   >
-                                    {isEnhancingMenuThis
+                                    {!canUseMenuUpgrade
+                                      ? "Upgrade plan required"
+                                      : isEnhancingMenuThis
                                       ? "Enhancing as Menu..."
                                       : "Enhance as Menu"}
                                   </button>
@@ -990,12 +1049,12 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
                                       isSettingThis ||
                                       isEnhancingVibeThis ||
                                       isEnhancingMenuThis ||
-                                      !restaurant?.has_vibe_upgrade
+                                      !canUseVibeUpgrade
                                     }
                                     className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-xs font-semibold text-white disabled:opacity-60"
                                   >
-                                    {!restaurant?.has_vibe_upgrade
-                                      ? "Vibe upgrade required"
+                                    {!canUseVibeUpgrade
+                                      ? "Upgrade plan required"
                                       : isSettingThis
                                       ? "Saving vibe background..."
                                       : isCurrentVibe
@@ -1010,12 +1069,12 @@ export default function RestaurantAssetsPage({ params }: PageProps) {
                                       isEnhancingVibeThis ||
                                       isEnhancingMenuThis ||
                                       isSettingThis ||
-                                      !restaurant?.has_vibe_upgrade
+                                      !canUseVibeUpgrade
                                     }
                                     className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-xs font-semibold text-neutral-800 disabled:opacity-60"
                                   >
-                                    {!restaurant?.has_vibe_upgrade
-                                      ? "Vibe upgrade required"
+                                    {!canUseVibeUpgrade
+                                      ? "Upgrade plan required"
                                       : isEnhancingVibeThis
                                       ? "Enhancing as Vibe..."
                                       : "Enhance as Vibe"}

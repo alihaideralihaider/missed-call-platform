@@ -1,4 +1,3 @@
-export const runtime = "edge";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -20,7 +19,7 @@ function getFileExtension(name: string): string {
 }
 
 export async function GET(_: NextRequest, context: RouteContext) {
-  const supabase = createClient<any>(
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -41,6 +40,13 @@ export async function GET(_: NextRequest, context: RouteContext) {
         { status: 404 }
       );
     }
+
+    const { data: billing } = await supabase
+      .schema("food_ordering")
+      .from("restaurant_billing")
+      .select("plan_key")
+      .eq("restaurant_id", restaurant.id)
+      .maybeSingle();
 
     const { data: assets, error: assetsError } = await supabase
       .schema("food_ordering")
@@ -68,7 +74,10 @@ export async function GET(_: NextRequest, context: RouteContext) {
 
     return NextResponse.json({
       success: true,
-      restaurant,
+      restaurant: {
+        ...restaurant,
+        plan_key: billing?.plan_key ?? null,
+      },
       assets: assets || [],
     });
   } catch (error) {
@@ -84,7 +93,7 @@ export async function GET(_: NextRequest, context: RouteContext) {
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
-  const supabase = createClient<any>(
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );

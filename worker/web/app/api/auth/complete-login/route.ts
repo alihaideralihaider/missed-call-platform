@@ -1,11 +1,12 @@
-export const runtime = "edge";
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getPlatformAccessForUserId } from "@/lib/platform/access";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const userId = (body.userId || "").trim();
+    const email = String(body.email || "").trim().toLowerCase();
 
     if (!userId) {
       return NextResponse.json(
@@ -18,16 +19,18 @@ export async function POST(req: Request) {
 
     const { data: membership, error: membershipError } = await admin
       .from("restaurant_users")
-      .select("restaurant_id, role, is_active")
+      .select("restaurant_id, role, is_active, phone_verified")
       .eq("auth_user_id", userId)
       .eq("is_active", true)
       .limit(1)
       .maybeSingle();
 
     if (membershipError || !membership?.restaurant_id) {
+      const platformAccess = await getPlatformAccessForUserId(userId, email);
+
       console.error("Membership lookup failed:", membershipError);
       return NextResponse.json(
-        { error: "not_authorized" },
+        { error: platformAccess ? "platform_only" : "not_authorized" },
         { status: 403 }
       );
     }
@@ -41,6 +44,16 @@ export async function POST(req: Request) {
 
     if (restaurantError || !restaurant?.slug) {
       console.error("Restaurant lookup failed:", restaurantError);
+      return NextResponse.json(
+        { error: "not_authorized" },
+        { status: 403 }
+      );
+    }
+
+    if (
+      restaurant.onboarding_status === "closed_by_platform" ||
+      restaurant.onboarding_status === "rejected_fraud"
+    ) {
       return NextResponse.json(
         { error: "not_authorized" },
         { status: 403 }
@@ -84,6 +97,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       slug: restaurant.slug,
+      redirectTo: membership.phone_verified ? "/admin" : "/verify-phone",
     });
   } catch (error) {
     console.error("POST /api/auth/complete-login failed:", error);

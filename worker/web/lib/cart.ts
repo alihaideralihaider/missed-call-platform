@@ -1,9 +1,19 @@
 export type CartItem = {
+  lineId?: string;
   id: string;
   name: string;
   price: number;
   quantity: number;
   is_sold_out?: boolean;
+  modifiers?: CartModifierSelection[];
+};
+
+export type CartModifierSelection = {
+  groupId: string;
+  groupName: string;
+  optionId: string;
+  optionName: string;
+  price: number;
 };
 
 export type CartState = {
@@ -33,6 +43,61 @@ function emitCartUpdated() {
   window.dispatchEvent(new Event(CART_UPDATED_EVENT));
 }
 
+function sanitizeModifierSelection(
+  modifier: unknown
+): CartModifierSelection | null {
+  if (!modifier || typeof modifier !== "object") return null;
+
+  const raw = modifier as Partial<CartModifierSelection>;
+  const groupId = String(raw.groupId ?? "").trim();
+  const groupName = String(raw.groupName ?? "").trim();
+  const optionId = String(raw.optionId ?? "").trim();
+  const optionName = String(raw.optionName ?? "").trim();
+  const price = Number(raw.price ?? 0);
+
+  if (!groupId || !groupName || !optionId || !optionName) return null;
+  if (!Number.isFinite(price)) return null;
+
+  return {
+    groupId,
+    groupName,
+    optionId,
+    optionName,
+    price,
+  };
+}
+
+function sanitizeModifierSelections(
+  modifiers: unknown
+): CartModifierSelection[] {
+  if (!Array.isArray(modifiers)) return [];
+
+  return modifiers
+    .map(sanitizeModifierSelection)
+    .filter(
+      (modifier): modifier is CartModifierSelection => modifier !== null
+    )
+    .sort((a, b) =>
+      `${a.groupId}:${a.optionId}`.localeCompare(`${b.groupId}:${b.optionId}`)
+    );
+}
+
+function buildCartLineId(item: {
+  id: string;
+  modifiers?: CartModifierSelection[];
+}) {
+  const normalizedId = String(item.id ?? "").trim();
+  const modifierKey = (item.modifiers || [])
+    .map(
+      (modifier) =>
+        `${modifier.groupId}:${modifier.optionId}:${Number(modifier.price || 0).toFixed(2)}`
+    )
+    .sort()
+    .join("|");
+
+  return modifierKey ? `${normalizedId}::${modifierKey}` : normalizedId;
+}
+
 function sanitizeCartItem(item: unknown): CartItem | null {
   if (!item || typeof item !== "object") return null;
 
@@ -42,17 +107,22 @@ function sanitizeCartItem(item: unknown): CartItem | null {
   const price = Number(raw.price);
   const quantity = Number(raw.quantity);
   const is_sold_out = Boolean(raw.is_sold_out);
+  const modifiers = sanitizeModifierSelections(raw.modifiers);
 
   if (!id || !name) return null;
   if (!Number.isFinite(price) || price < 0) return null;
   if (!Number.isFinite(quantity) || quantity <= 0) return null;
 
+  const lineId = String(raw.lineId ?? "").trim() || buildCartLineId({ id, modifiers });
+
   return {
+    lineId,
     id,
     name,
     price,
     quantity: Math.floor(quantity),
     is_sold_out,
+    modifiers,
   };
 }
 
@@ -88,16 +158,18 @@ export function getCart(): CartState {
 export function saveCart(cart: CartState) {
   if (typeof window === "undefined") return;
 
+  const normalizedItems = Array.isArray(cart.items)
+    ? cart.items
+        .map(sanitizeCartItem)
+        .filter((item): item is CartItem => item !== null)
+    : [];
+
   const normalizedCart: CartState = {
     restaurantSlug:
       typeof cart.restaurantSlug === "string" && cart.restaurantSlug.trim()
         ? cart.restaurantSlug.trim().toLowerCase()
         : null,
-    items: Array.isArray(cart.items)
-      ? cart.items
-          .map(sanitizeCartItem)
-          .filter((item): item is CartItem => item !== null)
-      : [],
+    items: normalizedItems,
   };
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedCart));
@@ -111,6 +183,7 @@ export function addToCart(
     name: string;
     price: number;
     is_sold_out?: boolean;
+    modifiers?: CartModifierSelection[];
   }
 ) {
   const normalizedRestaurantSlug = String(restaurantSlug ?? "")
@@ -119,15 +192,20 @@ export function addToCart(
 
   if (!normalizedRestaurantSlug) return;
 
+  console.log("ADD_TO_CART_INPUT", item);
+
   const normalizedItem = sanitizeCartItem({
     id: item.id,
     name: item.name,
     price: item.price,
     quantity: 1,
     is_sold_out: item.is_sold_out,
+    modifiers: sanitizeModifierSelections(item.modifiers),
   });
 
   if (!normalizedItem) return;
+
+  console.log("ADD_TO_CART_NORMALIZED", normalizedItem);
 
   const cart = getCart();
 
@@ -143,13 +221,18 @@ export function addToCart(
   }
 
   const items = [...cart.items];
-  const existing = items.find((i) => i.id === normalizedItem.id);
+  const existing = items.find((i) => i.lineId === normalizedItem.lineId);
 
   if (existing) {
     existing.quantity += 1;
     existing.name = normalizedItem.name;
     existing.price = normalizedItem.price;
     existing.is_sold_out = normalizedItem.is_sold_out;
+    existing.modifiers = sanitizeModifierSelections(normalizedItem.modifiers);
+    existing.lineId = buildCartLineId({
+      id: normalizedItem.id,
+      modifiers: normalizedItem.modifiers,
+    });
   } else {
     items.push(normalizedItem);
   }
@@ -177,7 +260,7 @@ export function updateCartItemQuantity(id: string, quantity: number) {
 
   const nextItems = cart.items
     .map((item) =>
-      item.id === normalizedId
+      (item.lineId || item.id) === normalizedId
         ? { ...item, quantity: Math.floor(quantity) }
         : item
     )
@@ -195,7 +278,9 @@ export function removeFromCart(id: string) {
 
   if (!normalizedId) return;
 
-  const nextItems = cart.items.filter((item) => item.id !== normalizedId);
+  const nextItems = cart.items.filter(
+    (item) => (item.lineId || item.id) !== normalizedId
+  );
 
   saveCart({
     restaurantSlug: nextItems.length > 0 ? cart.restaurantSlug : null,
@@ -220,7 +305,18 @@ export function clearCart() {
 }
 
 export function getCartItems(): CartItem[] {
-  return getCart().items;
+  const items = getCart().items.map((item) => ({
+    ...item,
+    modifiers: sanitizeModifierSelections(item.modifiers),
+    lineId: buildCartLineId({
+      id: item.id,
+      modifiers: item.modifiers,
+    }),
+  }));
+
+  console.log("GET_CART_ITEMS", items);
+
+  return items;
 }
 
 export function getCartRestaurantSlug(): string | null {
@@ -282,11 +378,16 @@ export function syncCartWithMenu(
       }
 
       return sanitizeCartItem({
+        lineId: cartItem.lineId,
         id: latest.id,
         name: latest.name,
-        price: latest.price,
+        price:
+          Array.isArray(cartItem.modifiers) && cartItem.modifiers.length > 0
+            ? cartItem.price
+            : latest.price,
         quantity: cartItem.quantity,
         is_sold_out: latest.is_sold_out,
+        modifiers: cartItem.modifiers,
       });
     })
     .filter((item): item is CartItem => item !== null);
@@ -297,11 +398,13 @@ export function syncCartWithMenu(
       const prev = cart.items[index];
       return (
         !prev ||
+        item.lineId !== prev.lineId ||
         item.id !== prev.id ||
         item.name !== prev.name ||
         item.price !== prev.price ||
         item.quantity !== prev.quantity ||
-        Boolean(item.is_sold_out) !== Boolean(prev.is_sold_out)
+        Boolean(item.is_sold_out) !== Boolean(prev.is_sold_out) ||
+        JSON.stringify(item.modifiers || []) !== JSON.stringify(prev.modifiers || [])
       );
     });
 

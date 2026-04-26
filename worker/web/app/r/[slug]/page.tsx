@@ -1,839 +1,601 @@
-"use client";
-
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import RestaurantMenuClient from "@/components/storefront/RestaurantMenuClient";
+import { evaluateRestaurantHours, type RestaurantHourRow } from "@/lib/restaurant-hours";
 import { createClient } from "@supabase/supabase-js";
-import {
-  CartItem,
-  clearCart,
-  getCartItems,
-  getCartRestaurantSlug,
-  subscribeToCartUpdates,
-} from "@/lib/cart";
 
-type PageProps = {
+type Props = {
   params: Promise<{ slug: string }>;
 };
 
-type RestaurantHourRow = {
-  day_of_week: number;
-  open_time: string | null;
-  close_time: string | null;
-  is_closed: boolean | null;
+type PromotionRow = {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  description: string | null;
+  promotion_type: string | null;
+  status: string | null;
+  priority: number | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  channels: string[] | string | null;
 };
 
-type PickupOption = {
-  value: string;
-  label: string;
+type PromotionRuleRow = {
+  id: string;
+  promotion_id: string;
+  buy_quantity: number | null;
+  get_quantity: number | null;
+  discount_percent: number | null;
+  discount_amount: number | null;
+  min_order_subtotal: number | null;
+  max_discount_amount: number | null;
+  first_order_only: boolean | null;
+  next_order_only: boolean | null;
+  pickup_only: boolean | null;
+  metadata: unknown;
 };
 
-const SALES_TAX_RATE = 0.08875; // change this if needed
-const ASAP_PREP_MINUTES = 20;
-const PICKUP_SLOT_INTERVAL_MINUTES = 15;
+type MenuItemRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  base_price: number | null;
+  compare_at_price: number | null;
+  image_url: string | null;
+  is_active: boolean | null;
+  is_sold_out: boolean | null;
+  is_featured: boolean | null;
+  order_count: number | null;
+  last_ordered_at: string | null;
+  sort_order: number | null;
+};
 
-function cleanSlug(value: unknown): string {
-  const s = String(value ?? "").trim().toLowerCase();
-  return s && s !== "undefined" && s !== "null" ? s : "";
+type ModifierGroupRow = {
+  id: string;
+  name: string | null;
+  description?: string | null;
+  required?: boolean | null;
+  is_required?: boolean | null;
+  min_select?: number | null;
+  max_select?: number | null;
+  min_selections?: number | null;
+  max_selections?: number | null;
+  selection_mode?: string | null;
+  sort_order?: number | null;
+  is_active?: boolean | null;
+};
+
+type ModifierOptionRow = {
+  id: string;
+  modifier_group_id: string;
+  name: string | null;
+  description?: string | null;
+  price_delta?: number | string | null;
+  sort_order?: number | null;
+  is_active?: boolean | null;
+};
+
+type MenuItemModifierGroupRow = {
+  menu_item_id: string;
+  modifier_group_id: string;
+  sort_order?: number | null;
+};
+
+type MenuCategoryRow = {
+  id: string;
+  name: string | null;
+  sort_order: number | null;
+  is_active?: boolean | null;
+  menu_items?: MenuItemRow[] | null;
+};
+
+type MenuRow = {
+  id: string;
+  is_active?: boolean | null;
+  menu_categories?: MenuCategoryRow[] | null;
+};
+
+type RestaurantRow = {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean | null;
+  timezone?: string | null;
+  has_vibe_upgrade: boolean | null;
+  has_menu_upgrade: boolean | null;
+  vibe_image_url: string | null;
+  address_line1?: string | null;
+  address_line_1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  menus?: MenuRow[] | null;
+};
+
+function isPromotionActive(promo: PromotionRow, now: Date) {
+  const startsOk = !promo.starts_at || new Date(promo.starts_at) <= now;
+  const endsOk = !promo.ends_at || new Date(promo.ends_at) >= now;
+  const status = String(promo.status || "").toLowerCase();
+
+  return startsOk && endsOk && (!status || status === "active" || status === "live");
 }
 
-function formatRestaurantName(slug: string): string {
-  if (!slug) return "Restaurant";
+function channelAllowsStorefront(channels: PromotionRow["channels"]) {
+  if (!channels) return true;
 
-  return slug
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
+  if (Array.isArray(channels)) {
+    if (channels.length === 0) return true;
 
-function normalizePhone(value: string): string {
-  return value.replace(/\D/g, "");
-}
+    const lowered = channels.map((c) => String(c).toLowerCase());
 
-function addMinutes(date: Date, minutes: number): Date {
-  return new Date(date.getTime() + minutes * 60 * 1000);
-}
-
-function formatPickupClockTime(date: Date): string {
-  return date.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatPickupOptionLabel(
-  label: string,
-  now: Date,
-  minutesFromNow: number
-): string {
-  const readyAt = addMinutes(now, minutesFromNow);
-  return `${label} (ready around ${formatPickupClockTime(readyAt)})`;
-}
-
-function buildTimeForToday(now: Date, timeValue: string) {
-  const [hour, minute] = timeValue.split(":").map(Number);
-  const result = new Date(now);
-  result.setHours(hour, minute, 0, 0);
-  return result;
-}
-
-function roundUpToNextInterval(date: Date, intervalMinutes: number) {
-  const result = new Date(date);
-  result.setSeconds(0, 0);
-
-  const minutes = result.getMinutes();
-  const remainder = minutes % intervalMinutes;
-
-  if (remainder !== 0) {
-    result.setMinutes(minutes + (intervalMinutes - remainder));
-  }
-
-  return result;
-}
-
-function getCurrentOpenWindow(
-  hours: RestaurantHourRow[],
-  now: Date
-): { openAt: Date; closeAt: Date } | null {
-  const currentDay = now.getDay();
-  const previousDay = currentDay === 0 ? 6 : currentDay - 1;
-
-  const today = hours.find((row) => Number(row.day_of_week) === currentDay);
-  const yesterday = hours.find((row) => Number(row.day_of_week) === previousDay);
-
-  if (today && !today.is_closed && today.open_time && today.close_time) {
-    const openAt = buildTimeForToday(now, today.open_time);
-    const closeAt = buildTimeForToday(now, today.close_time);
-
-    if (closeAt <= openAt) {
-      closeAt.setDate(closeAt.getDate() + 1);
-    }
-
-    if (now >= openAt && now <= closeAt) {
-      return { openAt, closeAt };
-    }
-  }
-
-  if (
-    yesterday &&
-    !yesterday.is_closed &&
-    yesterday.open_time &&
-    yesterday.close_time
-  ) {
-    const openAt = buildTimeForToday(now, yesterday.open_time);
-    openAt.setDate(openAt.getDate() - 1);
-
-    const closeAt = buildTimeForToday(now, yesterday.close_time);
-    const yesterdayIsOvernight = yesterday.close_time <= yesterday.open_time;
-
-    if (yesterdayIsOvernight && now >= openAt && now <= closeAt) {
-      return { openAt, closeAt };
-    }
-  }
-
-  return null;
-}
-
-function buildPickupOptionsFromHours(
-  hours: RestaurantHourRow[],
-  now: Date
-): PickupOption[] {
-  const currentWindow = getCurrentOpenWindow(hours, now);
-
-  if (!currentWindow) {
-    return [];
-  }
-
-  const asapReadyAt = addMinutes(now, ASAP_PREP_MINUTES);
-
-  if (asapReadyAt > currentWindow.closeAt) {
-    return [];
-  }
-
-  const options: PickupOption[] = [
-    {
-      value: "ASAP",
-      label: formatPickupOptionLabel("ASAP", now, ASAP_PREP_MINUTES),
-    },
-  ];
-
-  let slotTime = roundUpToNextInterval(
-    addMinutes(now, ASAP_PREP_MINUTES),
-    PICKUP_SLOT_INTERVAL_MINUTES
-  );
-
-  while (slotTime <= currentWindow.closeAt) {
-    const leadMinutes = Math.max(
-      PICKUP_SLOT_INTERVAL_MINUTES,
-      Math.round((slotTime.getTime() - now.getTime()) / 60000)
-    );
-
-    options.push({
-      value: `${leadMinutes} minutes`,
-      label: `Today at ${formatPickupClockTime(slotTime)}`,
-    });
-
-    slotTime = addMinutes(slotTime, PICKUP_SLOT_INTERVAL_MINUTES);
-  }
-
-  return options.filter(
-    (option, index, all) =>
-      all.findIndex((x) => x.value === option.value) === index
-  );
-}
-
-export default function CheckoutPage({ params }: PageProps) {
-  const [slug, setSlug] = useState("");
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [cartRestaurantSlug, setCartRestaurantSlug] = useState<string | null>(null);
-
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [pickupTime, setPickupTime] = useState("ASAP");
-  const [pickupMode, setPickupMode] = useState<"asap" | "scheduled">("asap");
-  const [notes, setNotes] = useState("");
-  const [smsOptIn, setSmsOptIn] = useState(false);
-
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [now, setNow] = useState(() => new Date());
-  const [restaurantTimezone, setRestaurantTimezone] = useState("America/New_York");
-  const [restaurantHours, setRestaurantHours] = useState<RestaurantHourRow[]>([]);
-  const [loadingPickupOptions, setLoadingPickupOptions] = useState(false);
-
-  function refresh() {
-    setItems(getCartItems());
-    setCartRestaurantSlug(getCartRestaurantSlug());
-  }
-
-  useEffect(() => {
-    params.then((resolved) => {
-      setSlug(cleanSlug(resolved?.slug));
-    });
-
-    refresh();
-
-    const unsubscribe = subscribeToCartUpdates(() => {
-      refresh();
-    });
-
-    return unsubscribe;
-  }, [params]);
-
-  useEffect(() => {
-    if (!slug) return;
-
-    let cancelled = false;
-
-    async function loadRestaurantPickupData() {
-      setLoadingPickupOptions(true);
-
-      try {
-        const supabase = createClient<any>(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
-
-        const { data: restaurantData, error: restaurantError } = await supabase
-          .schema("food_ordering")
-          .from("restaurants")
-          .select("id, timezone")
-          .eq("slug", slug)
-          .maybeSingle();
-
-        if (restaurantError || !restaurantData?.id) {
-          if (!cancelled) {
-            setRestaurantHours([]);
-            setLoadingPickupOptions(false);
-          }
-          return;
-        }
-
-        const timezone =
-          String(restaurantData.timezone || "").trim() || "America/New_York";
-
-        const restaurantNow = new Date(
-          new Date().toLocaleString("en-US", {
-            timeZone: timezone,
-          })
-        );
-
-        const { data: hoursData, error: hoursError } = await supabase
-          .schema("food_ordering")
-          .from("restaurant_hours")
-          .select("day_of_week, open_time, close_time, is_closed")
-          .eq("restaurant_id", restaurantData.id);
-
-        if (!cancelled) {
-          setRestaurantTimezone(timezone);
-          setNow(restaurantNow);
-          setRestaurantHours(
-            hoursError ? [] : ((hoursData as RestaurantHourRow[] | null) || [])
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingPickupOptions(false);
-        }
-      }
-    }
-
-    loadRestaurantPickupData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [slug]);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setNow(
-        new Date(
-          new Date().toLocaleString("en-US", {
-            timeZone: restaurantTimezone || "America/New_York",
-          })
-        )
-      );
-    }, 60 * 1000);
-
-    return () => window.clearInterval(interval);
-  }, [restaurantTimezone]);
-
-  const subtotal = useMemo(
-    () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
-    [items]
-  );
-
-  const tax = useMemo(() => subtotal * SALES_TAX_RATE, [subtotal]);
-  const total = useMemo(() => subtotal + tax, [subtotal, tax]);
-
-  const itemCount = useMemo(
-    () => items.reduce((sum, item) => sum + item.quantity, 0),
-    [items]
-  );
-
-  const restaurantName = formatRestaurantName(slug);
-
-  const cartBelongsToThisRestaurant =
-    !cartRestaurantSlug || !slug || cartRestaurantSlug === slug;
-
-  const pickupOptions = useMemo(() => {
-    if (restaurantHours.length > 0) {
-      return buildPickupOptionsFromHours(restaurantHours, now);
-    }
-
-    return [
-      {
-        value: "ASAP",
-        label: formatPickupOptionLabel("ASAP", now, ASAP_PREP_MINUTES),
-      },
-      {
-        value: "15 minutes",
-        label: formatPickupOptionLabel("15 minutes", now, 15),
-      },
-      {
-        value: "30 minutes",
-        label: formatPickupOptionLabel("30 minutes", now, 30),
-      },
-      {
-        value: "45 minutes",
-        label: formatPickupOptionLabel("45 minutes", now, 45),
-      },
-      {
-        value: "60 minutes",
-        label: formatPickupOptionLabel("60 minutes", now, 60),
-      },
-    ];
-  }, [restaurantHours, now]);
-
-  const scheduledPickupOptions = useMemo(
-    () => pickupOptions.filter((option) => option.value !== "ASAP"),
-    [pickupOptions]
-  );
-
-  useEffect(() => {
-    if (!pickupOptions.length) {
-      return;
-    }
-
-    const stillValid = pickupOptions.some((option) => option.value === pickupTime);
-
-    if (!stillValid) {
-      setPickupTime(pickupOptions[0].value);
-    }
-  }, [pickupOptions, pickupTime]);
-
-  useEffect(() => {
-    if (!pickupOptions.length) {
-      return;
-    }
-
-    if (pickupMode === "asap") {
-      setPickupTime("ASAP");
-      return;
-    }
-
-    if (pickupMode === "scheduled") {
-      if (!scheduledPickupOptions.length) {
-        setPickupMode("asap");
-        setPickupTime("ASAP");
-        return;
-      }
-
-      if (pickupTime === "ASAP") {
-        setPickupTime(scheduledPickupOptions[0].value);
-      }
-    }
-  }, [pickupMode, pickupOptions, pickupTime, scheduledPickupOptions]);
-
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-
-    if (submitting) return;
-    setError("");
-
-    const normalizedPhone = normalizePhone(customerPhone);
-
-    if (items.length === 0) {
-      setError("Your cart is empty.");
-      return;
-    }
-
-    if (!slug) {
-      setError("Missing restaurant slug.");
-      return;
-    }
-
-    if (!customerName.trim()) {
-      setError("Please enter your name.");
-      return;
-    }
-
-    if (normalizedPhone.length < 10) {
-      setError("Please enter a valid phone number.");
-      return;
-    }
-
-    if (!pickupOptions.length) {
-      setError("No pickup times are currently available.");
-      return;
-    }
-
-    if (pickupMode === "scheduled" && !scheduledPickupOptions.length) {
-      setError("No scheduled pickup times are currently available.");
-      return;
-    }
-
-    setSubmitting(true);
-
-    try {
-      const payload = {
-        restaurantSlug: slug,
-        customerName: customerName.trim(),
-        customerPhone: normalizedPhone,
-        pickupTime: pickupTime.trim() || "ASAP",
-        notes: notes.trim(),
-        smsOptIn,
-        items: items.map((item) => ({
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-        })),
-      };
-
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      let data: any = null;
-
-      try {
-        data = await res.json();
-      } catch {
-        data = null;
-      }
-
-      if (!res.ok) {
-        setError(data?.error || "Failed to place order.");
-        setSubmitting(false);
-        return;
-      }
-
-      clearCart();
-
-      const orderId =
-        typeof data?.orderId === "string" ? data.orderId : "";
-
-      const orderNumber =
-        typeof data?.orderNumber === "string"
-          ? data.orderNumber
-          : typeof data?.order?.order_number === "string"
-          ? data.order.order_number
-          : typeof data?.order?.public_order_code === "string"
-          ? data.order.public_order_code
-          : "";
-
-      const params = new URLSearchParams();
-
-      if (orderId) {
-        params.set("orderId", orderId);
-      }
-
-      if (orderNumber) {
-        params.set("orderNumber", orderNumber);
-      }
-
-      window.location.href = params.toString()
-        ? `/r/${slug}/success?${params.toString()}`
-        : `/r/${slug}/success`;
-    } catch {
-      setError("Something went wrong while placing your order.");
-      setSubmitting(false);
-    }
-  }
-
-  if (!cartBelongsToThisRestaurant) {
     return (
-      <main className="min-h-screen bg-neutral-100">
-        <div className="mx-auto min-h-screen max-w-md bg-white px-4 py-6 shadow-sm">
-          <div className="mb-6">
-            <Link
-              href={`/r/${slug}`}
-              className="text-sm font-medium text-neutral-500"
-            >
-              ← Back to menu
-            </Link>
-          </div>
-
-          <div className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
-            <h1 className="text-xl font-bold text-neutral-900">Wrong cart</h1>
-            <p className="mt-2 text-sm text-neutral-600">
-              Your cart belongs to a different restaurant. Start a new order for{" "}
-              {restaurantName}.
-            </p>
-
-            <div className="mt-5">
-              <Link
-                href={`/r/${slug}`}
-                className="block w-full rounded-2xl bg-neutral-900 px-4 py-3 text-center text-sm font-semibold text-white"
-              >
-                Go to menu
-              </Link>
-            </div>
-          </div>
-        </div>
-      </main>
+      lowered.includes("storefront") ||
+      lowered.includes("web") ||
+      lowered.includes("pickup") ||
+      lowered.includes("all")
     );
   }
 
-  if (items.length === 0) {
-    return (
-      <main className="min-h-screen bg-neutral-100">
-        <div className="mx-auto min-h-screen max-w-md bg-white px-4 py-6 shadow-sm">
-          <div className="mb-6">
-            <Link
-              href={`/r/${slug}/cart`}
-              className="text-sm font-medium text-neutral-500"
-            >
-              ← Back to cart
-            </Link>
-          </div>
-
-          <div className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 p-6 text-center">
-            <h1 className="text-xl font-bold text-neutral-900">
-              Your cart is empty
-            </h1>
-            <p className="mt-2 text-sm text-neutral-500">
-              Add items before checkout.
-            </p>
-
-            <Link
-              href={`/r/${slug}`}
-              className="mt-5 inline-block rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white"
-            >
-              Browse menu
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  const single = String(channels).toLowerCase();
 
   return (
-    <main className="min-h-screen bg-neutral-100">
-      <div className="mx-auto min-h-screen max-w-md bg-white shadow-sm">
-        <div className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 px-4 pb-4 pt-4 backdrop-blur">
-          <Link
-            href={`/r/${slug}/cart`}
-            className="text-sm font-medium text-neutral-500"
-          >
-            ← Back to cart
-          </Link>
+    single.includes("storefront") ||
+    single.includes("web") ||
+    single.includes("pickup") ||
+    single.includes("all")
+  );
+}
 
-          <div className="mt-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-              Pickup checkout
-            </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-neutral-900">
-              Checkout
-            </h1>
-            <p className="mt-1 text-sm text-neutral-500">{restaurantName}</p>
-          </div>
-        </div>
+function formatMoney(value: number) {
+  return `$${Number(value || 0).toFixed(2)}`;
+}
 
-        <form
-          id="checkout-form"
-          onSubmit={handleSubmit}
-          className="px-4 pb-36 pt-4"
-        >
-          <div className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
-            <h2 className="text-base font-semibold text-neutral-900">
-              Contact details
-            </h2>
+function buildPromotionSubtitle(
+  promo: PromotionRow,
+  rule?: PromotionRuleRow | null
+) {
+  const parts: string[] = [];
 
-            <div className="mt-4 space-y-4">
-              <div>
-                <label
-                  htmlFor="customerName"
-                  className="mb-2 block text-sm font-medium text-neutral-700"
-                >
-                  Name
-                </label>
-                <input
-                  id="customerName"
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Your name"
-                  className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
-                  autoComplete="name"
-                />
-              </div>
+  if (rule?.buy_quantity && rule?.get_quantity) {
+    parts.push(`Buy ${rule.buy_quantity}, get ${rule.get_quantity}`);
+  } else if (rule?.discount_percent) {
+    parts.push(`${rule.discount_percent}% off`);
+  } else if (rule?.discount_amount) {
+    parts.push(`${formatMoney(rule.discount_amount)} off`);
+  }
 
-              <div>
-                <label
-                  htmlFor="customerPhone"
-                  className="mb-2 block text-sm font-medium text-neutral-700"
-                >
-                  Phone
-                </label>
-                <input
-                  id="customerPhone"
-                  type="tel"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="(555) 555-5555"
-                  className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
-                  autoComplete="tel"
-                  inputMode="tel"
-                />
-              </div>
+  if (rule?.min_order_subtotal) {
+    parts.push(`on orders over ${formatMoney(rule.min_order_subtotal)}`);
+  }
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-neutral-700">
-                  Pickup time
-                </label>
+  if (rule?.pickup_only) {
+    parts.push("pickup only");
+  }
 
-                <div className="space-y-3">
-                  <button
-                    type="button"
-                    onClick={() => setPickupMode("asap")}
-                    disabled={loadingPickupOptions || pickupOptions.length === 0}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      pickupMode === "asap"
-                        ? "border-neutral-900 bg-neutral-900 text-white"
-                        : "border-neutral-200 bg-white text-neutral-900"
-                    }`}
-                  >
-                    <p className="text-sm font-semibold">ASAP</p>
-                    <p
-                      className={`mt-1 text-xs ${
-                        pickupMode === "asap"
-                          ? "text-neutral-200"
-                          : "text-neutral-500"
-                      }`}
-                    >
-                      {pickupOptions.find((option) => option.value === "ASAP")?.label ||
-                        "As soon as possible"}
-                    </p>
-                  </button>
+  if (rule?.first_order_only) {
+    parts.push("first order only");
+  }
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (scheduledPickupOptions.length > 0) {
-                        setPickupMode("scheduled");
-                      }
-                    }}
-                    disabled={
-                      loadingPickupOptions ||
-                      pickupOptions.length === 0 ||
-                      scheduledPickupOptions.length === 0
-                    }
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      pickupMode === "scheduled"
-                        ? "border-neutral-900 bg-neutral-900 text-white"
-                        : "border-neutral-200 bg-white text-neutral-900"
-                    }`}
-                  >
-                    <p className="text-sm font-semibold">Schedule for later</p>
-                    <p
-                      className={`mt-1 text-xs ${
-                        pickupMode === "scheduled"
-                          ? "text-neutral-200"
-                          : "text-neutral-500"
-                      }`}
-                    >
-                      {scheduledPickupOptions.length > 0
-                        ? "Choose an available pickup slot"
-                        : "No scheduled pickup times available"}
-                    </p>
-                  </button>
-                </div>
+  if (rule?.next_order_only) {
+    parts.push("next order only");
+  }
 
-                {pickupMode === "scheduled" ? (
-                  <div className="mt-3">
-                    <select
-                      id="pickupTime"
-                      value={pickupTime}
-                      onChange={(e) => setPickupTime(e.target.value)}
-                      disabled={
-                        loadingPickupOptions || scheduledPickupOptions.length === 0
-                      }
-                      className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-400 disabled:cursor-not-allowed disabled:bg-neutral-100"
-                    >
-                      {scheduledPickupOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
+  if (parts.length > 0) {
+    return parts.join(" • ");
+  }
 
-                {loadingPickupOptions ? (
-                  <p className="mt-2 text-xs text-neutral-500">
-                    Loading available pickup times...
-                  </p>
-                ) : null}
-                {!loadingPickupOptions && pickupOptions.length === 0 ? (
-                  <p className="mt-2 text-xs text-red-600">
-                    No pickup times are currently available.
-                  </p>
-                ) : null}
-              </div>
+  return promo.description || null;
+}
 
-              <div>
-                <label
-                  htmlFor="notes"
-                  className="mb-2 block text-sm font-medium text-neutral-700"
-                >
-                  Notes
-                </label>
-                <textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Extra sauce, no onions, call on arrival, etc."
-                  className="min-h-[100px] w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
-                />
-              </div>
+function buildPromotionBadge(
+  promo: PromotionRow,
+  rule?: PromotionRuleRow | null
+) {
+  if (rule?.pickup_only) return "Pickup Only";
 
-              <label className="flex items-start gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={smsOptIn}
-                  onChange={(e) => setSmsOptIn(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-neutral-300"
-                />
-                <div>
-                  <p className="text-sm font-medium text-neutral-900">
-                    Text me order updates and occasional offers
-                  </p>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    You can opt out later.
-                  </p>
-                </div>
-              </label>
-            </div>
-          </div>
+  const type = String(promo.promotion_type || "").trim();
+  if (!type) return null;
 
-          <div className="mt-4 rounded-3xl border border-neutral-200 bg-neutral-50 p-4">
-            <h2 className="text-base font-semibold text-neutral-900">
-              Order summary
-            </h2>
+  return type
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
 
-            <div className="mt-4 space-y-3">
-              {items.map((item) => (
-                <div
-                  key={item.name}
-                  className="flex items-start justify-between gap-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-neutral-900">
-                      {item.quantity} × {item.name}
-                    </p>
-                    <p className="mt-1 text-xs text-neutral-500">
-                      ${item.price.toFixed(2)} each
-                    </p>
-                  </div>
+function buildRestaurantAddress(restaurant: RestaurantRow | null) {
+  if (!restaurant) return null;
 
-                  <p className="text-sm font-semibold text-neutral-900">
-                    ${(item.price * item.quantity).toFixed(2)}
-                  </p>
-                </div>
-              ))}
-            </div>
+  const parts = [
+    restaurant.address_line1 || restaurant.address_line_1 || "",
+    restaurant.city || "",
+    restaurant.state || "",
+    restaurant.postal_code || "",
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
 
-            <div className="mt-4 border-t border-neutral-200 pt-4 text-sm">
-              <div className="flex items-center justify-between text-neutral-600">
-                <span>
-                  Subtotal ({itemCount} item{itemCount > 1 ? "s" : ""})
-                </span>
-                <span>${subtotal.toFixed(2)}</span>
-              </div>
+  return parts.length > 0 ? parts.join(", ") : null;
+}
 
-              <div className="mt-2 flex items-center justify-between text-neutral-600">
-                <span>Sales tax</span>
-                <span>${tax.toFixed(2)}</span>
-              </div>
+function normalizeModifierPrice(option: ModifierOptionRow) {
+  const value = option.price_delta ?? 0;
+  const price = Number(value);
+  return Number.isFinite(price) ? price : 0;
+}
 
-              <div className="mt-3 flex items-center justify-between text-base font-bold text-neutral-900">
-                <span>Total</span>
-                <span>${total.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
+function normalizeImageUrl(value: unknown) {
+  const imageUrl = String(value ?? "").trim();
 
-          {error ? (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          ) : null}
-        </form>
+  if (!imageUrl) return null;
+  if (imageUrl === "null" || imageUrl === "undefined") return null;
 
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-3 backdrop-blur">
-          <div className="mx-auto w-full max-w-md">
-            <button
-              type="submit"
-              form="checkout-form"
-              disabled={submitting || loadingPickupOptions || pickupOptions.length === 0}
-              className="flex w-full items-center justify-between rounded-2xl bg-neutral-900 px-4 py-4 text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98]"
-            >
-              <span className="text-sm font-semibold">
-                {submitting ? "Placing order..." : "Place order"}
-              </span>
-              <span className="text-sm font-semibold">
-                ${total.toFixed(2)}
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </main>
+  return imageUrl;
+}
+
+export default async function Page({ params }: Props) {
+  const { slug } = await params;
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const { data, error } = await supabase
+    .schema("food_ordering")
+    .from("restaurants")
+    .select(
+      `
+      id,
+      name,
+      slug,
+      is_active,
+      timezone,
+      has_vibe_upgrade,
+      has_menu_upgrade,
+      vibe_image_url,
+      address_line1,
+      address_line_1,
+      city,
+      state,
+      postal_code,
+      menus (
+        id,
+        is_active,
+        menu_categories (
+          id,
+          name,
+          sort_order,
+          is_active,
+          menu_items (
+            id,
+            name,
+            description,
+            price,
+            base_price,
+            compare_at_price,
+            image_url,
+            is_active,
+            is_sold_out,
+            is_featured,
+            order_count,
+            last_ordered_at,
+            sort_order
+          )
+        )
+      )
+    `
+    )
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error || !data) {
+    console.error("Error loading restaurant:", error);
+    return <div>Restaurant not found</div>;
+  }
+
+  const restaurant = data as RestaurantRow;
+  const restaurantTimeZone =
+    String(restaurant.timezone || "").trim() || "America/New_York";
+
+  const { data: restaurantHoursData, error: restaurantHoursError } = await supabase
+    .schema("food_ordering")
+    .from("restaurant_hours")
+    .select("day_of_week, open_time, close_time, is_closed")
+    .eq("restaurant_id", restaurant.id);
+
+  if (restaurantHoursError) {
+    console.error("Error loading restaurant hours:", restaurantHoursError);
+  }
+
+  const restaurantHours =
+    ((restaurantHoursData as RestaurantHourRow[] | null) || []).map((row) => ({
+      day_of_week: Number(row.day_of_week),
+      open_time: row.open_time ?? null,
+      close_time: row.close_time ?? null,
+      is_closed: row.is_closed ?? null,
+    }));
+
+  const menus = Array.isArray(restaurant.menus) ? restaurant.menus : [];
+  const activeMenu =
+    menus.find((menu) => menu && menu.is_active !== false) || menus[0] || null;
+
+  const categories = Array.isArray(activeMenu?.menu_categories)
+    ? activeMenu!.menu_categories
+        .filter((category) => category && category.is_active !== false)
+        .sort(
+          (a, b) => Number(a?.sort_order || 0) - Number(b?.sort_order || 0)
+        )
+    : [];
+
+  const items = categories.flatMap((category) =>
+    (Array.isArray(category.menu_items) ? category.menu_items : [])
+      .filter((item) => item && item.is_active)
+      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description ?? null,
+        price: Number(item.price || 0),
+        base_price: item.base_price ?? null,
+        compare_at_price: item.compare_at_price ?? null,
+        image_url: normalizeImageUrl(item.image_url),
+        is_sold_out: item.is_sold_out ?? false,
+        is_featured: item.is_featured ?? false,
+        order_count: item.order_count ?? 0,
+        last_ordered_at: item.last_ordered_at ?? null,
+        category_name: category.name ?? null,
+      }))
+  );
+
+  const itemIds = items.map((item) => item.id);
+  let modifierGroupsByItemId = new Map<
+    string,
+    Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      required: boolean;
+      min_select: number;
+      max_select: number | null;
+      selection_mode: string | null;
+      sort_order: number;
+      options: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        price: number;
+        sort_order: number;
+      }>;
+    }>
+  >();
+
+  if (itemIds.length > 0) {
+    const { data: menuItemModifierGroupsData, error: menuItemModifierGroupsError } =
+      await supabase
+        .schema("food_ordering")
+        .from("menu_item_modifier_groups")
+        .select("menu_item_id, modifier_group_id, sort_order")
+        .in("menu_item_id", itemIds);
+
+    if (menuItemModifierGroupsError) {
+      console.error(
+        "Error loading menu item modifier group links:",
+        menuItemModifierGroupsError
+      );
+    } else {
+      const menuItemModifierGroups =
+        (menuItemModifierGroupsData as MenuItemModifierGroupRow[] | null) || [];
+      const modifierGroupIds = Array.from(
+        new Set(menuItemModifierGroups.map((row) => row.modifier_group_id).filter(Boolean))
+      );
+
+      if (modifierGroupIds.length > 0) {
+        const [{ data: modifierGroupsData, error: modifierGroupsError }, { data: modifierOptionsData, error: modifierOptionsError }] =
+          await Promise.all([
+            supabase
+              .schema("food_ordering")
+              .from("modifier_groups")
+              .select("*")
+              .in("id", modifierGroupIds),
+            supabase
+              .schema("food_ordering")
+              .from("modifier_group_options")
+              .select("*")
+              .in("modifier_group_id", modifierGroupIds),
+          ]);
+
+        if (modifierGroupsError) {
+          console.error("Error loading modifier groups:", modifierGroupsError);
+        }
+
+        if (modifierOptionsError) {
+          console.error("Error loading modifier options:", modifierOptionsError);
+        }
+
+        const modifierGroups =
+          ((modifierGroupsData as ModifierGroupRow[] | null) || []).filter(
+            (group) => group && group.is_active !== false
+          );
+        const modifierOptions =
+          ((modifierOptionsData as ModifierOptionRow[] | null) || []).filter(
+            (option) => option && option.is_active !== false
+          );
+
+        const optionsByGroupId = new Map<
+          string,
+          Array<{
+            id: string;
+            name: string;
+            description: string | null;
+            price: number;
+            sort_order: number;
+          }>
+        >();
+
+        for (const option of modifierOptions) {
+          const existing = optionsByGroupId.get(option.modifier_group_id) || [];
+          existing.push({
+            id: option.id,
+            name: option.name ?? "",
+            description: option.description ?? null,
+            price: normalizeModifierPrice(option),
+            sort_order: Number(option.sort_order || 0),
+          });
+          optionsByGroupId.set(option.modifier_group_id, existing);
+        }
+
+        const groupsById = new Map(
+          modifierGroups.map((group) => [
+            group.id,
+            {
+              id: group.id,
+              name: group.name ?? "",
+              description: group.description ?? null,
+              required: group.is_required ?? group.required ?? false,
+              min_select: Number(group.min_selections ?? group.min_select ?? 0),
+              max_select:
+                group.max_selections === null || group.max_selections === undefined
+                  ? group.selection_mode === "single"
+                    ? 1
+                    : null
+                  : Number(group.max_selections),
+              selection_mode: group.selection_mode ?? null,
+              sort_order: Number(group.sort_order || 0),
+              options: (optionsByGroupId.get(group.id) || []).sort(
+                (a, b) => a.sort_order - b.sort_order
+              ),
+            },
+          ])
+        );
+
+        modifierGroupsByItemId = new Map();
+
+        for (const link of menuItemModifierGroups) {
+          const group = groupsById.get(link.modifier_group_id);
+          if (!group || !group.options.length) continue;
+
+          const existing = modifierGroupsByItemId.get(link.menu_item_id) || [];
+          existing.push({
+            ...group,
+            sort_order:
+              link.sort_order === null || link.sort_order === undefined
+                ? group.sort_order
+                : Number(link.sort_order),
+          });
+          modifierGroupsByItemId.set(link.menu_item_id, existing);
+        }
+      }
+    }
+  }
+
+  const itemsWithModifiers = items.map((item) => ({
+    ...item,
+    modifier_groups: (modifierGroupsByItemId.get(item.id) || []).sort(
+      (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)
+    ),
+  }));
+
+  const now = new Date();
+
+  const { data: promotionsData, error: promotionsError } = await supabase
+    .schema("growth")
+    .from("promotions")
+    .select(
+      `
+      id,
+      restaurant_id,
+      name,
+      description,
+      promotion_type,
+      status,
+      priority,
+      starts_at,
+      ends_at,
+      channels
+    `
+    )
+    .eq("restaurant_id", restaurant.id)
+    .order("priority", { ascending: false });
+
+  if (promotionsError) {
+    console.error("Error loading promotions:", promotionsError);
+  }
+
+  const activePromotions = ((promotionsData as PromotionRow[] | null) || []).filter(
+    (promo) => isPromotionActive(promo, now) && channelAllowsStorefront(promo.channels)
+  );
+
+  const promotionIds = activePromotions.map((promo) => promo.id);
+
+  let rulesByPromotionId = new Map<string, PromotionRuleRow>();
+
+  if (promotionIds.length > 0) {
+    const { data: rulesData, error: rulesError } = await supabase
+      .schema("growth")
+      .from("promotion_rules")
+      .select(
+        `
+        id,
+        promotion_id,
+        buy_quantity,
+        get_quantity,
+        discount_percent,
+        discount_amount,
+        min_order_subtotal,
+        max_discount_amount,
+        first_order_only,
+        next_order_only,
+        pickup_only,
+        metadata
+      `
+      )
+      .in("promotion_id", promotionIds);
+
+    if (rulesError) {
+      console.error("Error loading promotion rules:", rulesError);
+    } else {
+      rulesByPromotionId = new Map(
+        ((rulesData as PromotionRuleRow[] | null) || []).map((rule) => [
+          rule.promotion_id,
+          rule,
+        ])
+      );
+    }
+  }
+
+  const promotions = activePromotions.map((promo) => {
+    const rule = rulesByPromotionId.get(promo.id) || null;
+
+    return {
+      id: promo.id,
+      title: promo.name,
+      subtitle: buildPromotionSubtitle(promo, rule),
+      badge: buildPromotionBadge(promo, rule),
+      image_url: null,
+    };
+  });
+
+  const hoursStatus = evaluateRestaurantHours(
+    restaurantHours,
+    restaurantTimeZone,
+    now
+  );
+
+  return (
+    <RestaurantMenuClient
+      restaurantName={restaurant.name}
+      restaurantAddress={buildRestaurantAddress(restaurant)}
+      hasVibeUpgrade={restaurant.has_vibe_upgrade ?? false}
+      hasMenuUpgrade={restaurant.has_menu_upgrade ?? false}
+      vibeImageUrl={restaurant.vibe_image_url ?? null}
+      items={itemsWithModifiers}
+      hasPromotions={promotions.length > 0}
+      promotions={promotions}
+      isOpen={hoursStatus.isOpenNow}
+      closingSoon={hoursStatus.closingSoon}
+      closesAtText={hoursStatus.closesAtText}
+      nextOpenText={hoursStatus.nextOpenText}
+      statusText={hoursStatus.statusText}
+    />
   );
 }

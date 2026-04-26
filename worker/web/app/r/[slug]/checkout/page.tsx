@@ -10,38 +10,15 @@ import {
   getCartRestaurantSlug,
   subscribeToCartUpdates,
 } from "@/lib/cart";
+import {
+  evaluateRestaurantHours,
+  type PickupOption,
+  type RestaurantHourRow,
+} from "@/lib/restaurant-hours";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
 };
-
-type RestaurantHourRow = {
-  day_of_week: number;
-  open_time: string | null;
-  close_time: string | null;
-  is_closed: boolean | null;
-};
-
-type PickupOption = {
-  value: string;
-  label: string;
-  pickupAt: string;
-};
-
-const SALES_TAX_RATE = 0.08875; // change this if needed
-const ASAP_PREP_MINUTES = 20;
-const PICKUP_SLOT_INTERVAL_MINUTES = 15;
-const MAX_SCHEDULE_DAYS_AHEAD = 7;
-
-const DAY_LABELS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
 
 function cleanSlug(value: unknown): string {
   const s = String(value ?? "").trim().toLowerCase();
@@ -62,198 +39,19 @@ function normalizePhone(value: string) {
   return value.replace(/\D/g, "");
 }
 
-function addMinutes(date: Date, minutes: number): Date {
-  return new Date(date.getTime() + minutes * 60 * 1000);
-}
+function normalizeTaxRate(value: unknown): number {
+  const raw = Number(value);
 
-function formatPickupClockTime(date: Date): string {
-  return date.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatPickupOptionLabel(
-  label: string,
-  now: Date,
-  minutesFromNow: number
-): string {
-  const readyAt = addMinutes(now, minutesFromNow);
-  return `${label} (ready around ${formatPickupClockTime(readyAt)})`;
-}
-
-function buildTimeForToday(now: Date, timeValue: string) {
-  const [hour, minute] = timeValue.split(":").map(Number);
-  const result = new Date(now);
-  result.setHours(hour, minute, 0, 0);
-  return result;
-}
-
-function roundUpToNextInterval(date: Date, intervalMinutes: number) {
-  const result = new Date(date);
-  result.setSeconds(0, 0);
-
-  const minutes = result.getMinutes();
-  const remainder = minutes % intervalMinutes;
-
-  if (remainder !== 0) {
-    result.setMinutes(minutes + (intervalMinutes - remainder));
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 0;
   }
 
-  return result;
-}
-
-function getCurrentOpenWindow(
-  hours: RestaurantHourRow[],
-  now: Date
-): { openAt: Date; closeAt: Date } | null {
-  const currentDay = now.getDay();
-  const previousDay = currentDay === 0 ? 6 : currentDay - 1;
-
-  const today = hours.find((row) => Number(row.day_of_week) === currentDay);
-  const yesterday = hours.find((row) => Number(row.day_of_week) === previousDay);
-
-  if (today && !today.is_closed && today.open_time && today.close_time) {
-    const openAt = buildTimeForToday(now, today.open_time);
-    const closeAt = buildTimeForToday(now, today.close_time);
-
-    if (closeAt <= openAt) {
-      closeAt.setDate(closeAt.getDate() + 1);
-    }
-
-    if (now >= openAt && now <= closeAt) {
-      return { openAt, closeAt };
-    }
-  }
-
-  if (
-    yesterday &&
-    !yesterday.is_closed &&
-    yesterday.open_time &&
-    yesterday.close_time
-  ) {
-    const openAt = buildTimeForToday(now, yesterday.open_time);
-    openAt.setDate(openAt.getDate() - 1);
-
-    const closeAt = buildTimeForToday(now, yesterday.close_time);
-    const yesterdayIsOvernight = yesterday.close_time <= yesterday.open_time;
-
-    if (yesterdayIsOvernight && now >= openAt && now <= closeAt) {
-      return { openAt, closeAt };
-    }
-  }
-
-  return null;
-}
-
-function getOpenWindowForDayOffset(
-  hours: RestaurantHourRow[],
-  now: Date,
-  dayOffset: number
-): { openAt: Date; closeAt: Date } | null {
-  const target = new Date(now);
-  target.setDate(target.getDate() + dayOffset);
-
-  const dayIndex = target.getDay();
-  const row = hours.find((item) => Number(item.day_of_week) === dayIndex);
-
-  if (!row || row.is_closed || !row.open_time || !row.close_time) {
-    return null;
-  }
-
-  const openAt = new Date(target);
-  const [openHour, openMinute] = row.open_time.split(":").map(Number);
-  openAt.setHours(openHour, openMinute, 0, 0);
-
-  const closeAt = new Date(target);
-  const [closeHour, closeMinute] = row.close_time.split(":").map(Number);
-  closeAt.setHours(closeHour, closeMinute, 0, 0);
-
-  if (closeAt <= openAt) {
-    closeAt.setDate(closeAt.getDate() + 1);
-  }
-
-  return { openAt, closeAt };
-}
-
-function formatScheduledSlotLabel(now: Date, slotTime: Date, dayOffset: number) {
-  if (dayOffset === 0) {
-    return `Today at ${formatPickupClockTime(slotTime)}`;
-  }
-
-  if (dayOffset === 1) {
-    return `Tomorrow at ${formatPickupClockTime(slotTime)}`;
-  }
-
-  return `${DAY_LABELS[slotTime.getDay()]} at ${formatPickupClockTime(slotTime)}`;
-}
-
-function buildPickupOptionsFromHours(
-  hours: RestaurantHourRow[],
-  now: Date
-): PickupOption[] {
-  const options: PickupOption[] = [];
-  const asapReadyAt = addMinutes(now, ASAP_PREP_MINUTES);
-  const currentWindow = getCurrentOpenWindow(hours, now);
-
-  if (currentWindow && asapReadyAt <= currentWindow.closeAt) {
-    const asapDate = addMinutes(now, ASAP_PREP_MINUTES);
-
-    options.push({
-      value: "ASAP",
-      label: formatPickupOptionLabel("ASAP", now, ASAP_PREP_MINUTES),
-      pickupAt: asapDate.toISOString(),
-    });
-  }
-
-  for (let dayOffset = 0; dayOffset < MAX_SCHEDULE_DAYS_AHEAD; dayOffset++) {
-    const openWindow = getOpenWindowForDayOffset(hours, now, dayOffset);
-
-    if (!openWindow) {
-      continue;
-    }
-
-    let slotStart =
-      dayOffset === 0
-        ? roundUpToNextInterval(
-            addMinutes(now, ASAP_PREP_MINUTES),
-            PICKUP_SLOT_INTERVAL_MINUTES
-          )
-        : roundUpToNextInterval(openWindow.openAt, PICKUP_SLOT_INTERVAL_MINUTES);
-
-    if (slotStart < openWindow.openAt) {
-      slotStart = roundUpToNextInterval(
-        openWindow.openAt,
-        PICKUP_SLOT_INTERVAL_MINUTES
-      );
-    }
-
-    while (slotStart <= openWindow.closeAt) {
-      const leadMinutes = Math.max(
-        PICKUP_SLOT_INTERVAL_MINUTES,
-        Math.round((slotStart.getTime() - now.getTime()) / 60000)
-      );
-
-      if (leadMinutes > ASAP_PREP_MINUTES || dayOffset > 0) {
-        options.push({
-          value: `${leadMinutes} minutes`,
-          label: formatScheduledSlotLabel(now, slotStart, dayOffset),
-          pickupAt: slotStart.toISOString(),
-        });
-      }
-
-      slotStart = addMinutes(slotStart, PICKUP_SLOT_INTERVAL_MINUTES);
-    }
-  }
-
-  return options.filter(
-    (option, index, all) =>
-      all.findIndex((x) => x.value === option.value) === index
-  );
+  return raw >= 1 ? raw / 100 : raw;
 }
 
 export default function CheckoutPage({ params }: PageProps) {
   const [slug, setSlug] = useState("");
+  const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [items, setItems] = useState<CartItem[]>([]);
   const [cartRestaurantSlug, setCartRestaurantSlug] = useState<string | null>(null);
 
@@ -263,12 +61,15 @@ export default function CheckoutPage({ params }: PageProps) {
   const [pickupMode, setPickupMode] = useState<"asap" | "scheduled">("asap");
   const [notes, setNotes] = useState("");
   const [smsOptIn, setSmsOptIn] = useState(false);
+  const [smsConsentTouched, setSmsConsentTouched] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => new Date());
   const [restaurantTimezone, setRestaurantTimezone] = useState("America/New_York");
   const [restaurantHours, setRestaurantHours] = useState<RestaurantHourRow[]>([]);
+  const [salesTaxRate, setSalesTaxRate] = useState(0);
+  const [taxMode, setTaxMode] = useState<"exclusive" | "none">("none");
   const [loadingPickupOptions, setLoadingPickupOptions] = useState(false);
 
   function refresh() {
@@ -299,7 +100,7 @@ export default function CheckoutPage({ params }: PageProps) {
       setLoadingPickupOptions(true);
 
       try {
-        const supabase = createClient<any>(
+        const supabase = createClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         );
@@ -313,6 +114,7 @@ export default function CheckoutPage({ params }: PageProps) {
 
         if (restaurantError || !restaurantData?.id) {
           if (!cancelled) {
+            setRestaurantId(null);
             setRestaurantHours([]);
             setLoadingPickupOptions(false);
           }
@@ -322,11 +124,12 @@ export default function CheckoutPage({ params }: PageProps) {
         const timezone =
           String(restaurantData.timezone || "").trim() || "America/New_York";
 
-        const restaurantNow = new Date(
-          new Date().toLocaleString("en-US", {
-            timeZone: timezone,
-          })
-        );
+        const { data: taxSettingsData } = await supabase
+          .schema("food_ordering")
+          .from("tax_settings")
+          .select("sales_tax_rate, tax_mode")
+          .eq("restaurant_id", restaurantData.id)
+          .maybeSingle();
 
         const { data: hoursData, error: hoursError } = await supabase
           .schema("food_ordering")
@@ -335,8 +138,15 @@ export default function CheckoutPage({ params }: PageProps) {
           .eq("restaurant_id", restaurantData.id);
 
         if (!cancelled) {
+          setRestaurantId(restaurantData.id);
           setRestaurantTimezone(timezone);
-          setNow(restaurantNow);
+          setSalesTaxRate(normalizeTaxRate(taxSettingsData?.sales_tax_rate));
+          setTaxMode(
+            String(taxSettingsData?.tax_mode || "").trim().toLowerCase() === "exclusive"
+              ? "exclusive"
+              : "none"
+          );
+          setNow(new Date());
           setRestaurantHours(
             hoursError ? [] : ((hoursData as RestaurantHourRow[] | null) || [])
           );
@@ -357,24 +167,65 @@ export default function CheckoutPage({ params }: PageProps) {
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setNow(
-        new Date(
-          new Date().toLocaleString("en-US", {
-            timeZone: restaurantTimezone || "America/New_York",
-          })
-        )
-      );
+      setNow(new Date());
     }, 60 * 1000);
 
     return () => window.clearInterval(interval);
-  }, [restaurantTimezone]);
+  }, []);
+
+  useEffect(() => {
+    if (smsConsentTouched) return;
+
+    const normalizedPhone = normalizePhone(customerPhone);
+
+    if (!restaurantId || !slug || normalizedPhone.length < 10) {
+      setSmsOptIn(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadSmsConsentStatus() {
+      try {
+        const response = await fetch("/api/consent/sms-status", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            restaurantSlug: slug,
+            phoneNumber: normalizedPhone,
+          }),
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!cancelled) {
+          setSmsOptIn(Boolean(data?.defaultSmsOptIn));
+        }
+      } catch {
+        if (!cancelled) {
+          setSmsOptIn(false);
+        }
+      }
+    }
+
+    loadSmsConsentStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerPhone, restaurantId, slug, smsConsentTouched]);
 
   const subtotal = useMemo(
     () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [items]
   );
 
-  const tax = useMemo(() => subtotal * SALES_TAX_RATE, [subtotal]);
+  const tax = useMemo(
+    () => (taxMode === "exclusive" ? subtotal * salesTaxRate : 0),
+    [salesTaxRate, subtotal, taxMode]
+  );
   const total = useMemo(() => subtotal + tax, [subtotal, tax]);
 
   const itemCount = useMemo(
@@ -387,92 +238,47 @@ export default function CheckoutPage({ params }: PageProps) {
   const cartBelongsToThisRestaurant =
     !cartRestaurantSlug || !slug || cartRestaurantSlug === slug;
 
-  const pickupOptions = useMemo(() => {
-    if (restaurantHours.length > 0) {
-      return buildPickupOptionsFromHours(restaurantHours, now);
+  useEffect(() => {
+    if (!cartBelongsToThisRestaurant && cartRestaurantSlug) {
+      clearCart();
     }
+  }, [cartBelongsToThisRestaurant, cartRestaurantSlug]);
 
-    return [
-      {
-        value: "ASAP",
-        label: formatPickupOptionLabel("ASAP", now, ASAP_PREP_MINUTES),
-        pickupAt: addMinutes(now, ASAP_PREP_MINUTES).toISOString(),
-      },
-      {
-        value: "15 minutes",
-        label: formatPickupOptionLabel("15 minutes", now, 15),
-        pickupAt: addMinutes(now, 15).toISOString(),
-      },
-      {
-        value: "30 minutes",
-        label: formatPickupOptionLabel("30 minutes", now, 30),
-        pickupAt: addMinutes(now, 30).toISOString(),
-      },
-      {
-        value: "45 minutes",
-        label: formatPickupOptionLabel("45 minutes", now, 45),
-        pickupAt: addMinutes(now, 45).toISOString(),
-      },
-      {
-        value: "60 minutes",
-        label: formatPickupOptionLabel("60 minutes", now, 60),
-        pickupAt: addMinutes(now, 60).toISOString(),
-      },
-    ];
-  }, [restaurantHours, now]);
-
-  const scheduledPickupOptions = useMemo(
-    () => pickupOptions.filter((option) => option.value !== "ASAP"),
-    [pickupOptions]
+  const pickupEvaluation = useMemo(
+    () => evaluateRestaurantHours(restaurantHours, restaurantTimezone, now),
+    [restaurantHours, restaurantTimezone, now]
   );
 
-  const selectedPickupLabel = useMemo(() => {
+  const pickupOptions = pickupEvaluation.pickupOptions;
+  const scheduledPickupOptions = pickupEvaluation.availableScheduledSlots;
+
+  const selectedPickupOption = useMemo<PickupOption | null>(() => {
     if (pickupMode === "asap") {
-      return (
-        pickupOptions.find((option) => option.value === "ASAP")?.label ||
-        "ASAP"
-      );
+      return pickupOptions.find((option) => option.value === "ASAP") || null;
     }
 
     return (
-      scheduledPickupOptions.find((option) => option.value === pickupTime)?.label ||
-      pickupTime
+      scheduledPickupOptions.find((option) => option.value === pickupTime) || null
     );
-  }, [pickupMode, pickupOptions, scheduledPickupOptions, pickupTime]);
+  }, [pickupMode, pickupOptions, pickupTime, scheduledPickupOptions]);
 
-  const selectedPickupAt = useMemo(() => {
-    if (pickupMode === "asap") {
-      return (
-        pickupOptions.find((option) => option.value === "ASAP")?.pickupAt || ""
-      );
-    }
-
-    return (
-      scheduledPickupOptions.find((option) => option.value === pickupTime)?.pickupAt ||
-      ""
-    );
-  }, [pickupMode, pickupOptions, scheduledPickupOptions, pickupTime]);
+  const selectedPickupLabel = selectedPickupOption?.label || "";
+  const selectedPickupAt = selectedPickupOption?.pickupAt || "";
 
   useEffect(() => {
     if (!pickupOptions.length) {
+      setPickupMode("scheduled");
+      setPickupTime("");
       return;
     }
 
-    const stillValid = pickupOptions.some((option) => option.value === pickupTime);
-
-    if (!stillValid) {
-      setPickupTime(pickupOptions[0].value);
-    }
-  }, [pickupOptions, pickupTime]);
-
-  useEffect(() => {
-    if (!pickupOptions.length) {
-      return;
-    }
+    const hasAsap = pickupOptions.some((option) => option.value === "ASAP");
 
     if (pickupMode === "asap") {
-      if (pickupOptions.some((option) => option.value === "ASAP")) {
-        setPickupTime("ASAP");
+      if (hasAsap) {
+        if (pickupTime !== "ASAP") {
+          setPickupTime("ASAP");
+        }
         return;
       }
 
@@ -485,15 +291,21 @@ export default function CheckoutPage({ params }: PageProps) {
     }
 
     if (pickupMode === "scheduled") {
-      if (!scheduledPickupOptions.length) {
-        if (pickupOptions.some((option) => option.value === "ASAP")) {
+      if (scheduledPickupOptions.length === 0) {
+        if (hasAsap) {
           setPickupMode("asap");
           setPickupTime("ASAP");
+        } else {
+          setPickupTime("");
         }
         return;
       }
 
-      if (pickupTime === "ASAP") {
+      const stillValid = scheduledPickupOptions.some(
+        (option) => option.value === pickupTime
+      );
+
+      if (!stillValid) {
         setPickupTime(scheduledPickupOptions[0].value);
       }
     }
@@ -527,8 +339,11 @@ export default function CheckoutPage({ params }: PageProps) {
       return;
     }
 
-    if (!pickupOptions.length) {
-      setError("No pickup times are currently available.");
+    if (pickupMode === "asap" && !pickupEvaluation.allowsAsap) {
+      setError(
+        pickupEvaluation.nextOpenText ||
+          "ASAP pickup is not currently available."
+      );
       return;
     }
 
@@ -537,29 +352,36 @@ export default function CheckoutPage({ params }: PageProps) {
       return;
     }
 
+    if (!selectedPickupAt) {
+      setError("No pickup times are currently available.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       const pickupDisplayText =
-        pickupMode === "asap"
-          ? selectedPickupLabel || "ASAP"
-          : selectedPickupLabel || pickupTime;
+        selectedPickupLabel || (pickupMode === "asap" ? "ASAP" : "Scheduled");
 
       const payload = {
         restaurantSlug: slug,
         customerName: customerName.trim(),
         customerPhone: normalizedPhone,
-        pickupTime: pickupTime.trim() || "ASAP",
+        pickupTime:
+          pickupMode === "asap" ? "ASAP" : pickupDisplayText,
         pickupTimeLabel: pickupDisplayText,
         pickupAt: selectedPickupAt,
         notes: notes.trim(),
         smsOptIn,
         items: items.map((item) => ({
+          id: item.id,
           name: item.name,
-          price: item.price,
           quantity: item.quantity,
+          modifiers: Array.isArray(item.modifiers) ? item.modifiers : [],
         })),
       };
+
+      console.log("CHECKOUT_PAYLOAD_ITEMS", payload.items);
 
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -569,7 +391,8 @@ export default function CheckoutPage({ params }: PageProps) {
         body: JSON.stringify(payload),
       });
 
-      let data: any = null;
+      let data: { error?: string; orderId?: string; orderNumber?: string; order?: { order_number?: string; public_order_code?: string } } | null =
+        null;
 
       try {
         data = await res.json();
@@ -607,13 +430,15 @@ export default function CheckoutPage({ params }: PageProps) {
         params.set("orderNumber", orderNumber);
       }
 
-            if (selectedPickupLabel) {
+      if (selectedPickupLabel) {
         params.set("pickupLabel", selectedPickupLabel);
       }
 
       if (selectedPickupAt) {
         params.set("pickupAt", selectedPickupAt);
       }
+
+      params.set("smsOptIn", smsOptIn ? "1" : "0");
 
       window.location.href = params.toString()
         ? `/r/${slug}/success?${params.toString()}`
@@ -624,7 +449,7 @@ export default function CheckoutPage({ params }: PageProps) {
     }
   }
 
-  if (!cartBelongsToThisRestaurant) {
+  if (!cartBelongsToThisRestaurant || items.length === 0) {
     return (
       <main className="min-h-screen bg-neutral-100">
         <div className="mx-auto min-h-screen max-w-md bg-white px-4 py-6 shadow-sm">
@@ -637,53 +462,19 @@ export default function CheckoutPage({ params }: PageProps) {
             </Link>
           </div>
 
-          <div className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
-            <h1 className="text-xl font-bold text-neutral-900">Wrong cart</h1>
-            <p className="mt-2 text-sm text-neutral-600">
-              Your cart belongs to a different restaurant. Start a new order for{" "}
-              {restaurantName}.
-            </p>
-
-            <div className="mt-5">
-              <Link
-                href={`/r/${slug}`}
-                className="block w-full rounded-2xl bg-neutral-900 px-4 py-3 text-center text-sm font-semibold text-white"
-              >
-                Go to menu
-              </Link>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <main className="min-h-screen bg-neutral-100">
-        <div className="mx-auto min-h-screen max-w-md bg-white px-4 py-6 shadow-sm">
-          <div className="mb-6">
-            <Link
-              href={`/r/${slug}/cart`}
-              className="text-sm font-medium text-neutral-500"
-            >
-              ← Back to cart
-            </Link>
-          </div>
-
           <div className="rounded-3xl border border-dashed border-neutral-300 bg-neutral-50 p-6 text-center">
             <h1 className="text-xl font-bold text-neutral-900">
               Your cart is empty
             </h1>
             <p className="mt-2 text-sm text-neutral-500">
-              Add items before checkout.
+              Add items from the menu to continue to checkout.
             </p>
 
             <Link
               href={`/r/${slug}`}
               className="mt-5 inline-block rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white"
             >
-              Browse menu
+              Go to menu
             </Link>
           </div>
         </div>
@@ -770,14 +561,12 @@ export default function CheckoutPage({ params }: PageProps) {
                   <button
                     type="button"
                     onClick={() => {
-                      if (pickupOptions.some((option) => option.value === "ASAP")) {
+                      if (pickupEvaluation.allowsAsap) {
                         setPickupMode("asap");
+                        setPickupTime("ASAP");
                       }
                     }}
-                    disabled={
-                      loadingPickupOptions ||
-                      !pickupOptions.some((option) => option.value === "ASAP")
-                    }
+                    disabled={loadingPickupOptions || !pickupEvaluation.allowsAsap}
                     className={`w-full rounded-2xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
                       pickupMode === "asap"
                         ? "border-neutral-900 bg-neutral-900 text-white"
@@ -793,6 +582,7 @@ export default function CheckoutPage({ params }: PageProps) {
                       }`}
                     >
                       {pickupOptions.find((option) => option.value === "ASAP")?.label ||
+                        pickupEvaluation.nextOpenText ||
                         "ASAP is not currently available"}
                     </p>
                   </button>
@@ -802,12 +592,17 @@ export default function CheckoutPage({ params }: PageProps) {
                     onClick={() => {
                       if (scheduledPickupOptions.length > 0) {
                         setPickupMode("scheduled");
+                        if (
+                          !scheduledPickupOptions.some(
+                            (option) => option.value === pickupTime
+                          )
+                        ) {
+                          setPickupTime(scheduledPickupOptions[0].value);
+                        }
                       }
                     }}
                     disabled={
-                      loadingPickupOptions ||
-                      pickupOptions.length === 0 ||
-                      scheduledPickupOptions.length === 0
+                      loadingPickupOptions || scheduledPickupOptions.length === 0
                     }
                     className={`w-full rounded-2xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
                       pickupMode === "scheduled"
@@ -825,7 +620,8 @@ export default function CheckoutPage({ params }: PageProps) {
                     >
                       {scheduledPickupOptions.length > 0
                         ? "Choose an available pickup slot"
-                        : "No scheduled pickup times available"}
+                        : pickupEvaluation.nextOpenText ||
+                          "No scheduled pickup times available"}
                     </p>
                   </button>
                 </div>
@@ -866,6 +662,17 @@ export default function CheckoutPage({ params }: PageProps) {
                     Loading available pickup times...
                   </p>
                 ) : null}
+
+                {!loadingPickupOptions && pickupEvaluation.statusText ? (
+                  <p
+                    className={`mt-2 text-xs ${
+                      pickupEvaluation.isOpenNow ? "text-neutral-500" : "text-red-600"
+                    }`}
+                  >
+                    {pickupEvaluation.statusText}
+                  </p>
+                ) : null}
+
                 {!loadingPickupOptions && pickupOptions.length === 0 ? (
                   <p className="mt-2 text-xs text-red-600">
                     No pickup times are currently available.
@@ -888,23 +695,6 @@ export default function CheckoutPage({ params }: PageProps) {
                   className="min-h-[100px] w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
                 />
               </div>
-
-              <label className="flex items-start gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={smsOptIn}
-                  onChange={(e) => setSmsOptIn(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-neutral-300"
-                />
-                <div>
-                  <p className="text-sm font-medium text-neutral-900">
-                    Text me order updates and occasional offers
-                  </p>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    You can opt out later.
-                  </p>
-                </div>
-              </label>
             </div>
           </div>
 
@@ -916,7 +706,7 @@ export default function CheckoutPage({ params }: PageProps) {
             <div className="mt-4 space-y-3">
               {items.map((item) => (
                 <div
-                  key={item.name}
+                  key={`${item.id}-${item.name}`}
                   className="flex items-start justify-between gap-3"
                 >
                   <div className="min-w-0 flex-1">
@@ -960,6 +750,26 @@ export default function CheckoutPage({ params }: PageProps) {
               {error}
             </div>
           ) : null}
+
+          <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+            <label className="flex items-start gap-3 text-sm text-neutral-700">
+              <input
+                type="checkbox"
+                checked={smsOptIn}
+                onChange={(e) => {
+                  setSmsConsentTouched(true);
+                  setSmsOptIn(e.target.checked);
+                }}
+                className="mt-1"
+              />
+              <span className="leading-5">
+                I agree to receive SMS updates about my order from{" "}
+                {restaurantName || "the restaurant"}. Message frequency varies.
+                Msg &amp; data rates may apply. Reply STOP to opt out, HELP for
+                help. Consent is not a condition of purchase.
+              </span>
+            </label>
+          </div>
         </form>
 
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-3 backdrop-blur">

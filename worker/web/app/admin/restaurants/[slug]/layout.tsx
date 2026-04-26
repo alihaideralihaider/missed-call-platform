@@ -2,6 +2,8 @@ import { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import GrowthBanner from "@/components/admin/GrowthBanner";
+import RestaurantAdminNav from "@/components/admin/RestaurantAdminNav";
 
 type Props = {
   children: ReactNode;
@@ -75,5 +77,17 @@ export default async function RestaurantAdminLayout({
     redirect("/verify-phone");
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <GrowthBanner slug={clean} />
+
+      <div className="border-b border-neutral-200 bg-white">
+        <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
+          <RestaurantAdminNav slug={clean} />
+        </div>
+      </div>
+
+      {children}
+    </>
+  );
 }
