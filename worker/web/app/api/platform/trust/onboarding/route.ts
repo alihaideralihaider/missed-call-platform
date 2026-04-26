@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentPlatformAccess } from "@/lib/platform/access";
+import {
+  getRestaurantRiskSummaries,
+  maybeLogRiskLinksDetected,
+} from "@/lib/platform/risk-links";
 
 type RestaurantRow = {
   id: string;
@@ -124,10 +128,38 @@ export async function GET(req: Request) {
     const safePage = Math.min(page, totalPages);
     const start = (safePage - 1) * limit;
     const pagedRecords = filteredRecords.slice(start, start + limit);
+    const riskSummaries = await getRestaurantRiskSummaries(
+      pagedRecords.map((record) => record.id)
+    );
+
+    const recordsWithRisk = pagedRecords.map((record) => {
+      const summary = riskSummaries.get(record.id);
+
+      return {
+        ...record,
+        repeated_phone_count: summary?.repeated_phone_count || 0,
+        repeated_email_count: summary?.repeated_email_count || 0,
+        repeated_user_agent_count: summary?.repeated_user_agent_count || 0,
+        linked_restaurants_count: summary?.linked_restaurants_count || 0,
+        risk_flags: summary?.risk_flags || [],
+      };
+    });
+
+    await Promise.all(
+      recordsWithRisk.map(async (record) => {
+        const summary = riskSummaries.get(record.id);
+        if (summary) {
+          await maybeLogRiskLinksDetected({
+            restaurantId: record.id,
+            summary,
+          });
+        }
+      })
+    );
 
     return NextResponse.json({
       success: true,
-      records: pagedRecords,
+      records: recordsWithRisk,
       pagination: {
         page: safePage,
         limit,

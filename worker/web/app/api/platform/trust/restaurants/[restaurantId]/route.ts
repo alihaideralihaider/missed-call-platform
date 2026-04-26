@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentPlatformAccess } from "@/lib/platform/access";
+import {
+  getRestaurantRiskSummaries,
+  maybeLogRiskLinksDetected,
+} from "@/lib/platform/risk-links";
 
 type RouteContext = {
   params: Promise<{ restaurantId: string }>;
@@ -72,6 +76,10 @@ export async function GET(_req: Request, context: RouteContext) {
           .limit(100),
       ]);
 
+    const riskSummary = (await getRestaurantRiskSummaries([restaurant.id])).get(
+      restaurant.id
+    );
+
     if (businessError) {
       throw new Error(`Failed to load business record: ${businessError.message}`);
     }
@@ -102,6 +110,13 @@ export async function GET(_req: Request, context: RouteContext) {
       );
     });
 
+    if (riskSummary) {
+      await maybeLogRiskLinksDetected({
+        restaurantId: restaurant.id,
+        summary: riskSummary,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       record: {
@@ -110,6 +125,19 @@ export async function GET(_req: Request, context: RouteContext) {
         memberships: memberships || [],
         ip_watchlist: watchlist || null,
         activities: filteredActivities.slice(0, 20),
+        risk_links: riskSummary || {
+          duplicate_ip: false,
+          duplicate_phone: false,
+          duplicate_email: false,
+          duplicate_user_agent: false,
+          repeated_ip_count: 0,
+          repeated_phone_count: 0,
+          repeated_email_count: 0,
+          repeated_user_agent_count: 0,
+          linked_restaurants_count: 0,
+          risk_flags: [],
+          linked_signals: [],
+        },
       },
     });
   } catch (error) {

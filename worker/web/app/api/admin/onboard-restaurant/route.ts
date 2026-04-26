@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { upsertIdentitySignalsForRestaurant } from "@/lib/platform/risk-links";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -472,6 +473,14 @@ export async function POST(req: Request) {
         `Failed to create restaurant auth mapping: ${bridgeError.message}`
       );
     }
+
+    await upsertIdentitySignalsForRestaurant({
+      restaurantId: restaurant.id,
+      contactEmail,
+      contactPhone,
+      onboardingSourceIp: sourceIp || null,
+      onboardingUserAgent: userAgent || null,
+    });
 
     // 10) Generate magic link
     const redirectTo = `${getAppBaseUrl(req)}/auth/callback`;

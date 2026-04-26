@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type ReviewStatus =
   | "pending_owner_activation"
@@ -24,6 +24,11 @@ type OnboardingRecord = {
   onboarding_user_agent: string | null;
   created_at: string | null;
   repeated_ip_count: number;
+  repeated_phone_count: number;
+  repeated_email_count: number;
+  repeated_user_agent_count: number;
+  linked_restaurants_count: number;
+  risk_flags: string[];
 };
 
 type PaginationState = {
@@ -97,7 +102,8 @@ export default function PlatformOnboardingReviewPage() {
     return () => window.clearTimeout(timeoutId);
   }, [query]);
 
-  async function loadRecords(nextPage = page, nextQuery = debouncedQuery) {
+  const loadRecords = useCallback(
+    async (nextPage = page, nextQuery = debouncedQuery) => {
     setLoading(true);
     setError("");
 
@@ -128,11 +134,17 @@ export default function PlatformOnboardingReviewPage() {
       setError("Something went wrong while loading onboarding review queue.");
       setLoading(false);
     }
-  }
+    },
+    [debouncedQuery, page]
+  );
 
   useEffect(() => {
-    loadRecords(page, debouncedQuery);
-  }, [page, debouncedQuery]);
+    async function run() {
+      await loadRecords(page, debouncedQuery);
+    }
+
+    void run();
+  }, [page, debouncedQuery, loadRecords]);
 
   const pendingCount = useMemo(
     () =>
@@ -304,6 +316,14 @@ export default function PlatformOnboardingReviewPage() {
                           <p>Business status: {record.business_status || "—"}</p>
                           <p>Onboarding IP: {record.onboarding_source_ip || "—"}</p>
                           <p>Repeated IP count: {record.repeated_ip_count}</p>
+                          <p>Repeated phone count: {record.repeated_phone_count || 0}</p>
+                          <p>Repeated email count: {record.repeated_email_count || 0}</p>
+                          <p>
+                            Repeated device count: {record.repeated_user_agent_count || 0}
+                          </p>
+                          <p>
+                            Linked restaurants: {record.linked_restaurants_count || 0}
+                          </p>
                         </div>
                       </div>
 
@@ -363,6 +383,19 @@ export default function PlatformOnboardingReviewPage() {
                         <p className="mt-2 break-all text-xs text-neutral-600">
                           {record.onboarding_user_agent}
                         </p>
+                      </div>
+                    ) : null}
+
+                    {record.risk_flags.length > 0 ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {record.risk_flags.map((flag) => (
+                          <span
+                            key={flag}
+                            className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
+                          >
+                            {flag}
+                          </span>
+                        ))}
                       </div>
                     ) : null}
                   </div>

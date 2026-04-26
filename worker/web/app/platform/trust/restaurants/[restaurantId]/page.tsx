@@ -47,6 +47,32 @@ type DetailRecord = {
     metadata: Record<string, unknown> | null;
     created_at: string | null;
   }>;
+  risk_links: {
+    duplicate_ip: boolean;
+    duplicate_phone: boolean;
+    duplicate_email: boolean;
+    duplicate_user_agent: boolean;
+    repeated_ip_count: number;
+    repeated_phone_count: number;
+    repeated_email_count: number;
+    repeated_user_agent_count: number;
+    linked_restaurants_count: number;
+    risk_flags: string[];
+    linked_signals: Array<{
+      signal_type: string;
+      signal_value: string;
+      masked_signal_value: string;
+      linked_restaurant_count: number;
+      linked_restaurants: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        onboarding_status: string | null;
+        created_at: string | null;
+      }>;
+      created_at: string | null;
+    }>;
+  };
 };
 
 function formatDateTime(value?: string | null): string {
@@ -114,8 +140,12 @@ export default function PlatformRestaurantDetailPage() {
   }
 
   useEffect(() => {
+    async function run() {
+      await loadRecord(restaurantId);
+    }
+
     if (restaurantId) {
-      loadRecord(restaurantId);
+      void run();
     }
   }, [restaurantId]);
 
@@ -334,6 +364,94 @@ export default function PlatformRestaurantDetailPage() {
                             <p>Actor: {activity.actor_type || "—"}</p>
                             <p>Actor user: {activity.actor_user_id || "—"}</p>
                           </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-lg font-bold text-neutral-900">Risk Links</h2>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {record.risk_links.risk_flags.length > 0 ? (
+                      record.risk_links.risk_flags.map((flag) => (
+                        <span
+                          key={flag}
+                          className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
+                        >
+                          {flag}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                        No duplicate signals detected
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                      Repeated IP count: {record.risk_links.repeated_ip_count}
+                    </div>
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                      Repeated phone count: {record.risk_links.repeated_phone_count}
+                    </div>
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                      Repeated email count: {record.risk_links.repeated_email_count}
+                    </div>
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                      Repeated device count: {record.risk_links.repeated_user_agent_count}
+                    </div>
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700 md:col-span-2">
+                      Total linked restaurants: {record.risk_links.linked_restaurants_count}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {record.risk_links.linked_signals.length === 0 ? (
+                      <p className="text-sm text-neutral-500">
+                        No linked signals found for this restaurant.
+                      </p>
+                    ) : (
+                      record.risk_links.linked_signals.map((signal, index) => (
+                        <div
+                          key={`${signal.signal_type}-${index}`}
+                          className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-neutral-900">
+                              {humanize(signal.signal_type)}
+                            </p>
+                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-neutral-700">
+                              {signal.linked_restaurant_count} linked
+                            </span>
+                          </div>
+                          <div className="mt-2 space-y-1 text-sm text-neutral-600">
+                            <p>Signal: {signal.masked_signal_value}</p>
+                            <p>Created: {formatDateTime(signal.created_at)}</p>
+                          </div>
+
+                          {signal.linked_restaurants.length > 0 ? (
+                            <div className="mt-3 space-y-2">
+                              {signal.linked_restaurants.map((linkedRestaurant) => (
+                                <div
+                                  key={linkedRestaurant.id}
+                                  className="rounded-lg border border-neutral-200 bg-white p-3 text-sm text-neutral-700"
+                                >
+                                  <p className="font-semibold text-neutral-900">
+                                    {linkedRestaurant.name}
+                                  </p>
+                                  <p>Slug: {linkedRestaurant.slug}</p>
+                                  <p>
+                                    Status: {linkedRestaurant.onboarding_status || "—"}
+                                  </p>
+                                  <p>
+                                    Created: {formatDateTime(linkedRestaurant.created_at)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       ))
                     )}
