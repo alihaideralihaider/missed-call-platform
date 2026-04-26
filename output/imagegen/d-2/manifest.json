@@ -1,0 +1,144 @@
+{
+  "restaurant": {
+    "id": "db129005-19d0-4cf2-a317-50aff45dda45",
+    "slug": "d-2"
+  },
+  "assets": [
+    {
+      "type": "menu-item",
+      "name": "2 Smashed Tacos",
+      "file": "two-crispy-beef-tacos.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775953943376-two-crispy-beef-tacos.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775953943376-two-crispy-beef-tacos.png",
+      "alt": "Two crispy beef tacos in a plain serving tray."
+    },
+    {
+      "type": "menu-item",
+      "name": "6 Smashed Tacos",
+      "file": "six-crispy-beef-tacos.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775953966285-six-crispy-beef-tacos.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775953966285-six-crispy-beef-tacos.png",
+      "alt": "A platter of six crispy beef tacos."
+    },
+    {
+      "type": "menu-item",
+      "name": "Animal Style Fries",
+      "file": "loaded-cheesy-fries.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775953985436-loaded-cheesy-fries.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775953985436-loaded-cheesy-fries.png",
+      "alt": "Loaded fries with cheese, onions, and sauce in a plain tray."
+    },
+    {
+      "type": "menu-item",
+      "name": "Bahadur Burger",
+      "file": "double-smash-burger.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954003474-double-smash-burger.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954003474-double-smash-burger.png",
+      "alt": "A double smash burger on a plain plate."
+    },
+    {
+      "type": "menu-item",
+      "name": "Chicken Tenders with Fries",
+      "file": "chicken-tenders-and-fries.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954024028-chicken-tenders-and-fries.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954024028-chicken-tenders-and-fries.png",
+      "alt": "Crispy chicken tenders served with fries."
+    },
+    {
+      "type": "menu-item",
+      "name": "Chicken Wrap with Fries",
+      "file": "grilled-chicken-wrap-and-fries.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954040646-grilled-chicken-wrap-and-fries.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954040646-grilled-chicken-wrap-and-fries.png",
+      "alt": "A grilled chicken wrap sliced in half with fries."
+    },
+    {
+      "type": "menu-item",
+      "name": "Classic Smash Burger",
+      "file": "classic-smash-cheeseburger.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954057629-classic-smash-cheeseburger.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954057629-classic-smash-cheeseburger.png",
+      "alt": "A classic smash cheeseburger on a plain plate."
+    },
+    {
+      "type": "menu-item",
+      "name": "Don Burger",
+      "file": "stacked-burger-with-special-sauce.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954079624-stacked-burger-with-special-sauce.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954079624-stacked-burger-with-special-sauce.png",
+      "alt": "A stacked burger with sauce on a plain plate."
+    },
+    {
+      "type": "menu-item",
+      "name": "Falafel Wrap with Fries",
+      "file": "falafel-wrap-and-fries.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954098741-falafel-wrap-and-fries.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954098741-falafel-wrap-and-fries.png",
+      "alt": "A falafel wrap served with fries."
+    },
+    {
+      "type": "menu-item",
+      "name": "Ghost Zinger",
+      "file": "spicy-crispy-chicken-sandwich.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954116244-spicy-crispy-chicken-sandwich.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954116244-spicy-crispy-chicken-sandwich.png",
+      "alt": "A spicy crispy chicken sandwich on a plain plate."
+    },
+    {
+      "type": "menu-item",
+      "name": "Griller Chicken Sandwich",
+      "file": "grilled-chicken-sandwich.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954137220-grilled-chicken-sandwich.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954137220-grilled-chicken-sandwich.png",
+      "alt": "A grilled chicken sandwich on a plain plate."
+    },
+    {
+      "type": "menu-item",
+      "name": "Kids Nuggets Meal",
+      "file": "kids-nuggets-meal.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954154999-kids-nuggets-meal.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954154999-kids-nuggets-meal.png",
+      "alt": "A kids meal with nuggets, fries, and a plain drink cup."
+    },
+    {
+      "type": "menu-item",
+      "name": "Loaded Animal Style Fries",
+      "file": "fully-loaded-fries.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954172211-fully-loaded-fries.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954172211-fully-loaded-fries.png",
+      "alt": "Loaded fries with cheese, beef crumbles, onions, and sauce."
+    },
+    {
+      "type": "menu-item",
+      "name": "Nashville Zinger",
+      "file": "hot-chicken-sandwich.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954190442-hot-chicken-sandwich.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954190442-hot-chicken-sandwich.png",
+      "alt": "A hot chicken sandwich with pickles on a plain plate."
+    },
+    {
+      "type": "menu-item",
+      "name": "Seasoned Fries",
+      "file": "seasoned-fries.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954209999-seasoned-fries.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954209999-seasoned-fries.png",
+      "alt": "Seasoned fries in a plain serving tray."
+    },
+    {
+      "type": "menu-item",
+      "name": "Vanilla Shake 16 Oz",
+      "file": "vanilla-milkshake.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954225725-vanilla-milkshake.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954225725-vanilla-milkshake.png",
+      "alt": "A vanilla milkshake in a plain cup."
+    },
+    {
+      "type": "storefront",
+      "name": "d-2",
+      "file": "generic-restaurant-storefront.png",
+      "publicUrl": "https://rqungzymxypijmlwacii.supabase.co/storage/v1/object/public/restaurant-assets/db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954248672-generic-restaurant-storefront.png",
+      "storagePath": "db129005-19d0-4cf2-a317-50aff45dda45/public-demo/1775954248672-generic-restaurant-storefront.png",
+      "alt": "A generic modern restaurant storefront with a blank sign."
+    }
+  ]
+}

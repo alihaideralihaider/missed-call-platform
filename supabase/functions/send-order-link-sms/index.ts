@@ -1,10 +1,17 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const TWILIO_ACCOUNT_SID = Deno.env.get("TWILIO_ACCOUNT_SID") || "";
 const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN") || "";
 const TWILIO_FROM_NUMBER = Deno.env.get("TWILIO_FROM_NUMBER") || "";
 const PUBLIC_BASE_URL = (Deno.env.get("PUBLIC_BASE_URL") || "").replace(/\/+$/, "");
 const INTERNAL_FUNCTION_TOKEN = Deno.env.get("INTERNAL_FUNCTION_TOKEN") || "";
+
+const supabase =
+  SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    : null;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -16,7 +23,50 @@ function json(data: unknown, status = 200) {
 }
 
 function buildOrderUrl(slug: string): string {
-  return `${PUBLIC_BASE_URL}/order/${encodeURIComponent(slug)}`;
+  return `${PUBLIC_BASE_URL}/r/${encodeURIComponent(slug)}`;
+}
+
+async function resolveBusinessIdBySlug(slug: string): Promise<string | null> {
+  if (!supabase || !slug) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (error) {
+    console.error("send-order-link-sms business lookup error", { slug, error });
+    return null;
+  }
+
+  return data?.id || null;
+}
+
+async function isOptedOut(phoneNumber: string, businessId: string | null): Promise<boolean> {
+  if (!supabase || !phoneNumber || !businessId) {
+    return false;
+  }
+
+  const { data, error } = await supabase
+    .from("opt_outs")
+    .select("id")
+    .eq("business_id", businessId)
+    .eq("phone_number", phoneNumber)
+    .maybeSingle();
+
+  if (error) {
+    console.error("send-order-link-sms opt_outs lookup error", {
+      phone_number: phoneNumber,
+      business_id: businessId,
+      error,
+    });
+    return false;
+  }
+
+  return Boolean(data?.id);
 }
 
 async function sendSms(to: string, body: string) {
@@ -88,6 +138,32 @@ Deno.serve(async (req) => {
 
     if (!to || !businessSlug) {
       return json({ ok: false, error: "Missing to or business_slug" }, 400);
+    }
+
+    const businessId = await resolveBusinessIdBySlug(businessSlug);
+
+    if (await isOptedOut(to, businessId)) {
+      console.log("sms_suppressed_opt_out", {
+        phone_number: to,
+        business_id: businessId,
+      });
+
+      return json({
+        ok: true,
+        result: {
+          ok: true,
+          status: 200,
+          body: "suppressed_opt_out",
+        },
+        meta: {
+          to,
+          business_slug: businessSlug,
+          business_name: businessName,
+          business_id: businessId,
+          order_url: buildOrderUrl(businessSlug),
+          suppressed: true,
+        },
+      });
     }
 
     const orderUrl = buildOrderUrl(businessSlug);

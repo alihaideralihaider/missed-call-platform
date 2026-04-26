@@ -1,14 +1,15 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "authtoolkit",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-16",
-
   "assets": {
     "directory": "./public"
   },
-
   "vars": {
-    "SUPABASE_URL": "https://rqungzymxypijmlwacii.supabase.co",
-    "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJxdW5nenlteHlwaWptbHdhY2lpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzM2Mjk4MywiZXhwIjoyMDg4OTM4OTgzfQ.3ur38oGOTp1KwMSoH5LmOjdapdiOnUfNfBlSvnP1H5Q"
+    "SUPABASE_URL": "https://rqungzymxypijmlwacii.supabase.co"
+  },
+  "observability": {
+    "enabled": true
   }
 }

@@ -1,4 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  evaluateRestaurantHours,
+  isRestaurantOpenAt,
+  type RestaurantHourRow,
+} from "./restaurant-hours";
+import { incrementRestaurantUsage } from "./usage";
 
 type Env = {
   SUPABASE_URL: string;
@@ -14,6 +20,15 @@ type OrderItemInput = {
   name?: string;
   price?: number;
   quantity?: number;
+  modifiers?: ModifierSelectionInput[];
+};
+
+type ModifierSelectionInput = {
+  groupId?: string;
+  groupName?: string;
+  optionId?: string;
+  optionName?: string;
+  price?: number;
 };
 
 type CreateOrderPayload = {
@@ -23,6 +38,7 @@ type CreateOrderPayload = {
   pickupTime?: string;
   pickupTimeLabel?: string;
   pickupAt?: string;
+  smsOptIn?: boolean;
   notes?: string;
   items: OrderItemInput[];
 };
@@ -36,11 +52,10 @@ type RestaurantRow = {
   name?: string | null;
 };
 
-type RestaurantHourRow = {
-  day_of_week: number;
-  open_time: string | null;
-  close_time: string | null;
-  is_closed: boolean | null;
+type TaxSettingsRow = {
+  sales_tax_rate?: number | string | null;
+  tax_mode?: string | null;
+  tax_label?: string | null;
 };
 
 type MenuItemRow = {
@@ -52,7 +67,19 @@ type MenuItemRow = {
   category_id: string;
 };
 
+type NormalizedModifierSelection = {
+  groupId: string;
+  groupName: string;
+  optionId: string;
+  optionName: string;
+  price: number;
+};
+
 const ASAP_PREP_MINUTES = 20;
+
+function readEnv(value: string | undefined | null): string {
+  return String(value ?? "").trim();
+}
 
 function jsonResponse(data: JsonRecord, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -101,6 +128,19 @@ function normalizePhone(input: string): string {
   return (input || "").replace(/\D/g, "");
 }
 
+function buildPhoneVariants(phoneNumber: string): string[] {
+  return Array.from(
+    new Set(
+      [
+        phoneNumber,
+        `+${phoneNumber}`,
+        phoneNumber.length === 10 ? `+1${phoneNumber}` : "",
+        phoneNumber.length === 11 && phoneNumber.startsWith("1") ? `+${phoneNumber}` : "",
+      ].filter(Boolean)
+    )
+  );
+}
+
 function isValidPhone(phone: string): boolean {
   return /^\d{10,15}$/.test(phone);
 }
@@ -114,6 +154,20 @@ function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function normalizeTaxRate(value: unknown): number {
+  const raw = Number(value);
+
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 0;
+  }
+
+  if (raw >= 1) {
+    return raw / 100;
+  }
+
+  return raw;
+}
+
 function sanitizeSlug(input: string): string {
   return (input || "")
     .trim()
@@ -123,23 +177,99 @@ function sanitizeSlug(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function getNowInTimeZone(timeZone?: string | null): Date {
-  return new Date(
-    new Date().toLocaleString("en-US", {
-      timeZone: timeZone || "America/New_York",
-    })
-  );
-}
-
-function buildTimeForToday(now: Date, timeValue: string) {
-  const [hour, minute] = timeValue.split(":").map(Number);
-  const result = new Date(now);
-  result.setHours(hour, minute, 0, 0);
-  return result;
-}
-
 function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+// TEMP DEBUG: pickup-time validation tracing. Remove after checkout-hours issue is resolved.
+function getDebugSafeTimeZone(timeZone?: string | null): string {
+  const candidate = String(timeZone || "").trim();
+
+  if (!candidate) {
+    return "America/New_York";
+  }
+
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format(new Date());
+    return candidate;
+  } catch {
+    return "America/New_York";
+  }
+}
+
+function getDebugTimeZoneParts(
+  date: Date,
+  timeZone: string
+): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+  weekday: number;
+} {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    weekday: "short",
+    hour12: false,
+  });
+
+  const weekdayMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  const parts = formatter.formatToParts(date);
+  const values = Object.create(null) as Record<string, string>;
+
+  for (const part of parts) {
+    if (part.type !== "literal") {
+      values[part.type] = part.value;
+    }
+  }
+
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+    weekday: weekdayMap[values.weekday] ?? 0,
+  };
+}
+
+function formatDebugLocalTimestamp(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function getDebugHoursRowForDay(
+  hours: RestaurantHourRow[],
+  dayOfWeek: number
+): RestaurantHourRow | null {
+  return (
+    hours.find((row) => Number(row.day_of_week) === Number(dayOfWeek)) || null
+  );
 }
 
 function parsePickupLeadMinutes(pickupTime: string): number | null {
@@ -191,62 +321,27 @@ function isAsapPickup(pickupTime: string): boolean {
   return !value || value.toUpperCase() === "ASAP";
 }
 
-function isRestaurantOpenNow(hours: RestaurantHourRow[], now = new Date()): boolean {
-  const currentDay = now.getDay();
-  const previousDay = currentDay === 0 ? 6 : currentDay - 1;
-
-  const today = hours.find((row) => Number(row.day_of_week) === currentDay);
-  const yesterday = hours.find((row) => Number(row.day_of_week) === previousDay);
-
-  if (today && !today.is_closed && today.open_time && today.close_time) {
-    const openAt = buildTimeForToday(now, today.open_time);
-    const closeAt = buildTimeForToday(now, today.close_time);
-
-    if (closeAt <= openAt) {
-      closeAt.setDate(closeAt.getDate() + 1);
-    }
-
-    if (now >= openAt && now <= closeAt) {
-      return true;
-    }
-  }
-
-  if (
-    yesterday &&
-    !yesterday.is_closed &&
-    yesterday.open_time &&
-    yesterday.close_time
-  ) {
-    const yesterdayOpenAt = buildTimeForToday(now, yesterday.open_time);
-    yesterdayOpenAt.setDate(yesterdayOpenAt.getDate() - 1);
-
-    const yesterdayCloseAt = buildTimeForToday(now, yesterday.close_time);
-
-    const yesterdayIsOvernight =
-      yesterday.close_time <= yesterday.open_time;
-
-    if (yesterdayIsOvernight && now <= yesterdayCloseAt) {
-      if (now >= yesterdayOpenAt) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+function isSameMinute(a: Date, b: Date): boolean {
+  return Math.abs(a.getTime() - b.getTime()) < 60 * 1000;
 }
 
 function formatPickupTimeForSms(
   pickupAt: Date,
   timeZone?: string | null
 ): string {
-  const smsNow = getNowInTimeZone(timeZone);
+  const safeTimeZone = String(timeZone || "").trim() || "America/New_York";
+  const smsNow = new Date();
   const smsPickup = new Date(
     pickupAt.toLocaleString("en-US", {
-      timeZone: timeZone || "America/New_York",
+      timeZone: safeTimeZone,
     })
   );
 
-  const today = new Date(smsNow);
+  const today = new Date(
+    smsNow.toLocaleString("en-US", {
+      timeZone: safeTimeZone,
+    })
+  );
   today.setHours(0, 0, 0, 0);
 
   const tomorrow = new Date(today);
@@ -256,7 +351,7 @@ function formatPickupTimeForSms(
   pickupDay.setHours(0, 0, 0, 0);
 
   const timeText = pickupAt.toLocaleTimeString("en-US", {
-    timeZone: timeZone || "America/New_York",
+    timeZone: safeTimeZone,
     hour: "numeric",
     minute: "2-digit",
   });
@@ -270,7 +365,7 @@ function formatPickupTimeForSms(
   }
 
   const dateText = pickupAt.toLocaleDateString("en-US", {
-    timeZone: timeZone || "America/New_York",
+    timeZone: safeTimeZone,
     month: "short",
     day: "numeric",
   });
@@ -279,40 +374,144 @@ function formatPickupTimeForSms(
 }
 
 function buildStorefrontUrl(requestUrl: URL, slug: string, env: Env): string {
-  const baseUrl = String(env.APP_BASE_URL || "").trim() || requestUrl.origin;
+  const baseUrl = readEnv(env.APP_BASE_URL) || requestUrl.origin;
   return `${baseUrl.replace(/\/$/, "")}/r/${slug}`;
 }
 
+async function resolveBusinessIdByRestaurantId(
+  supabase: ReturnType<typeof createClient>,
+  restaurantId: string
+): Promise<string | null> {
+  const { data: businessMap, error: businessMapError } = await supabase
+    .from("business_restaurant_map")
+    .select("business_id")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+
+  if (!businessMapError && businessMap?.business_id) {
+    return businessMap.business_id;
+  }
+
+  const { data, error } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to resolve business id:", {
+      restaurantId,
+      error: error.message,
+    });
+    return null;
+  }
+
+  return data?.id || null;
+}
+
+async function isOptedOut(
+  supabase: ReturnType<typeof createClient>,
+  phoneNumber: string,
+  businessId: string | null
+): Promise<boolean> {
+  if (!phoneNumber || !businessId) {
+    return false;
+  }
+
+  const variants = buildPhoneVariants(phoneNumber);
+
+  const { data, error } = await supabase
+    .from("opt_outs")
+    .select("id")
+    .eq("business_id", businessId)
+    .in("phone_number", variants)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to check opt-out status:", {
+      businessId,
+      phoneNumber,
+      error: error.message,
+    });
+    return false;
+  }
+
+  return Boolean(data?.id);
+}
+
+async function upsertTransactionalSmsConsent(args: {
+  supabase: ReturnType<typeof createClient>;
+  businessId: string | null;
+  restaurantId: string;
+  phoneNumber: string;
+  consentSource: "checkout" | "ivr";
+}) {
+  const { supabase, businessId, restaurantId, phoneNumber, consentSource } = args;
+
+  if (!businessId || !restaurantId || !phoneNumber) {
+    return;
+  }
+
+  const { error } = await supabase
+    .schema("messaging")
+    .from("sms_consents")
+    .upsert(
+      {
+        business_id: businessId,
+        restaurant_id: restaurantId,
+        phone_number: phoneNumber,
+        consent_type: "transactional",
+        consent_source: consentSource,
+        consent_granted: true,
+        last_seen_at: new Date().toISOString(),
+      },
+      { onConflict: "business_id,phone_number,consent_type" }
+    );
+
+  if (error) {
+    throw new Error(`Failed to upsert SMS consent: ${error.message}`);
+  }
+}
+
 async function sendOrderConfirmationSms(args: {
+  supabase: ReturnType<typeof createClient>;
+  businessId: string | null;
   env: Env;
   to: string;
   restaurantName: string;
   orderNumber: string;
   pickupText: string;
 }) {
-  const { env, to, restaurantName, orderNumber, pickupText } = args;
+  const { supabase, businessId, env, to, restaurantName, orderNumber, pickupText } = args;
+  const accountSid = readEnv(env.TWILIO_ACCOUNT_SID);
+  const authToken = readEnv(env.TWILIO_AUTH_TOKEN);
+  const fromNumber = readEnv(env.TWILIO_FROM_NUMBER);
 
-  if (
-    !env.TWILIO_ACCOUNT_SID ||
-    !env.TWILIO_AUTH_TOKEN ||
-    !env.TWILIO_FROM_NUMBER
-  ) {
+  if (!accountSid || !authToken || !fromNumber) {
     console.log("Skipping SMS confirmation: missing Twilio env vars");
+    return;
+  }
+
+  if (await isOptedOut(supabase, to, businessId)) {
+    console.log("sms_suppressed_opt_out", {
+      phone_number: to,
+      business_id: businessId,
+    });
     return;
   }
 
   const body = new URLSearchParams();
   body.set("To", to);
-  body.set("From", env.TWILIO_FROM_NUMBER);
+  body.set("From", fromNumber);
   body.set(
     "Body",
     `Thanks for your order from ${restaurantName}. Your order ${orderNumber} is scheduled for pickup ${pickupText}.`
   );
 
-  const auth = btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`);
+  const auth = btoa(`${accountSid}:${authToken}`);
 
   const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`,
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
     {
       method: "POST",
       headers: {
@@ -330,34 +529,43 @@ async function sendOrderConfirmationSms(args: {
 }
 
 async function sendMissedCallLinkSms(args: {
+  supabase: ReturnType<typeof createClient>;
+  businessId: string | null;
   env: Env;
   to: string;
   restaurantName: string;
   storefrontUrl: string;
 }) {
-  const { env, to, restaurantName, storefrontUrl } = args;
+  const { supabase, businessId, env, to, restaurantName, storefrontUrl } = args;
+  const accountSid = readEnv(env.TWILIO_ACCOUNT_SID);
+  const authToken = readEnv(env.TWILIO_AUTH_TOKEN);
+  const fromNumber = readEnv(env.TWILIO_FROM_NUMBER);
 
-  if (
-    !env.TWILIO_ACCOUNT_SID ||
-    !env.TWILIO_AUTH_TOKEN ||
-    !env.TWILIO_FROM_NUMBER
-  ) {
+  if (!accountSid || !authToken || !fromNumber) {
     console.log("Skipping missed-call SMS: missing Twilio env vars");
+    return;
+  }
+
+  if (await isOptedOut(supabase, to, businessId)) {
+    console.log("sms_suppressed_opt_out", {
+      phone_number: to,
+      business_id: businessId,
+    });
     return;
   }
 
   const body = new URLSearchParams();
   body.set("To", to);
-  body.set("From", env.TWILIO_FROM_NUMBER);
+  body.set("From", fromNumber);
   body.set(
     "Body",
     `Thanks for calling ${restaurantName}. Order here for pickup: ${storefrontUrl}`
   );
 
-  const auth = btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`);
+  const auth = btoa(`${accountSid}:${authToken}`);
 
   const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`,
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
     {
       method: "POST",
       headers: {
@@ -442,6 +650,276 @@ async function loadRestaurantMenuItems(
   }));
 }
 
+function normalizeModifierOptionPrice(option: any): number {
+  const raw = option?.price_delta ?? 0;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+async function loadModifierConfig(
+  supabase: ReturnType<typeof createClient>,
+  menuItemIds: string[]
+) {
+  if (!menuItemIds.length) {
+    return {
+      linksByItemId: new Map<string, any[]>(),
+      groupsById: new Map<string, any>(),
+      optionsById: new Map<string, any>(),
+      optionsByGroupId: new Map<string, any[]>(),
+    };
+  }
+
+  const { data: linkRows, error: linkError } = await supabase
+    .schema("food_ordering")
+    .from("menu_item_modifier_groups")
+    .select("*")
+    .in("menu_item_id", menuItemIds);
+
+  if (linkError) {
+    throw new Error(`Failed to load menu item modifier groups: ${linkError.message}`);
+  }
+
+  const links = (linkRows as any[] | null) || [];
+  const groupIds = Array.from(
+    new Set(links.map((row) => String(row?.modifier_group_id || "")).filter(Boolean))
+  );
+
+  if (!groupIds.length) {
+    return {
+      linksByItemId: new Map<string, any[]>(),
+      groupsById: new Map<string, any>(),
+      optionsById: new Map<string, any>(),
+      optionsByGroupId: new Map<string, any[]>(),
+    };
+  }
+
+  const [{ data: groupRows, error: groupError }, { data: optionRows, error: optionError }] =
+    await Promise.all([
+      supabase.schema("food_ordering").from("modifier_groups").select("*").in("id", groupIds),
+      supabase
+        .schema("food_ordering")
+        .from("modifier_group_options")
+        .select("*")
+        .in("modifier_group_id", groupIds),
+    ]);
+
+  if (groupError) {
+    throw new Error(`Failed to load modifier groups: ${groupError.message}`);
+  }
+
+  if (optionError) {
+    throw new Error(`Failed to load modifier options: ${optionError.message}`);
+  }
+
+  const linksByItemId = new Map<string, any[]>();
+  for (const link of links) {
+    const itemId = String(link?.menu_item_id || "");
+    if (!itemId) continue;
+    const existing = linksByItemId.get(itemId) || [];
+    existing.push(link);
+    linksByItemId.set(itemId, existing);
+  }
+
+  const groupsById = new Map<string, any>();
+  for (const group of (groupRows as any[] | null) || []) {
+    if (group?.is_active === false) continue;
+    groupsById.set(String(group.id), group);
+  }
+
+  const optionsById = new Map<string, any>();
+  const optionsByGroupId = new Map<string, any[]>();
+  for (const option of (optionRows as any[] | null) || []) {
+    if (option?.is_active === false) continue;
+    const optionId = String(option?.id || "");
+    const groupId = String(option?.modifier_group_id || "");
+    if (!optionId || !groupId) continue;
+    optionsById.set(optionId, option);
+    const existing = optionsByGroupId.get(groupId) || [];
+    existing.push(option);
+    optionsByGroupId.set(groupId, existing);
+  }
+
+  return {
+    linksByItemId,
+    groupsById,
+    optionsById,
+    optionsByGroupId,
+  };
+}
+
+function validateAndPriceModifiers(args: {
+  menuItemId: string;
+  modifiers: NormalizedModifierSelection[];
+  modifierConfig: Awaited<ReturnType<typeof loadModifierConfig>>;
+}) {
+  const { menuItemId, modifiers, modifierConfig } = args;
+  const itemLinks = modifierConfig.linksByItemId.get(menuItemId) || [];
+  const allowedGroupIds = new Set(
+    itemLinks
+      .map((link) => String(link?.modifier_group_id || ""))
+      .filter(Boolean)
+  );
+
+  if (!modifiers.length) {
+    for (const groupId of allowedGroupIds) {
+      const group = modifierConfig.groupsById.get(groupId);
+      if (!group) continue;
+      const required = Boolean(group?.is_required ?? group?.required ?? false);
+      const minSelect = Math.max(
+        Number(group?.min_selections ?? group?.min_select ?? (required ? 1 : 0)),
+        required ? 1 : 0
+      );
+      if (minSelect > 0) {
+        throw new Error(`Missing required modifiers for ${group?.name || "this item"}`);
+      }
+    }
+
+    return {
+      modifierTotal: 0,
+      normalizedModifiers: [] as NormalizedModifierSelection[],
+      displayNameSuffix: "",
+    };
+  }
+
+  const selectedByGroup = new Map<string, NormalizedModifierSelection[]>();
+  const dedupe = new Set<string>();
+
+  for (const modifier of modifiers) {
+    if (!allowedGroupIds.has(modifier.groupId)) {
+      throw new Error("Invalid modifier group selected for item.");
+    }
+
+    const option = modifierConfig.optionsById.get(modifier.optionId);
+    if (!option) {
+      throw new Error("Invalid modifier option selected for item.");
+    }
+
+    const optionGroupId = String(option?.modifier_group_id || "");
+    if (optionGroupId !== modifier.groupId) {
+      throw new Error("Modifier option does not belong to modifier group.");
+    }
+
+    const dedupeKey = `${modifier.groupId}:${modifier.optionId}`;
+    if (dedupe.has(dedupeKey)) {
+      continue;
+    }
+    dedupe.add(dedupeKey);
+
+    const group = modifierConfig.groupsById.get(modifier.groupId);
+    const normalizedModifier: NormalizedModifierSelection = {
+      groupId: modifier.groupId,
+      groupName: String(group?.name || modifier.groupName || "Modifier").trim(),
+      optionId: modifier.optionId,
+      optionName: String(option?.name || modifier.optionName || "Option").trim(),
+      price: normalizeModifierOptionPrice(option),
+    };
+
+    const existing = selectedByGroup.get(modifier.groupId) || [];
+    existing.push(normalizedModifier);
+    selectedByGroup.set(modifier.groupId, existing);
+  }
+
+  for (const groupId of allowedGroupIds) {
+    const group = modifierConfig.groupsById.get(groupId);
+    if (!group) continue;
+
+    const selected = selectedByGroup.get(groupId) || [];
+    const required = Boolean(group?.is_required ?? group?.required ?? false);
+    const minSelect = Math.max(
+      Number(group?.min_selections ?? group?.min_select ?? (required ? 1 : 0)),
+      required ? 1 : 0
+    );
+    const groupOptions = modifierConfig.optionsByGroupId.get(groupId) || [];
+    const maxSelectRaw =
+      group?.max_selections === null || group?.max_selections === undefined
+        ? group?.selection_mode === "single"
+          ? 1
+          : group?.max_select === null || group?.max_select === undefined
+          ? groupOptions.length
+          : Number(group.max_select)
+        : Number(group.max_selections);
+    const maxSelect = Math.max(1, Number.isFinite(maxSelectRaw) ? maxSelectRaw : groupOptions.length);
+
+    if (selected.length < minSelect) {
+      throw new Error(`Missing required modifiers for ${group?.name || "this item"}`);
+    }
+
+    if (selected.length > maxSelect) {
+      throw new Error(`Too many modifiers selected for ${group?.name || "this item"}`);
+    }
+  }
+
+  const normalizedModifiers = Array.from(selectedByGroup.values()).flat();
+  const modifierTotal = normalizedModifiers.reduce(
+    (sum, modifier) => sum + modifier.price,
+    0
+  );
+  const displayNameSuffix =
+    normalizedModifiers.length > 0
+      ? ` (${normalizedModifiers.map((modifier) => modifier.optionName).join(", ")})`
+      : "";
+
+  return {
+    modifierTotal,
+    normalizedModifiers,
+    displayNameSuffix,
+  };
+}
+
+async function loadRestaurantTaxConfig(
+  supabase: ReturnType<typeof createClient>,
+  restaurantId: string
+): Promise<{
+  taxRate: number;
+  taxMode: "exclusive" | "none";
+}> {
+  const { data, error } = await supabase
+    .schema("food_ordering")
+    .from("tax_settings")
+    .select("sales_tax_rate, tax_mode, tax_label")
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle<TaxSettingsRow>();
+
+  if (error) {
+    console.warn("Failed to load restaurant tax settings; defaulting tax to 0.", {
+      restaurantId,
+      error: error.message,
+    });
+    return {
+      taxRate: 0,
+      taxMode: "none",
+    };
+  }
+
+  if (!data) {
+    console.warn("No restaurant tax settings found; defaulting tax to 0.", {
+      restaurantId,
+    });
+    return {
+      taxRate: 0,
+      taxMode: "none",
+    };
+  }
+
+  const normalizedMode =
+    String(data.tax_mode || "").trim().toLowerCase() === "exclusive"
+      ? "exclusive"
+      : "none";
+  const normalizedRate = normalizeTaxRate(data.sales_tax_rate);
+
+  if (normalizedMode !== "exclusive" || normalizedRate <= 0) {
+    return {
+      taxRate: 0,
+      taxMode: "none",
+    };
+  }
+
+  return {
+    taxRate: normalizedRate,
+    taxMode: "exclusive",
+  };
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") {
@@ -459,7 +937,10 @@ export default {
       url.pathname.startsWith("/twilio/voice/")
     ) {
       try {
-        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+        const supabaseUrl = readEnv(env.SUPABASE_URL);
+        const supabaseServiceRoleKey = readEnv(env.SUPABASE_SERVICE_ROLE_KEY);
+
+        if (!supabaseUrl || !supabaseServiceRoleKey) {
           return xmlResponse(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`, 200);
         }
 
@@ -479,8 +960,8 @@ export default {
         }
 
         const supabase = createClient(
-          env.SUPABASE_URL,
-          env.SUPABASE_SERVICE_ROLE_KEY
+          supabaseUrl,
+          supabaseServiceRoleKey
         );
 
         const { data: restaurant, error: restaurantError } = await supabase
@@ -500,16 +981,42 @@ export default {
         }
 
         try {
+          try {
+            await incrementRestaurantUsage({
+              supabase,
+              restaurantId: restaurant.id,
+              callsDelta: 1,
+            });
+          } catch (usageError) {
+            console.error("Missed-call usage increment failed:", usageError);
+          }
+
           const smsRestaurantName =
             String(restaurant.name || "").trim() || restaurant.slug || "the restaurant";
           const storefrontUrl = buildStorefrontUrl(url, restaurant.slug, env);
+          const businessId = await resolveBusinessIdByRestaurantId(
+            supabase,
+            restaurant.id
+          );
 
           await sendMissedCallLinkSms({
+            supabase,
+            businessId,
             env,
             to: fromPhone,
             restaurantName: smsRestaurantName,
             storefrontUrl,
           });
+
+          try {
+            await incrementRestaurantUsage({
+              supabase,
+              restaurantId: restaurant.id,
+              smsDelta: 1,
+            });
+          } catch (usageError) {
+            console.error("Missed-call SMS usage increment failed:", usageError);
+          }
         } catch (smsError) {
           console.error("Missed-call SMS failed:", smsError);
         }
@@ -526,15 +1033,24 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/orders") {
       console.log("POST /api/orders hit");
+      const supabaseUrl = readEnv(env.SUPABASE_URL);
+      const supabaseServiceRoleKey = readEnv(env.SUPABASE_SERVICE_ROLE_KEY);
+
+      console.log("SUPABASE_URL exists:", Boolean(supabaseUrl));
+      console.log(
+        "SUPABASE_SERVICE_ROLE_KEY exists:",
+        Boolean(supabaseServiceRoleKey)
+      );
+
 
       try {
-        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+        if (!supabaseUrl || !supabaseServiceRoleKey) {
           return jsonError("Missing Supabase environment variables.", 500);
         }
 
         const supabase = createClient(
-          env.SUPABASE_URL,
-          env.SUPABASE_SERVICE_ROLE_KEY
+          supabaseUrl,
+          supabaseServiceRoleKey
         );
 
         const body = (await request.json()) as Partial<CreateOrderPayload>;
@@ -545,8 +1061,11 @@ export default {
         const pickupTime = (body.pickupTime || "ASAP").trim();
         const pickupTimeLabel = (body.pickupTimeLabel || "").trim();
         const pickupAtInput = (body.pickupAt || "").trim();
+        const smsOptIn = body.smsOptIn === true;
         const notes = (body.notes || "").trim();
         const items = Array.isArray(body.items) ? body.items : [];
+
+        console.log("WORKER_RAW_ITEMS", body.items);
 
         if (!restaurantSlug) return jsonError("restaurantSlug is required.");
         if (!customerName) return jsonError("customerName is required.");
@@ -583,33 +1102,119 @@ export default {
         }
 
         const hours = (restaurantHours as RestaurantHourRow[] | null) || [];
-        const now = getNowInTimeZone(restaurant.timezone);
+        const taxConfig = await loadRestaurantTaxConfig(supabase, restaurant.id);
+        const now = new Date();
+        const hoursEvaluation = evaluateRestaurantHours(
+          hours,
+          restaurant.timezone,
+          now
+        );
 
         const requestedPickupDate =
           parsePickupAt(pickupAtInput) || getRequestedPickupDate(pickupTime, now);
 
+        const debugTimeZone = getDebugSafeTimeZone(restaurant.timezone);
+        const debugPickupParts = requestedPickupDate
+          ? getDebugTimeZoneParts(requestedPickupDate, debugTimeZone)
+          : null;
+        const debugDayOfWeek = debugPickupParts?.weekday ?? null;
+        const debugHoursRow =
+          debugDayOfWeek === null
+            ? null
+            : getDebugHoursRowForDay(hours, debugDayOfWeek);
+
+        const logPickupValidationDebug = (
+          invalidationReason: string,
+          extra?: JsonRecord
+        ) => {
+          console.log("TEMP DEBUG pickup validation", {
+            restaurantSlug,
+            restaurantId: restaurant.id,
+            restaurantTimezone: restaurant.timezone,
+            pickupTime,
+            pickupTimeLabel,
+            pickupAt: pickupAtInput || null,
+            currentTimeInRestaurantTimezone: formatDebugLocalTimestamp(
+              now,
+              debugTimeZone
+            ),
+            parsedPickupTimeInRestaurantTimezone: requestedPickupDate
+              ? formatDebugLocalTimestamp(requestedPickupDate, debugTimeZone)
+              : null,
+            computedDayOfWeekUsedForValidation: debugDayOfWeek,
+            selectedRestaurantHoursRowForDay: debugHoursRow,
+            openTime: debugHoursRow?.open_time ?? null,
+            closeTime: debugHoursRow?.close_time ?? null,
+            invalidationReason,
+            ...extra,
+          });
+        };
+
+        logPickupValidationDebug("pre-validation");
+
         if (!requestedPickupDate) {
+          logPickupValidationDebug("requestedPickupDate could not be parsed");
           return jsonError("Invalid pickup time selected.", 400, {
             code: "INVALID_PICKUP_TIME",
           });
         }
 
         if (isAsapPickup(pickupTime)) {
-          const isOpenNow = isRestaurantOpenNow(hours, now);
-
-          if (!isOpenNow) {
+          if (!hoursEvaluation.allowsAsap) {
+            logPickupValidationDebug("ASAP rejected because hoursEvaluation.allowsAsap is false", {
+              hoursEvaluation,
+            });
             return jsonError("Restaurant is currently closed.", 409, {
               code: "RESTAURANT_CLOSED",
+              nextOpenText: hoursEvaluation.nextOpenText,
             });
+          }
+        } else {
+          if (requestedPickupDate.getTime() <= now.getTime()) {
+            logPickupValidationDebug("scheduled pickup rejected because requestedPickupDate is not in the future");
+            return jsonError("Selected pickup time must be in the future.", 409, {
+              code: "INVALID_PICKUP_TIME",
+            });
+          }
+
+          if (pickupAtInput) {
+            const matchesGeneratedSlot = hoursEvaluation.availableScheduledSlots.some(
+              (option) => isSameMinute(new Date(option.pickupAt), requestedPickupDate)
+            );
+
+            if (!matchesGeneratedSlot) {
+              logPickupValidationDebug(
+                "pickupAtInput rejected because it did not match any generated scheduled slot",
+                {
+                  availableScheduledSlots: hoursEvaluation.availableScheduledSlots,
+                }
+              );
+              return jsonError(
+                "Selected pickup time is outside restaurant hours.",
+                409,
+                {
+                  code: "INVALID_PICKUP_TIME",
+                }
+              );
+            }
+          } else if (!isRestaurantOpenAt(hours, restaurant.timezone, requestedPickupDate)) {
+            logPickupValidationDebug(
+              "scheduled pickup rejected by isRestaurantOpenAt in non-pickupAtInput branch"
+            );
+            return jsonError(
+              "Selected pickup time is outside restaurant hours.",
+              409,
+              {
+                code: "INVALID_PICKUP_TIME",
+              }
+            );
           }
         }
 
-        const isOpenAtRequestedPickupTime = isRestaurantOpenNow(
-          hours,
-          requestedPickupDate
-        );
-
-        if (!isOpenAtRequestedPickupTime) {
+        if (!isRestaurantOpenAt(hours, restaurant.timezone, requestedPickupDate)) {
+          logPickupValidationDebug(
+            "final isRestaurantOpenAt check rejected pickup time"
+          );
           return jsonError("Selected pickup time is outside restaurant hours.", 409, {
             code: "INVALID_PICKUP_TIME",
           });
@@ -619,7 +1224,35 @@ export default {
           id: String(item?.id || "").trim(),
           name: String(item?.name || "").trim(),
           quantity: Math.max(1, Math.floor(toNumber(item?.quantity) || 1)),
+          modifiers: Array.isArray(item?.modifiers)
+            ? item.modifiers
+                .map((modifier) => {
+                  const groupId = String(modifier?.groupId || "").trim();
+                  const groupName = String(modifier?.groupName || "").trim();
+                  const optionId = String(modifier?.optionId || "").trim();
+                  const optionName = String(modifier?.optionName || "").trim();
+                  const price = Number(modifier?.price || 0);
+
+                  if (!groupId || !optionId || !groupName || !optionName) {
+                    return null;
+                  }
+
+                  return {
+                    groupId,
+                    groupName,
+                    optionId,
+                    optionName,
+                    price: Number.isFinite(price) ? price : 0,
+                  } satisfies NormalizedModifierSelection;
+                })
+                .filter(
+                  (modifier): modifier is NormalizedModifierSelection =>
+                    modifier !== null
+                )
+            : [],
         }));
+
+        console.log("WORKER_NORMALIZED_ITEMS", normalizedItems);
 
         const hasIdsForAllItems = normalizedItems.every((item) => item.id);
         const restaurantMenuItems = await loadRestaurantMenuItems(
@@ -657,6 +1290,11 @@ export default {
           return jsonError("One or more items are invalid.");
         }
 
+        const modifierConfig = await loadModifierConfig(
+          supabase,
+          matchedDbItems.map((item) => item.id)
+        );
+
         const soldOutItems = matchedDbItems.filter((item) => item.is_sold_out);
 
         if (soldOutItems.length > 0) {
@@ -675,13 +1313,21 @@ export default {
           const unitPrice = roundMoney(
             Number(dbItem.base_price ?? dbItem.price ?? 0)
           );
+          const modifierPricing = validateAndPriceModifiers({
+            menuItemId: dbItem.id,
+            modifiers: item.modifiers,
+            modifierConfig,
+          });
+          const finalUnitPrice = roundMoney(unitPrice + modifierPricing.modifierTotal);
 
           return {
             menuItemId: dbItem.id,
-            name: dbItem.name,
-            unitPrice,
+            name: `${dbItem.name}${modifierPricing.displayNameSuffix}`,
+            baseUnitPrice: unitPrice,
+            unitPrice: finalUnitPrice,
             quantity: item.quantity,
-            lineTotal: roundMoney(unitPrice * item.quantity),
+            lineTotal: roundMoney(finalUnitPrice * item.quantity),
+            modifiers: modifierPricing.normalizedModifiers,
           };
         });
 
@@ -730,7 +1376,10 @@ export default {
         const subtotal = roundMoney(
           cleanedItems.reduce((sum, item) => sum + item.lineTotal, 0)
         );
-        const tax = 0;
+        const tax =
+          taxConfig.taxMode === "exclusive"
+            ? roundMoney(subtotal * taxConfig.taxRate)
+            : 0;
         const total = roundMoney(subtotal + tax);
 
         const orderNumber = await generateOrderNumber(
@@ -755,6 +1404,7 @@ export default {
               [pickupTimeLabel ? `Pickup: ${pickupTimeLabel}` : "", notes]
                 .filter(Boolean)
                 .join("\n") || null,
+            sms_opt_in: smsOptIn,
             tax,
             payment_status: "unpaid",
             payment_method: "cash",
@@ -782,32 +1432,98 @@ export default {
           line_total: item.lineTotal,
         }));
 
-        const { error: orderItemsError } = await supabase
+        const { data: insertedOrderItems, error: orderItemsError } = await supabase
           .schema("food_ordering")
           .from("order_items")
-          .insert(orderItemsPayload);
+          .insert(orderItemsPayload)
+          .select("id");
 
         if (orderItemsError) {
           throw new Error(`Order items creation failed: ${orderItemsError.message}`);
         }
 
-        try {
-          const smsRestaurantName =
-            String(restaurant.name || "").trim() || restaurant.slug || "the restaurant";
-          const pickupText = formatPickupTimeForSms(
-            requestedPickupDate,
-            restaurant.timezone
-          );
+        if (!insertedOrderItems || insertedOrderItems.length !== cleanedItems.length) {
+          throw new Error("Order items creation failed: missing inserted item ids");
+        }
 
-          await sendOrderConfirmationSms({
-            env,
-            to: customerPhone,
-            restaurantName: smsRestaurantName,
-            orderNumber: insertedOrder.order_number,
-            pickupText,
+        const modifierSelectionsPayload = insertedOrderItems.flatMap(
+          (orderItem, index) =>
+            (cleanedItems[index]?.modifiers || []).map((modifier) => ({
+              order_item_id: orderItem.id,
+              group_name: modifier.groupName,
+              option_name: modifier.optionName,
+              price_delta: modifier.price,
+            }))
+        );
+
+        if (modifierSelectionsPayload.length > 0) {
+          const { error: modifierSelectionsError } = await supabase
+            .schema("food_ordering")
+            .from("order_item_modifier_selections")
+            .insert(modifierSelectionsPayload);
+
+          if (modifierSelectionsError) {
+            throw new Error(
+              `Order item modifier selections creation failed: ${modifierSelectionsError.message}`
+            );
+          }
+        }
+
+        try {
+          await incrementRestaurantUsage({
+            supabase,
+            restaurantId: restaurant.id,
+            ordersDelta: 1,
+            orderId: insertedOrder.id,
           });
-        } catch (smsError) {
-          console.error("Order confirmation SMS failed:", smsError);
+        } catch (usageError) {
+          console.error("Order usage increment failed:", usageError);
+        }
+
+        if (smsOptIn) {
+          try {
+            const businessId = await resolveBusinessIdByRestaurantId(
+              supabase,
+              restaurant.id
+            );
+
+            await upsertTransactionalSmsConsent({
+              supabase,
+              businessId,
+              restaurantId: restaurant.id,
+              phoneNumber: customerPhone,
+              consentSource: "checkout",
+            });
+
+            const smsRestaurantName =
+              String(restaurant.name || "").trim() || restaurant.slug || "the restaurant";
+            const pickupText = formatPickupTimeForSms(
+              requestedPickupDate,
+              restaurant.timezone
+            );
+
+            await sendOrderConfirmationSms({
+              supabase,
+              businessId,
+              env,
+              to: customerPhone,
+              restaurantName: smsRestaurantName,
+              orderNumber: insertedOrder.order_number,
+              pickupText,
+            });
+
+            try {
+              await incrementRestaurantUsage({
+                supabase,
+                restaurantId: restaurant.id,
+                smsDelta: 1,
+              });
+            } catch (usageError) {
+              console.error("Order confirmation SMS usage increment failed:", usageError);
+            }
+          } catch (smsError) {
+            console.error("Order confirmation SMS failed:", smsError);
+          }
         }
 
         for (const item of cleanedItems) {
