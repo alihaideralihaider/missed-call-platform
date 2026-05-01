@@ -18,12 +18,20 @@ export const metadata: Metadata = {
   title: "SaanaOS | Restaurant Missed Call Recovery",
   description:
     "Recover missed restaurant calls with SMS ordering links, dedicated phone lines, and direct pickup ordering. Your restaurant. Your phone line. Your customers.",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: [
+      { url: "/favicon.ico", sizes: "any" },
       { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
     apple: [
-      { url: "/brand/logos/saanaos-cloche-circuit-icon.svg" },
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    shortcut: [
+      { url: "/favicon.ico" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
     ],
   },
   alternates: {
