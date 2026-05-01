@@ -111,6 +111,12 @@ function hasDisplayImage(imageUrl: string | null | undefined) {
   return Boolean(value && value !== "null" && value !== "undefined");
 }
 
+function getAddItemLabel(item: MenuItem) {
+  if (item.is_sold_out) return `${item.name} is sold out`;
+  if (itemHasModifiers(item)) return `Customize ${item.name}`;
+  return `Add ${item.name} to order`;
+}
+
 function makeCategoryId(categoryName: string) {
   return `menu-category-${categoryName
     .toLowerCase()
@@ -493,7 +499,7 @@ export default function RestaurantMenuClient({
                         block: "start",
                       })
                   }
-                  className="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 sm:px-4 sm:py-2 sm:text-sm"
+                  className="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 sm:px-4 sm:py-2 sm:text-sm"
                 >
                   Promotions
                 </button>
@@ -507,7 +513,7 @@ export default function RestaurantMenuClient({
                     block: "start",
                   })
                 }
-                className="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 sm:px-4 sm:py-2 sm:text-sm"
+                className="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 sm:px-4 sm:py-2 sm:text-sm"
               >
                 Popular
               </button>
@@ -520,7 +526,7 @@ export default function RestaurantMenuClient({
                     block: "start",
                   })
                 }
-                className="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 sm:px-4 sm:py-2 sm:text-sm"
+                className="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 sm:px-4 sm:py-2 sm:text-sm"
               >
                 Menu
               </button>
@@ -568,9 +574,9 @@ export default function RestaurantMenuClient({
                     </div>
 
                     <div className="min-w-0 p-4">
-                      <p className="truncate text-base font-semibold text-neutral-900">
+                      <h3 className="truncate text-base font-semibold text-neutral-900">
                         {promo.title}
-                      </p>
+                      </h3>
                       {promo.subtitle ? (
                         <p className="mt-1 truncate text-sm text-neutral-500">
                           {promo.subtitle}
@@ -603,6 +609,7 @@ export default function RestaurantMenuClient({
                       role="button"
                       tabIndex={canAddItem(item) ? 0 : -1}
                       aria-disabled={!canAddItem(item)}
+                      aria-label={getAddItemLabel(item)}
                       onClick={() => handleAddItem(item)}
                       onKeyDown={(event) => {
                         if (!canAddItem(item)) return;
@@ -611,7 +618,7 @@ export default function RestaurantMenuClient({
                           handleAddItem(item);
                         }
                       }}
-                      className={`w-full overflow-hidden rounded-2xl border text-left shadow-sm transition ${
+                      className={`w-full overflow-hidden rounded-2xl border text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 ${
                         canAddItem(item)
                           ? "cursor-pointer border-neutral-200 bg-white active:scale-[0.99]"
                           : "cursor-not-allowed border-neutral-200 bg-neutral-100 opacity-60"
@@ -649,7 +656,8 @@ export default function RestaurantMenuClient({
                             event.stopPropagation();
                             handleAddItem(item);
                           }}
-                          className={`absolute bottom-1 right-1 z-10 shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm transition active:scale-[0.98] ${
+                          aria-label={getAddItemLabel(item)}
+                          className={`absolute bottom-1 right-1 z-10 min-h-10 shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 active:scale-[0.98] ${
                             item.is_sold_out
                               ? "cursor-not-allowed bg-neutral-300 text-neutral-500"
                               : !isOpen
@@ -733,7 +741,7 @@ export default function RestaurantMenuClient({
                         block: "start",
                       })
                     }
-                    className="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700"
+                    className="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2"
                   >
                     {category}
                   </button>
@@ -769,6 +777,7 @@ export default function RestaurantMenuClient({
                             role="button"
                             tabIndex={canAddItem(item) ? 0 : -1}
                             aria-disabled={!canAddItem(item)}
+                            aria-label={getAddItemLabel(item)}
                             key={item.id}
                             onClick={() => handleAddItem(item)}
                             onKeyDown={(event) => {
@@ -778,7 +787,7 @@ export default function RestaurantMenuClient({
                                 handleAddItem(item);
                               }
                             }}
-                            className={`overflow-hidden rounded-2xl border shadow-sm ${
+                            className={`overflow-hidden rounded-2xl border shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 ${
                               canAddItem(item)
                                 ? "cursor-pointer border-neutral-200 bg-white"
                                 : "cursor-not-allowed border-neutral-200 bg-neutral-100 opacity-70"
@@ -816,7 +825,8 @@ export default function RestaurantMenuClient({
                                   event.stopPropagation();
                                   handleAddItem(item);
                                 }}
-                                className={`absolute bottom-1 right-1 z-10 shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm transition active:scale-[0.98] ${
+                                aria-label={getAddItemLabel(item)}
+                                className={`absolute bottom-1 right-1 z-10 min-h-10 shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 active:scale-[0.98] ${
                                   item.is_sold_out
                                     ? "cursor-not-allowed bg-neutral-300 text-neutral-500"
                                     : !isOpen
@@ -881,7 +891,12 @@ export default function RestaurantMenuClient({
         </div>
 
         {activeItem ? (
-          <div className="fixed inset-0 z-50 flex items-end bg-black/45 sm:items-center sm:justify-center">
+          <div
+            className="fixed inset-0 z-50 flex items-end bg-black/45 sm:items-center sm:justify-center"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modifier-dialog-title"
+          >
             <div className="relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl sm:max-w-md sm:rounded-[28px]">
               <div className="shrink-0">
                 <div className="relative h-48 bg-neutral-100">
@@ -900,7 +915,8 @@ export default function RestaurantMenuClient({
                   <button
                     type="button"
                     onClick={closeItemModal}
-                    className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-neutral-900 shadow-sm"
+                    aria-label={`Close ${activeItem.name} options`}
+                    className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-neutral-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2"
                   >
                     Close
                   </button>
@@ -908,7 +924,10 @@ export default function RestaurantMenuClient({
 
                 <div className="border-b border-neutral-200 p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-xl font-semibold text-neutral-900">
+                    <h2
+                      id="modifier-dialog-title"
+                      className="text-xl font-semibold text-neutral-900"
+                    >
                       {activeItem.name}
                     </h2>
                     <span className="shrink-0 text-base font-semibold text-neutral-900">
@@ -972,7 +991,7 @@ export default function RestaurantMenuClient({
                                     name={`modifier-${group.id}`}
                                     checked={checked}
                                     onChange={() => toggleModifierOption(group, option)}
-                                    className="mt-1"
+                                    className="mt-1 focus:ring-2 focus:ring-neutral-900"
                                   />
                                   <div>
                                     <p className="text-sm font-medium text-neutral-900">
@@ -997,7 +1016,10 @@ export default function RestaurantMenuClient({
                   })}
 
                   {modifierError ? (
-                    <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <div
+                      role="alert"
+                      className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                    >
                       {modifierError}
                     </div>
                   ) : null}
@@ -1015,7 +1037,8 @@ export default function RestaurantMenuClient({
                   type="button"
                   onClick={handleAddActiveItem}
                   disabled={!canAddItem(activeItem)}
-                  className="flex w-full items-center justify-center rounded-2xl bg-neutral-900 px-4 py-4 text-sm font-semibold text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label={`Add ${activeItem.name} to order for ${formatPrice(activeItemTotal)}`}
+                  className="flex w-full items-center justify-center rounded-2xl bg-neutral-900 px-4 py-4 text-sm font-semibold text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span>
                     {activeItem.is_sold_out

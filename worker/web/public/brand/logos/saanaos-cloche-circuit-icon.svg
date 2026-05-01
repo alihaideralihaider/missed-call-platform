@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SaanaOS cloche circuit icon">
+  <defs>
+    <style>
+      .navy{fill:none;stroke:#071E41;stroke-width:24;stroke-linecap:round;stroke-linejoin:round}
+      .orange{fill:none;stroke:#FF5A00;stroke-width:22;stroke-linecap:round;stroke-linejoin:round}
+      .nodeN{fill:#fff;stroke:#071E41;stroke-width:18}
+      .nodeO{fill:#fff;stroke:#FF5A00;stroke-width:18}
+    </style>
+  </defs>
+  <circle class="nodeN" cx="256" cy="64" r="24"/>
+  <path class="navy" d="M104 248c0-88 68-158 152-158s152 70 152 158"/>
+  <path class="navy" d="M152 196c14-36 42-61 75-72"/>
+  <path class="navy" d="M104 272h304c16 0 28 12 28 28s-12 28-28 28H104c-16 0-28-12-28-28s12-28 28-28z"/>
+  <path class="navy" d="M220 328v72l-42 42"/>
+  <path class="navy" d="M256 328v112"/>
+  <path class="navy" d="M292 328v72l42 42"/>
+  <path class="orange" d="M172 328v66l-50 50"/>
+  <path class="orange" d="M340 328v66l50 50"/>
+  <path class="orange" d="M292 410v54"/>
+  <circle class="nodeO" cx="104" cy="460" r="20"/>
+  <circle class="nodeN" cx="256" cy="464" r="20"/>
+  <circle class="nodeO" cx="292" cy="484" r="20"/>
+  <circle class="nodeO" cx="408" cy="460" r="20"/>
+</svg>

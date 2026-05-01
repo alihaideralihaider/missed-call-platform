@@ -1,318 +1,454 @@
-import Image from "next/image";
-import Link from "next/link";
-import { SiteFooter } from "@/app/components/site-footer";
+import type { Metadata } from "next";
 
-type PricingPlan = {
-  name: string;
-  badge?: string;
-  price: string;
-  originalPrice: string;
-  cta: string;
-  href: string;
-  featured: boolean;
-  intro: string;
-  features: string[];
+import { FloatingPattern } from "@/components/brand/FloatingPattern";
+import { CTAButton } from "@/components/marketing/CTAButton";
+import { MarketingFooter } from "@/components/marketing/MarketingFooter";
+import { MarketingHeader } from "@/components/marketing/MarketingHeader";
+import { SectionShell } from "@/components/marketing/SectionShell";
+import { TrustLine } from "@/components/marketing/TrustLine";
+import { saanaColors } from "@/lib/brand/colors";
+
+export const metadata: Metadata = {
+  title: "SaanaOS Pricing | Missed Call Recovery and Restaurant Website Packages",
+  description:
+    "Simple SaanaOS pricing for restaurant missed-call recovery, dedicated phone lines, SMS ordering links, website setup, menu, checkout, hosting, maintenance, and SEO support.",
+  alternates: {
+    canonical: "/pricing",
+  },
 };
 
-const PRICING_PLANS: PricingPlan[] = [
+const missedCallPlans = [
   {
     name: "Basic",
-    badge: "Founding Plan \uD83D\uDD12",
-    price: "$29/month",
-    originalPrice: "Normally $59",
-    cta: "Get Started",
     href: "/onboard",
-    featured: true,
-    intro: "Recommended starting plan for restaurants launching their ordering line.",
-    features: [
-      "Dedicated ordering line",
-      "125 calls / month",
-      "400 SMS / month",
-      "Missed call \u2192 SMS link",
-      "Order notifications: confirmed and ready",
-      "Simple dashboard",
+    regularPrice: "$69/month",
+    introPrice: "$39/month",
+    bullets: [
+      "Missed call automation",
+      "IVR consent prompt",
+      "SMS order link sent automatically",
+      "Pickup order recovery",
+      "Basic setup support",
     ],
   },
   {
     name: "Pro",
-    price: "$39/month",
-    originalPrice: "Normally $69",
-    cta: "Start Pro",
     href: "/onboard?plan=pro",
-    featured: false,
-    intro: "Everything in Basic +",
-    features: [
-      "Menu image upgrades",
-      "Promotions display",
-      "Better storefront experience",
-    ],
-  },
-  {
-    name: "Pro Plus",
-    price: "$49/month",
-    originalPrice: "Normally $79",
-    cta: "Start Pro Plus",
-    href: "/onboard?plan=pro_plus",
-    featured: false,
-    intro: "Everything in Pro +",
-    features: [
-      "Assisted onboarding coming soon",
-      "Priority support",
+    regularPrice: "$79/month",
+    introPrice: "$49/month",
+    bullets: [
+      "Everything in Basic",
+      "More monthly call & SMS usage",
+      "Priority setup support",
+      "Stronger recovery for busy locations",
+      "Built for growing restaurants",
     ],
   },
 ];
 
+const websiteProducts = [
+  {
+    name: "Website Development",
+    price: "$100 one-time",
+    note: "Per location",
+    bullets: [
+      "Basic restaurant website",
+      "Menu page included",
+      "Pickup checkout included",
+      "Mobile-friendly setup",
+    ],
+  },
+  {
+    name: "Hosting & Maintenance",
+    price: "$20/month",
+    note: "Per location",
+    bullets: [
+      "Hosting included",
+      "Basic maintenance",
+      "Small content updates",
+      "Keep your site running smoothly",
+    ],
+  },
+];
+
+const marketplaceComparison = [
+  "Commission fees",
+  "Marketplace owns customer attention",
+  "Delivery-first",
+  "Harder to build direct relationship",
+];
+
+const saanaComparison = [
+  "Flat monthly pricing",
+  "Your restaurant, your phone line, your customers",
+  "Pickup-order focused",
+  "Built around missed-call recovery",
+];
+
 export default function PricingPage() {
   return (
-    <main className="min-h-screen bg-[#081120] text-[#e7eef9]">
-      <div className="mx-auto max-w-[1140px] px-6">
-        <nav className="flex flex-col gap-4 py-5 md:flex-row md:items-start md:justify-between">
-          <Link
-            href="/"
-            className="flex min-w-0 flex-col items-start gap-2"
-            aria-label="Saana home"
-          >
-            <div className="rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02))] px-3 py-2 shadow-[0_14px_34px_rgba(0,0,0,.22)]">
-              <Image
-                src="/logo.svg"
-                alt="Saana logo"
-                width={208}
-                height={44}
-                priority
-                className="h-auto w-[150px] md:w-[208px]"
-              />
-            </div>
-            <div className="pl-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#9cadc5] md:text-[12px]">
-              Restaurant Missed Call Recovery
-            </div>
-          </Link>
+    <main
+      className="relative min-h-screen overflow-hidden"
+      style={{ backgroundColor: saanaColors.softBackground }}
+    >
+      <MarketingHeader />
 
-          <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:items-center md:gap-3">
-            <Link
-              href="/pricing"
-              className="inline-flex h-10 items-center justify-center rounded-[12px] border border-white/12 bg-white/[0.03] px-3 py-2 text-[13px] font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px] md:h-auto md:rounded-[14px] md:px-5 md:py-3 md:text-base"
-            >
-              Pricing
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex h-10 items-center justify-center rounded-[12px] border border-white/12 bg-white/[0.03] px-3 py-2 text-[13px] font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px] md:h-auto md:rounded-[14px] md:px-5 md:py-3 md:text-base"
-            >
-              Login
-            </Link>
-            <Link
-              href="/onboard"
-              className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#ff8a3d] px-3 py-2 text-[13px] font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px] md:h-auto md:rounded-[14px] md:px-5 md:py-3 md:text-base"
-            >
-              Get Started
-            </Link>
-            <Link
-              href="/#demo"
-              className="inline-flex h-10 items-center justify-center rounded-[12px] border border-white/12 bg-white/[0.03] px-3 py-2 text-[13px] font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px] md:h-auto md:rounded-[14px] md:px-5 md:py-3 md:text-base"
-            >
-              Book a demo
-            </Link>
-          </div>
-        </nav>
-
-        <section className="grid gap-8 py-8 pb-12 lg:grid-cols-[1.02fr_.98fr] lg:items-center">
-          <div>
-            <div className="inline-flex items-center rounded-full border border-[#ff8a3d]/20 bg-[#ff8a3d]/12 px-3 py-2 text-[12px] font-black uppercase tracking-[0.08em] text-[#ffc8a2]">
-              Founding pricing for launch
-            </div>
-            <h1 className="mt-5 max-w-[11ch] text-[44px] font-black leading-[0.92] tracking-[-0.05em] text-[#f8fbff] md:max-w-none md:text-6xl md:leading-none md:tracking-[-0.045em]">
-              Turn missed calls into orders
-            </h1>
-            <p className="mt-4 max-w-[680px] text-lg text-[#a7b6cc] md:text-xl">
-              Get your own ordering line. Customers call, receive a link, and
-              place orders instantly.
-            </p>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/onboard"
-                className="inline-flex items-center justify-center rounded-[14px] bg-[#ff8a3d] px-5 py-3 font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px]"
-              >
-                Get Started - $29
-              </Link>
-              <Link
-                href="/#demo"
-                className="inline-flex items-center justify-center rounded-[14px] border border-white/12 bg-white/[0.03] px-5 py-3 font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px]"
-              >
-                Book a Demo
-              </Link>
-              <Link
-                href="#plans"
-                className="inline-flex items-center justify-center rounded-[14px] border border-white/12 bg-white/[0.03] px-5 py-3 font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px]"
-              >
-                See plans
-              </Link>
-            </div>
-          </div>
-
-          <div className="rounded-[28px] border border-white/10 bg-white/[0.05] p-5 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-            <div className="rounded-[22px] border border-[#ff8a3d]/20 bg-[#ff8a3d]/10 p-5">
-              <p className="text-sm font-black uppercase tracking-[0.08em] text-[#ffc8a2]">
-                \uD83C\uDF89 Founding Pricing - First 100 Restaurants
-              </p>
-              <p className="mt-2 text-3xl font-black text-[#f8fbff]">
-                $29/month Founding Plan
-              </p>
-              <p className="mt-1 text-sm text-[#a7b6cc]">Normally $59/month</p>
-              <p className="mt-4 text-base text-[#d8e0ec]">
-                First 100 restaurants lock this price forever.
-              </p>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {[
-                "Dedicated ordering line included",
-                "125 calls/month + 400 SMS/month",
-                "Warning at 80% usage",
-                "Auto top-up available with no service interruption",
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="rounded-[18px] border border-white/10 bg-[rgba(8,17,32,.74)] p-4 text-sm text-[#d8e0ec]"
-                >
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section
-          id="plans"
-          className="grid gap-4 py-4 lg:grid-cols-3 lg:items-stretch"
-        >
-          {PRICING_PLANS.map((plan) => (
+      <section className="relative z-10 overflow-hidden border-b border-orange-100 bg-white/90">
+        <FloatingPattern className="-right-28 top-10 w-[420px] opacity-[0.07] sm:opacity-[0.08] lg:w-[560px] lg:opacity-[0.10]" />
+        <SectionShell className="relative z-10 pb-14 pt-12 sm:pb-20 sm:pt-16">
+          <div className="mx-auto max-w-4xl text-center">
             <div
-              key={plan.name}
-              className={`rounded-[28px] border p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)] ${
-                plan.featured
-                  ? "border-[#ff8a3d]/30 bg-[linear-gradient(180deg,rgba(255,138,61,.14),rgba(255,255,255,.05))]"
-                  : "border-white/10 bg-white/[0.05]"
-              }`}
+              className="inline-flex rounded-full px-3 py-2 text-xs font-black uppercase tracking-[0.12em]"
+              style={{
+                backgroundColor: saanaColors.softOrange,
+                color: saanaColors.orange,
+              }}
             >
-              {plan.badge ? (
-                <div className="inline-flex rounded-full border border-[#ff8a3d]/20 bg-[#ff8a3d]/12 px-3 py-1 text-[12px] font-black uppercase tracking-[0.08em] text-[#ffc8a2]">
-                  {plan.badge}
-                </div>
-              ) : null}
-              {plan.featured ? (
-                <div className="mt-3 inline-flex rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[12px] font-black uppercase tracking-[0.08em] text-[#f8fbff]">
-                  Recommended starting plan
-                </div>
-              ) : null}
-
-              <h2 className="mt-4 text-2xl font-black text-[#f8fbff]">
-                {plan.name}
-              </h2>
-              <div className="mt-3 flex items-end gap-3">
-                <p className="text-3xl font-black text-[#f8fbff]">{plan.price}</p>
-                <p className="pb-1 text-sm text-[#9cadc5]">{plan.originalPrice}</p>
-              </div>
-              <p className="mt-4 text-sm text-[#a7b6cc]">{plan.intro}</p>
-
-              <div className="mt-5 space-y-3">
-                {plan.features.map((feature) => (
-                  <div
-                    key={feature}
-                    className="rounded-[18px] border border-white/10 bg-[rgba(8,17,32,.74)] px-4 py-3 text-sm text-[#d8e0ec]"
-                  >
-                    {feature}
-                  </div>
-                ))}
-              </div>
-
-              <Link
-                href={plan.href}
-                className={`mt-6 inline-flex w-full items-center justify-center rounded-[14px] px-5 py-3 text-center font-extrabold transition hover:-translate-y-[1px] ${
-                  plan.featured
-                    ? "bg-[#ff8a3d] text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)]"
-                    : "border border-white/12 bg-white/[0.03] text-[#e7eef9]"
-                }`}
-              >
-                {plan.cta}
-              </Link>
+              Founding restaurants lock in intro pricing.
             </div>
-          ))}
-        </section>
 
-        <section className="grid gap-4 py-12 lg:grid-cols-2">
-          <div className="rounded-[28px] border border-white/10 bg-white/[0.05] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-            <h2 className="text-2xl font-black text-[#f8fbff]">
-              Your ordering line
+            <h1
+              className="mt-6 text-5xl font-black leading-[0.98] tracking-normal sm:text-6xl lg:text-7xl"
+              style={{ color: saanaColors.navy }}
+            >
+              Simple restaurant technology pricing.
+            </h1>
+
+            <p
+              className="mx-auto mt-6 max-w-3xl text-lg leading-8 sm:text-xl"
+              style={{ color: saanaColors.muted }}
+            >
+              Start with missed-call recovery, then add website, menu, checkout,
+              and SEO support when your restaurant is ready.
+            </p>
+
+            <div className="mt-8 flex justify-center">
+              <TrustLine />
+            </div>
+
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <CTAButton href="/onboard">Book Your Setup</CTAButton>
+              <CTAButton href="#website-package" variant="secondary">
+                View Website Package
+              </CTAButton>
+            </div>
+          </div>
+        </SectionShell>
+      </section>
+
+      <SectionShell id="missed-call-recovery" className="relative z-10 overflow-hidden">
+        <FloatingPattern className="-left-44 bottom-[-130px] hidden w-[430px] opacity-[0.06] lg:block" />
+        <div className="relative z-10 mx-auto max-w-3xl text-center">
+          <p
+            className="text-sm font-black uppercase tracking-[0.14em]"
+            style={{ color: saanaColors.orange }}
+          >
+            Missed Call Recovery
+          </p>
+          <h2
+            className="mt-3 text-4xl font-black tracking-normal sm:text-5xl"
+            style={{ color: saanaColors.navy }}
+          >
+            Recover missed calls with a dedicated phone line included.
+          </h2>
+          <p
+            className="mt-4 text-lg leading-8"
+            style={{ color: saanaColors.muted }}
+          >
+            Recover missed calls and send customers an SMS ordering link with a
+            dedicated phone line included.
+          </p>
+        </div>
+
+        <div className="relative z-10 mt-10 grid gap-5 lg:grid-cols-2">
+          {missedCallPlans.map((plan) => (
+            <MissedCallPlanCard key={plan.name} plan={plan} />
+          ))}
+        </div>
+      </SectionShell>
+
+      <SectionShell id="website-package" className="relative z-10 overflow-hidden bg-white/90">
+        <FloatingPattern className="-right-40 top-14 hidden w-[430px] opacity-[0.07] lg:block" />
+        <div className="relative z-10 grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+          <div>
+            <p
+              className="text-sm font-black uppercase tracking-[0.14em]"
+              style={{ color: saanaColors.orange }}
+            >
+              Separate product
+            </p>
+            <h2
+              className="mt-3 text-4xl font-black tracking-normal sm:text-5xl"
+              style={{ color: saanaColors.navy }}
+            >
+              Website + Menu + Checkout
             </h2>
-            <p className="mt-3 text-base text-[#a7b6cc]">
-              Each restaurant gets a dedicated phone number. Customers call,
-              receive a link, and place orders. No shared numbers. No confusion.
+            <p
+              className="mt-4 text-lg leading-8"
+              style={{ color: saanaColors.muted }}
+            >
+              A separate website package for restaurants that need a clean
+              online presence and direct pickup checkout.
             </p>
           </div>
 
-          <div className="rounded-[28px] border border-white/10 bg-white/[0.05] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-            <h2 className="text-2xl font-black text-[#f8fbff]">
-              What happens if I exceed usage?
-            </h2>
-            <div className="mt-4 space-y-3 text-sm text-[#d8e0ec]">
-              <div className="rounded-[18px] border border-white/10 bg-[rgba(8,17,32,.74)] px-4 py-3">
-                Warning at 80%
-              </div>
-              <div className="rounded-[18px] border border-white/10 bg-[rgba(8,17,32,.74)] px-4 py-3">
-                Auto top-up: $10
-              </div>
-              <div className="rounded-[18px] border border-white/10 bg-[rgba(8,17,32,.74)] px-4 py-3">
-                Adds +100 calls / +300 SMS
-              </div>
-              <div className="rounded-[18px] border border-white/10 bg-[rgba(8,17,32,.74)] px-4 py-3">
-                No rollover and no service interruption
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-[28px] border border-white/10 bg-white/[0.05] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-          <div className="grid gap-3 md:grid-cols-3">
-            {["No contracts", "Cancel anytime", "No setup fees"].map((item) => (
-              <div
-                key={item}
-                className="rounded-[18px] border border-white/10 bg-[rgba(8,17,32,.74)] px-4 py-4 text-center text-sm font-bold text-[#f8fbff]"
-              >
-                {item}
-              </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            {websiteProducts.map((product) => (
+              <WebsiteProductCard key={product.name} product={product} />
             ))}
           </div>
-        </section>
+        </div>
 
-        <section className="py-12">
-          <div className="rounded-[28px] border border-[#ff8a3d]/20 bg-[linear-gradient(180deg,rgba(255,138,61,.14),rgba(255,255,255,.05))] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-            <h2 className="text-3xl font-black text-[#f8fbff]">
-              Start your ordering line today
+        <div
+          className="relative z-10 mt-8 rounded-3xl border bg-[#fffaf7] p-6 shadow-[0_18px_45px_rgba(7,30,65,0.08)]"
+          style={{ borderColor: saanaColors.paleOrange }}
+        >
+          <h3
+            className="text-2xl font-black"
+            style={{ color: saanaColors.navy }}
+          >
+            SEO — Separate Product
+          </h3>
+          <p className="mt-3" style={{ color: saanaColors.muted }}>
+            Need help getting found on Google? Ask about our restaurant SEO
+            package.
+          </p>
+        </div>
+      </SectionShell>
+
+      <SectionShell className="relative z-10 overflow-hidden">
+        <FloatingPattern className="-left-40 top-12 hidden w-[400px] opacity-[0.06] lg:block" />
+        <div className="relative z-10 mx-auto max-w-3xl text-center">
+          <p
+            className="text-sm font-black uppercase tracking-[0.14em]"
+            style={{ color: saanaColors.orange }}
+          >
+            Why SaanaOS
+          </p>
+          <h2
+            className="mt-3 text-4xl font-black tracking-normal sm:text-5xl"
+            style={{ color: saanaColors.navy }}
+          >
+            Built for direct restaurant relationships.
+          </h2>
+        </div>
+
+        <div className="relative z-10 mt-10 grid gap-5 lg:grid-cols-2">
+          <ComparisonCard
+            title="Marketplace apps"
+            items={marketplaceComparison}
+            muted
+          />
+          <ComparisonCard title="SaanaOS" items={saanaComparison} />
+        </div>
+      </SectionShell>
+
+      <SectionShell className="relative z-10 overflow-hidden bg-white/90">
+        <FloatingPattern className="-right-36 bottom-[-120px] hidden w-[430px] opacity-[0.07] lg:block" />
+        <div
+          className="relative z-10 overflow-hidden rounded-3xl border p-8 shadow-[0_24px_70px_rgba(7,30,65,0.12)] sm:p-10"
+          style={{
+            backgroundColor: saanaColors.softBackground,
+            borderColor: saanaColors.paleOrange,
+          }}
+        >
+          <div className="relative max-w-2xl">
+            <h2
+              className="text-4xl font-black tracking-normal sm:text-5xl"
+              style={{ color: saanaColors.navy }}
+            >
+              Ready to recover missed orders?
             </h2>
-            <p className="mt-3 max-w-[720px] text-[#d8e0ec]">
-              Get started now or talk to us first if you want a quick demo of
-              the missed-call recovery flow.
+            <p className="mt-4 text-lg" style={{ color: saanaColors.muted }}>
+              Start with missed-call recovery, then add the website package when
+              your restaurant is ready.
             </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link
-                href="/onboard"
-                className="inline-flex items-center justify-center rounded-[14px] bg-[#ff8a3d] px-5 py-3 font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px]"
-              >
-                Get Started - $29
-              </Link>
-              <Link
-                href="/#demo"
-                className="inline-flex items-center justify-center rounded-[14px] border border-white/12 bg-white/[0.03] px-5 py-3 font-extrabold text-[#e7eef9] transition hover:-translate-y-[1px]"
-              >
-                Talk to us
-              </Link>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <CTAButton href="/onboard">Book Your Setup</CTAButton>
+              <CTAButton href="#website-package" variant="secondary">
+                View Website Package
+              </CTAButton>
             </div>
           </div>
-        </section>
+        </div>
+      </SectionShell>
 
-        <SiteFooter />
+      <div className="relative z-10">
+        <MarketingFooter />
       </div>
     </main>
+  );
+}
+
+function MissedCallPlanCard({
+  plan,
+}: {
+  plan: {
+    name: string;
+    href: string;
+    regularPrice: string;
+    introPrice: string;
+    bullets: string[];
+  };
+}) {
+  return (
+    <div
+      className="rounded-3xl border bg-white p-7 shadow-[0_24px_70px_rgba(7,30,65,0.12)]"
+      style={{ borderColor: saanaColors.paleOrange }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-2xl font-black" style={{ color: saanaColors.navy }}>
+          {plan.name}
+        </h3>
+        <span
+          className="rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em]"
+          style={{
+            backgroundColor: saanaColors.softOrange,
+            color: saanaColors.orange,
+          }}
+        >
+          Intro Offer
+        </span>
+      </div>
+
+      <div className="mt-6">
+        <div
+          className="text-lg font-bold line-through"
+          style={{ color: saanaColors.muted }}
+        >
+          {plan.regularPrice}
+        </div>
+        <div
+          className="mt-1 text-5xl font-black"
+          style={{ color: saanaColors.orange }}
+        >
+          {plan.introPrice}
+        </div>
+        <p className="mt-2 text-sm font-semibold" style={{ color: saanaColors.muted }}>
+          Per location
+        </p>
+      </div>
+
+      <div
+        className="mt-6 rounded-2xl px-4 py-3 text-sm font-black"
+        style={{
+          backgroundColor: saanaColors.softOrange,
+          color: saanaColors.navy,
+        }}
+      >
+        Dedicated phone line included
+      </div>
+
+      <ul className="mt-6 space-y-3">
+        {plan.bullets.map((bullet) => (
+          <li
+            key={bullet}
+            className="flex gap-3 text-sm font-medium"
+            style={{ color: saanaColors.ink }}
+          >
+            <span
+              className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: saanaColors.orange }}
+            />
+            <span>{bullet}</span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-7">
+        <CTAButton href={plan.href} className="w-full">
+          Book Your Setup
+        </CTAButton>
+      </div>
+    </div>
+  );
+}
+
+function WebsiteProductCard({
+  product,
+}: {
+  product: {
+    name: string;
+    price: string;
+    note: string;
+    bullets: string[];
+  };
+}) {
+  return (
+    <div
+      className="rounded-3xl border bg-white p-6 shadow-[0_18px_45px_rgba(7,30,65,0.08)]"
+      style={{ borderColor: saanaColors.border }}
+    >
+      <h3 className="text-xl font-black" style={{ color: saanaColors.navy }}>
+        {product.name}
+      </h3>
+      <p
+        className="mt-4 text-4xl font-black"
+        style={{ color: saanaColors.orange }}
+      >
+        {product.price}
+      </p>
+      <p className="mt-2 text-sm font-semibold" style={{ color: saanaColors.muted }}>
+        {product.note}
+      </p>
+
+      <ul className="mt-6 space-y-3">
+        {product.bullets.map((bullet) => (
+          <li
+            key={bullet}
+            className="flex gap-3 text-sm font-medium"
+            style={{ color: saanaColors.ink }}
+          >
+            <span
+              className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: saanaColors.orange }}
+            />
+            <span>{bullet}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ComparisonCard({
+  title,
+  items,
+  muted = false,
+}: {
+  title: string;
+  items: string[];
+  muted?: boolean;
+}) {
+  return (
+    <div
+      className="rounded-3xl border bg-white p-7 shadow-[0_18px_45px_rgba(7,30,65,0.08)]"
+      style={{
+        borderColor: muted ? saanaColors.border : saanaColors.paleOrange,
+      }}
+    >
+      <h3 className="text-2xl font-black" style={{ color: saanaColors.navy }}>
+        {title}
+      </h3>
+      <ul className="mt-6 space-y-3">
+        {items.map((item) => (
+          <li
+            key={item}
+            className="flex gap-3 text-sm font-medium"
+            style={{ color: muted ? saanaColors.muted : saanaColors.ink }}
+          >
+            <span
+              className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{
+                backgroundColor: muted
+                  ? saanaColors.border
+                  : saanaColors.orange,
+              }}
+            />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

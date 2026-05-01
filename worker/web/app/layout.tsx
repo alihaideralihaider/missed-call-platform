@@ -15,12 +15,16 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.saanaos.com"),
-  title: "SaanaOS | Restaurant Missed Call Recovery and SMS Ordering System",
+  title: "SaanaOS | Restaurant Missed Call Recovery",
   description:
-    "SaanaOS helps restaurants recover lost orders with restaurant missed call recovery, missed call ordering, and a fast SMS ordering system for confirmations and status updates.",
+    "Recover missed restaurant calls with SMS ordering links, dedicated phone lines, and direct pickup ordering. Your restaurant. Your phone line. Your customers.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/brand/logos/saanaos-cloche-circuit-icon.svg" },
+    ],
   },
   alternates: {
     canonical: "/",

@@ -1,164 +1,157 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { SiteFooter } from "../components/site-footer";
+
+import { FloatingPattern } from "@/components/brand/FloatingPattern";
+import { CTAButton } from "@/components/marketing/CTAButton";
+import { MarketingFooter } from "@/components/marketing/MarketingFooter";
+import { MarketingHeader } from "@/components/marketing/MarketingHeader";
+import { SectionShell } from "@/components/marketing/SectionShell";
+import { TrustLine } from "@/components/marketing/TrustLine";
+import { saanaColors } from "@/lib/brand/colors";
+import { saanaBrandCopy } from "@/lib/brand/copy";
 
 export const metadata: Metadata = {
   title:
     "How SaanaOS Works | Restaurant Missed Call Recovery & SMS Ordering",
   description:
-    "Learn how SaanaOS helps restaurants recover missed calls and turn them into orders using SMS ordering and automated responses.",
+    "Learn how SaanaOS helps restaurants recover missed calls and turn them into direct pickup orders using SMS ordering links and dedicated phone lines.",
 };
 
 const steps = [
   {
-    number: "1",
     title: "Customer calls your restaurant",
-    text: "A customer tries to place an order but the call is missed or the line is busy.",
+    body: "Buying intent starts on your restaurant phone line.",
   },
   {
-    number: "2",
-    title: "SaanaOS sends an instant SMS",
-    text: "The customer automatically receives a text message with a secure ordering link.",
+    title: "Missed-call recovery starts",
+    body: "SaanaOS detects that the call was missed or could not be answered.",
   },
   {
-    number: "3",
-    title: "Customer places the order",
-    text: "The customer completes their order online, and your restaurant receives it instantly.",
+    title: "SMS order link is sent after consent",
+    body: "The customer gets a simple direct ordering path by text.",
+  },
+  {
+    title: "Pickup order appears in your dashboard",
+    body: "Your team receives the order and can prepare it for pickup.",
   },
 ];
 
-const benefits = [
-  "Recover lost revenue from missed calls",
-  "Reduce phone pressure during busy hours",
-  "Improve customer experience with fast ordering",
-  "Increase overall order volume",
+const notes = [
+  {
+    title: "Phone line included",
+    body: "Missed-call recovery plans include a dedicated phone line so setup stays simple per location.",
+  },
+  {
+    title: saanaBrandCopy.websiteProductLine,
+    body: "Need a restaurant website too? Website, menu, checkout, hosting, maintenance, and SEO are handled as separate products.",
+  },
 ];
 
 export default function HowItWorksPage() {
   return (
-    <main className="min-h-screen bg-[#081120] text-[#e7eef9]">
-      <div className="mx-auto max-w-[1140px] px-6 py-8 md:py-10">
-        <section className="rounded-[28px] border border-white/10 bg-white/[0.05] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)] md:p-8">
-          <div className="inline-flex items-center rounded-full border border-[#ff8a3d]/20 bg-[#ff8a3d]/12 px-3 py-2 text-[12px] font-black uppercase tracking-[0.08em] text-[#ffc8a2]">
-            Restaurant missed call recovery
-          </div>
-          <h1 className="mt-5 text-[42px] font-black leading-[0.95] tracking-[-0.05em] text-[#f8fbff] md:text-6xl md:leading-none md:tracking-[-0.045em]">
-            How SaanaOS Works
-          </h1>
-          <p className="mt-4 max-w-[760px] text-lg text-[#a7b6cc] md:text-xl">
-            SaanaOS helps restaurants recover missed calls by instantly
-            sending customers an SMS with a link to place their order. Instead
-            of losing business, every missed call becomes an opportunity to
-            capture revenue.
-          </p>
-        </section>
+    <main
+      className="relative min-h-screen overflow-hidden"
+      style={{ backgroundColor: saanaColors.softBackground }}
+    >
+      <MarketingHeader />
 
-        <section className="py-8 md:py-10">
-          <h2 className="mb-6 text-4xl font-black tracking-[-0.03em] text-[#f8fbff]">
-            3 Step Process
+      <section className="relative z-10 overflow-hidden border-b border-orange-100 bg-white/90">
+        <FloatingPattern className="-right-28 top-12 w-[420px] opacity-[0.07] sm:opacity-[0.08] lg:w-[560px] lg:opacity-[0.10]" />
+        <SectionShell className="relative z-10 pb-14 pt-12 sm:pb-20 sm:pt-16">
+          <div className="max-w-4xl">
+            <p
+              className="inline-flex rounded-full px-3 py-2 text-xs font-black uppercase tracking-[0.12em]"
+              style={{
+                backgroundColor: saanaColors.softOrange,
+                color: saanaColors.orange,
+              }}
+            >
+              Restaurant technology, simplified
+            </p>
+            <h1
+              className="mt-6 text-5xl font-black leading-[0.98] tracking-normal sm:text-6xl lg:text-7xl"
+              style={{ color: saanaColors.navy }}
+            >
+              How SaanaOS works
+            </h1>
+            <p
+              className="mt-6 max-w-3xl text-lg leading-8 sm:text-xl"
+              style={{ color: saanaColors.muted }}
+            >
+              From missed call to SMS link to pickup order, SaanaOS keeps the
+              customer relationship with your restaurant.
+            </p>
+            <div className="mt-7">
+              <TrustLine />
+            </div>
+            <div className="mt-8">
+              <CTAButton href="/onboard">Book Your Setup</CTAButton>
+            </div>
+          </div>
+        </SectionShell>
+      </section>
+
+      <SectionShell className="relative z-10 overflow-hidden">
+        <FloatingPattern className="-right-44 top-8 hidden w-[420px] opacity-[0.07] lg:block" />
+        <div className="relative z-10 mx-auto max-w-3xl text-center">
+          <h2 className="text-4xl font-black sm:text-5xl" style={{ color: saanaColors.navy }}>
+            Call missed. Order recovered.
           </h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            {steps.map((step) => (
-              <div
-                key={step.number}
-                className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_18px_60px_rgba(0,0,0,.28)]"
-              >
-                <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-[14px] bg-gradient-to-b from-[#ff9f60] to-[#ff8a3d] font-black text-[#24150a]">
-                  {step.number}
-                </div>
-                <h3 className="mb-2 text-xl font-semibold text-[#f8fbff]">
-                  {step.title}
-                </h3>
-                <p className="text-[#a7b6cc]">{step.text}</p>
+          <p className="mt-4 text-lg leading-8" style={{ color: saanaColors.muted }}>
+            The product is built around one direct loop for restaurants.
+          </p>
+        </div>
+        <div className="relative z-10 mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+          {steps.map((step, index) => (
+            <div key={step.title} className="rounded-3xl border bg-white p-6 shadow-[0_18px_45px_rgba(7,30,65,0.08)]">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl text-lg font-black text-white" style={{ backgroundColor: index === 2 ? saanaColors.orange : saanaColors.navy }}>
+                {index + 1}
               </div>
-            ))}
-          </div>
-        </section>
+              <h3 className="mt-5 text-xl font-black" style={{ color: saanaColors.navy }}>
+                {step.title}
+              </h3>
+              <p className="mt-3 leading-7" style={{ color: saanaColors.muted }}>
+                {step.body}
+              </p>
+            </div>
+          ))}
+        </div>
+      </SectionShell>
 
-        <section className="py-5">
-          <h2 className="mb-3 text-4xl font-black tracking-[-0.03em] text-[#f8fbff]">
-            Why restaurants lose orders from missed calls
+      <SectionShell className="relative z-10 overflow-hidden bg-white/90">
+        <FloatingPattern className="-left-44 bottom-[-120px] hidden w-[430px] opacity-[0.06] lg:block" />
+        <div className="relative z-10 grid gap-5 lg:grid-cols-2">
+          {notes.map((note) => (
+            <div key={note.title} className="rounded-[32px] border bg-white p-7 shadow-[0_18px_45px_rgba(7,30,65,0.08)]">
+              <h2 className="text-3xl font-black" style={{ color: saanaColors.navy }}>
+                {note.title}
+              </h2>
+              <p className="mt-4 leading-7" style={{ color: saanaColors.muted }}>
+                {note.body}
+              </p>
+            </div>
+          ))}
+        </div>
+      </SectionShell>
+
+      <SectionShell className="relative z-10 overflow-hidden">
+        <FloatingPattern className="-right-40 top-14 hidden w-[430px] opacity-[0.07] lg:block" />
+        <div className="relative z-10 rounded-[32px] border bg-[#fffaf7] p-8 shadow-[0_24px_70px_rgba(7,30,65,0.10)] sm:p-10">
+          <h2 className="text-4xl font-black sm:text-5xl" style={{ color: saanaColors.navy }}>
+            Start recovering missed restaurant orders with SaanaOS.
           </h2>
-          <p className="max-w-[780px] text-[#a7b6cc]">
-            Restaurants lose valuable orders every day when they can&apos;t
-            answer the phone during peak hours. Busy lines, staff shortages,
-            and high call volume lead customers to order elsewhere.
+          <p className="mt-4 max-w-2xl text-lg leading-8" style={{ color: saanaColors.muted }}>
+            Your restaurant. Your phone line. Your customers.
           </p>
-        </section>
-
-        <section className="py-5">
-          <h2 className="mb-3 text-4xl font-black tracking-[-0.03em] text-[#f8fbff]">
-            How SaanaOS solves missed call recovery
-          </h2>
-          <p className="max-w-[780px] text-[#a7b6cc]">
-            SaanaOS ensures every missed call is followed up instantly with an
-            SMS ordering option, giving customers a fast and convenient way to
-            place their order without waiting on hold.
-          </p>
-          <p className="mt-4 max-w-[780px] text-[#a7b6cc]">
-            If you want a deeper explanation of the business case for missed
-            call recovery, visit the{" "}
-            <Link
-              href="/restaurant-missed-call-recovery"
-              className="font-semibold text-[#f8fbff] underline decoration-white/25 underline-offset-4 transition hover:text-white"
-            >
-              restaurant missed call recovery
-            </Link>{" "}
-            page.
-          </p>
-        </section>
-
-        <section className="py-5">
-          <h2 className="mb-5 text-4xl font-black tracking-[-0.03em] text-[#f8fbff]">
-            Benefits for your restaurant
-          </h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            {benefits.map((benefit) => (
-              <div
-                key={benefit}
-                className="rounded-[22px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,.28)]"
-              >
-                <p className="text-lg font-semibold text-[#f8fbff]">
-                  {benefit}
-                </p>
-              </div>
-            ))}
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <CTAButton href="/onboard">Book Your Setup</CTAButton>
+            <CTAButton href="/pricing" variant="secondary">
+              See Pricing
+            </CTAButton>
           </div>
-          <p className="mt-4 max-w-[780px] text-[#a7b6cc]">
-            Related reading:{" "}
-            <Link
-              href="/sms-ordering-for-restaurants"
-              className="font-semibold text-[#f8fbff] underline decoration-white/25 underline-offset-4 transition hover:text-white"
-            >
-              SMS ordering for restaurants
-            </Link>{" "}
-            and{" "}
-            <Link
-              href="/increase-restaurant-orders"
-              className="font-semibold text-[#f8fbff] underline decoration-white/25 underline-offset-4 transition hover:text-white"
-            >
-              how to increase restaurant orders
-            </Link>
-            .
-          </p>
-        </section>
+        </div>
+      </SectionShell>
 
-        <section className="py-5 pb-12">
-          <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-8 shadow-[0_18px_60px_rgba(0,0,0,.28)]">
-            <h2 className="mb-3 text-4xl font-black tracking-[-0.03em] text-[#f8fbff]">
-              Start recovering missed orders today
-            </h2>
-            <Link
-              href="/onboard"
-              className="inline-flex items-center justify-center rounded-[14px] bg-[#ff8a3d] px-5 py-3 font-extrabold text-[#211307] shadow-[0_12px_28px_rgba(255,138,61,.24)] transition hover:-translate-y-[1px]"
-            >
-              Try SaanaOS
-            </Link>
-          </div>
-        </section>
-
-        <SiteFooter />
-      </div>
+      <MarketingFooter />
     </main>
   );
 }

@@ -106,7 +106,7 @@ export default function CartPage({ params }: PageProps) {
           <div className="mb-6">
             <Link
               href={`/r/${slug}`}
-              className="text-sm font-medium text-neutral-500"
+              className="rounded text-sm font-medium text-neutral-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
             >
               ← Back to menu
             </Link>
@@ -121,15 +121,17 @@ export default function CartPage({ params }: PageProps) {
 
             <div className="mt-5 space-y-3">
               <button
+                type="button"
                 onClick={handleClearCart}
-                className="w-full rounded-2xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white"
+                aria-label="Clear cart"
+                className="w-full rounded-2xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
               >
                 Clear cart
               </button>
 
               <Link
                 href={`/r/${slug}`}
-                className="block w-full rounded-2xl border border-neutral-200 px-4 py-3 text-center text-sm font-semibold text-neutral-900"
+                className="block w-full rounded-2xl border border-neutral-200 px-4 py-3 text-center text-sm font-semibold text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
               >
                 Go to menu
               </Link>
@@ -146,7 +148,7 @@ export default function CartPage({ params }: PageProps) {
         <div className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 px-4 pb-4 pt-4 backdrop-blur">
           <Link
             href={`/r/${slug}`}
-            className="text-sm font-medium text-neutral-500"
+            className="rounded text-sm font-medium text-neutral-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
           >
             ← Back to menu
           </Link>
@@ -164,8 +166,10 @@ export default function CartPage({ params }: PageProps) {
 
             {items.length > 0 ? (
               <button
+                type="button"
                 onClick={handleClearCart}
-                className="rounded-full bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700"
+                aria-label="Clear cart"
+                className="rounded-full bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
               >
                 Clear
               </button>
@@ -185,7 +189,7 @@ export default function CartPage({ params }: PageProps) {
 
               <Link
                 href={`/r/${slug}`}
-                className="mt-5 inline-block rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white"
+                className="mt-5 inline-block rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
               >
                 Browse menu
               </Link>
@@ -193,7 +197,7 @@ export default function CartPage({ params }: PageProps) {
           ) : (
             <>
               {hasSoldOutItems ? (
-                <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+                <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4" role="alert">
                   <p className="text-sm font-semibold text-red-700">
                     One or more items in your cart are sold out. Remove them to continue.
                   </p>
@@ -241,8 +245,10 @@ export default function CartPage({ params }: PageProps) {
                       </div>
 
                       <button
+                        type="button"
                         onClick={() => removeFromCart(item.lineId || item.id)}
-                        className="text-sm font-medium text-neutral-500"
+                        aria-label={`Remove ${item.name} from order`}
+                        className="rounded px-1 text-sm font-medium text-neutral-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
                       >
                         Remove
                       </button>
@@ -251,9 +257,10 @@ export default function CartPage({ params }: PageProps) {
                     <div className="mt-4 flex items-center justify-between">
                       <div className="inline-flex items-center rounded-full border border-neutral-200 bg-white">
                         <button
+                          type="button"
                           onClick={() => handleDecrease(item)}
-                          className="h-10 w-10 text-lg font-semibold text-neutral-900"
-                          aria-label={`Decrease quantity of ${item.name}`}
+                          className="h-10 w-10 rounded-l-full text-lg font-semibold text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+                          aria-label={`Decrease quantity for ${item.name}`}
                         >
                           −
                         </button>
@@ -263,9 +270,10 @@ export default function CartPage({ params }: PageProps) {
                         </span>
 
                         <button
+                          type="button"
                           onClick={() => handleIncrease(item)}
-                          className="h-10 w-10 text-lg font-semibold text-neutral-900"
-                          aria-label={`Increase quantity of ${item.name}`}
+                          className="h-10 w-10 rounded-r-full text-lg font-semibold text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+                          aria-label={`Increase quantity for ${item.name}`}
                         >
                           +
                         </button>
@@ -279,7 +287,10 @@ export default function CartPage({ params }: PageProps) {
                 ))}
               </div>
 
-              <div className="mt-5 rounded-3xl border border-neutral-200 bg-neutral-50 p-4">
+              <div
+                className="mt-5 rounded-3xl border border-neutral-200 bg-neutral-50 p-4"
+                aria-live="polite"
+              >
                 <h2 className="text-base font-semibold text-neutral-900">
                   Order summary
                 </h2>
@@ -313,13 +324,14 @@ export default function CartPage({ params }: PageProps) {
           <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-3 backdrop-blur">
             <div className="mx-auto w-full max-w-md">
               {hasSoldOutItems ? (
-                <div className="rounded-2xl bg-red-600 px-4 py-4 text-center text-sm font-semibold text-white shadow-lg">
+                <div className="rounded-2xl bg-red-600 px-4 py-4 text-center text-sm font-semibold text-white shadow-lg" role="alert">
                   Remove sold out items to continue
                 </div>
               ) : (
                 <Link
                   href={`/r/${slug}/checkout`}
-                  className="flex w-full items-center justify-between rounded-2xl bg-neutral-900 px-4 py-4 text-white shadow-lg transition active:scale-[0.98]"
+                  aria-label={`Continue to checkout. ${itemCount} item${itemCount > 1 ? "s" : ""}, total ${subtotal.toFixed(2)} dollars`}
+                  className="flex w-full items-center justify-between rounded-2xl bg-neutral-900 px-4 py-4 text-white shadow-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 active:scale-[0.98]"
                 >
                   <span className="text-sm font-semibold">
                     Continue checkout

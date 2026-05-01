@@ -1,0 +1,10 @@
+SaanaOS Working Brand Colors
+
+SaanaOS Navy: #071E41
+SaanaOS Orange: #FF5A00
+Soft Orange Background: #FFF2E8
+Light Gray Border: #E6E8EC
+Slate Text: #334155
+White: #FFFFFF
+
+Note: These are working values based on the current logo direction. Lock final values after the production SVG logo is finalized.

@@ -472,7 +472,7 @@ export default function CheckoutPage({ params }: PageProps) {
 
             <Link
               href={`/r/${slug}`}
-              className="mt-5 inline-block rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white"
+              className="mt-5 inline-block rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
             >
               Go to menu
             </Link>
@@ -488,7 +488,7 @@ export default function CheckoutPage({ params }: PageProps) {
         <div className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 px-4 pb-4 pt-4 backdrop-blur">
           <Link
             href={`/r/${slug}/cart`}
-            className="text-sm font-medium text-neutral-500"
+            className="rounded text-sm font-medium text-neutral-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
           >
             ← Back to cart
           </Link>
@@ -507,6 +507,7 @@ export default function CheckoutPage({ params }: PageProps) {
         <form
           id="checkout-form"
           onSubmit={handleSubmit}
+          aria-describedby={error ? "checkout-error" : undefined}
           className="px-4 pb-36 pt-4"
         >
           <div className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
@@ -528,8 +529,10 @@ export default function CheckoutPage({ params }: PageProps) {
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   placeholder="Your name"
-                  className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+                  className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
                   autoComplete="name"
+                  required
+                  aria-required="true"
                 />
               </div>
 
@@ -546,16 +549,18 @@ export default function CheckoutPage({ params }: PageProps) {
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
                   placeholder="(555) 555-5555"
-                  className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+                  className="w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
                   autoComplete="tel"
                   inputMode="tel"
+                  required
+                  aria-required="true"
                 />
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-neutral-700">
+              <fieldset>
+                <legend className="mb-2 block text-sm font-medium text-neutral-700">
                   Pickup time
-                </label>
+                </legend>
 
                 <div className="space-y-3">
                   <button
@@ -567,7 +572,7 @@ export default function CheckoutPage({ params }: PageProps) {
                       }
                     }}
                     disabled={loadingPickupOptions || !pickupEvaluation.allowsAsap}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    className={`w-full rounded-2xl border px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60 ${
                       pickupMode === "asap"
                         ? "border-neutral-900 bg-neutral-900 text-white"
                         : "border-neutral-200 bg-white text-neutral-900"
@@ -604,7 +609,7 @@ export default function CheckoutPage({ params }: PageProps) {
                     disabled={
                       loadingPickupOptions || scheduledPickupOptions.length === 0
                     }
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    className={`w-full rounded-2xl border px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60 ${
                       pickupMode === "scheduled"
                         ? "border-neutral-900 bg-neutral-900 text-white"
                         : "border-neutral-200 bg-white text-neutral-900"
@@ -628,6 +633,9 @@ export default function CheckoutPage({ params }: PageProps) {
 
                 {pickupMode === "scheduled" ? (
                   <div className="mt-3">
+                    <label htmlFor="pickupTime" className="sr-only">
+                      Scheduled pickup time
+                    </label>
                     <select
                       id="pickupTime"
                       value={pickupTime}
@@ -635,7 +643,7 @@ export default function CheckoutPage({ params }: PageProps) {
                       disabled={
                         loadingPickupOptions || scheduledPickupOptions.length === 0
                       }
-                      className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-400 disabled:cursor-not-allowed disabled:bg-neutral-100"
+                      className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:bg-neutral-100"
                     >
                       {scheduledPickupOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -674,11 +682,11 @@ export default function CheckoutPage({ params }: PageProps) {
                 ) : null}
 
                 {!loadingPickupOptions && pickupOptions.length === 0 ? (
-                  <p className="mt-2 text-xs text-red-600">
+                  <p className="mt-2 text-xs text-red-600" role="alert">
                     No pickup times are currently available.
                   </p>
                 ) : null}
-              </div>
+              </fieldset>
 
               <div>
                 <label
@@ -692,13 +700,13 @@ export default function CheckoutPage({ params }: PageProps) {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Extra sauce, no onions, call on arrival, etc."
-                  className="min-h-[100px] w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+                  className="min-h-[100px] w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
                 />
               </div>
             </div>
           </div>
 
-          <div className="mt-4 rounded-3xl border border-neutral-200 bg-neutral-50 p-4">
+          <div className="mt-4 rounded-3xl border border-neutral-200 bg-neutral-50 p-4" aria-live="polite">
             <h2 className="text-base font-semibold text-neutral-900">
               Order summary
             </h2>
@@ -746,7 +754,11 @@ export default function CheckoutPage({ params }: PageProps) {
           </div>
 
           {error ? (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div
+              id="checkout-error"
+              className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              role="alert"
+            >
               {error}
             </div>
           ) : null}
@@ -754,13 +766,14 @@ export default function CheckoutPage({ params }: PageProps) {
           <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
             <label className="flex items-start gap-3 text-sm text-neutral-700">
               <input
+                id="smsOptIn"
                 type="checkbox"
                 checked={smsOptIn}
                 onChange={(e) => {
                   setSmsConsentTouched(true);
                   setSmsOptIn(e.target.checked);
                 }}
-                className="mt-1"
+                className="mt-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
               />
               <span className="leading-5">
                 I agree to receive SMS updates about my order from{" "}
@@ -778,7 +791,8 @@ export default function CheckoutPage({ params }: PageProps) {
               type="submit"
               form="checkout-form"
               disabled={submitting || loadingPickupOptions || pickupOptions.length === 0}
-              className="flex w-full items-center justify-between rounded-2xl bg-neutral-900 px-4 py-4 text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98]"
+              aria-label={`Place order for ${total.toFixed(2)} dollars`}
+              className="flex w-full items-center justify-between rounded-2xl bg-neutral-900 px-4 py-4 text-white shadow-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98]"
             >
               <span className="text-sm font-semibold">
                 {submitting ? "Placing order..." : "Place order"}

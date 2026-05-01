@@ -381,7 +381,7 @@ export default function SuccessPage({ params }: PageProps) {
           ) : null}
 
           {cancelMessage ? (
-            <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
               {cancelMessage}
             </div>
           ) : null}
@@ -434,7 +434,7 @@ export default function SuccessPage({ params }: PageProps) {
               type="button"
               onClick={handleCancelOrder}
               disabled={cancelSubmitting}
-              className="mt-5 block w-full rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-700 disabled:opacity-60"
+              className="mt-5 block w-full rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:opacity-60"
             >
               {cancelSubmitting ? "Cancelling..." : "Cancel Order"}
             </button>
@@ -443,14 +443,14 @@ export default function SuccessPage({ params }: PageProps) {
           <div className="mt-6 space-y-3">
             <Link
               href={`/r/${slug}`}
-              className="block w-full rounded-2xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white"
+              className="block w-full rounded-2xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
             >
               Back to menu
             </Link>
 
             <Link
               href={`/r/${slug}`}
-              className="block w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-900"
+              className="block w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
             >
               Start another order
             </Link>

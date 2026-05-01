@@ -179,7 +179,7 @@ export default function ConfirmationPage() {
           {statusMessage}
         </p>
 
-        <div className="mt-4 flex items-center justify-center">
+        <div className="mt-4 flex items-center justify-center" aria-live="polite">
           <span
             className={`rounded-full px-3 py-1 text-xs font-semibold ${statusPillClass(
               normalizedStatus
@@ -189,7 +189,7 @@ export default function ConfirmationPage() {
           </span>
         </div>
 
-        <div className="mt-6 w-full rounded-2xl border p-4 text-left">
+        <div className="mt-6 w-full rounded-2xl border p-4 text-left" aria-live="polite">
           <p className="text-sm text-gray-500">Order Number</p>
           <p className="font-semibold">
             {loading
@@ -227,7 +227,7 @@ export default function ConfirmationPage() {
 
         <Link
           href={`/r/${slug}`}
-          className="mt-6 block w-full rounded-2xl bg-black px-4 py-3 text-center font-semibold text-white"
+          className="mt-6 block w-full rounded-2xl bg-black px-4 py-3 text-center font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
         >
           Back to Menu
         </Link>
