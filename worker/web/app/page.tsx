@@ -138,8 +138,8 @@ export default function HomePage() {
 
       <section className="relative z-10 overflow-hidden border-b border-orange-100 bg-white/90">
         <FloatingPattern className="-right-28 top-12 w-[420px] opacity-[0.07] sm:opacity-[0.08] lg:w-[560px] lg:opacity-[0.10]" />
-        <SectionShell className="relative z-10 pb-14 pt-12 sm:pb-20 sm:pt-16">
-          <div className="grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+        <SectionShell className="relative z-10 pb-14 pt-10 sm:pb-20 sm:pt-16">
+          <div className="grid gap-9 sm:gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
             <div>
               <div
                 className="inline-flex rounded-full px-3 py-2 text-xs font-black uppercase tracking-[0.12em]"
@@ -152,14 +152,14 @@ export default function HomePage() {
               </div>
 
               <h1
-                className="mt-6 max-w-4xl text-5xl font-black leading-[0.96] tracking-normal sm:text-6xl lg:text-7xl"
+                className="mt-6 max-w-4xl text-5xl font-black leading-[0.98] tracking-normal sm:text-6xl lg:text-[5.25rem] lg:leading-[0.94] xl:text-[5.75rem]"
                 style={{ color: saanaColors.navy }}
               >
                 Recover missed calls. Turn them into direct pickup orders.
               </h1>
 
               <p
-                className="mt-6 max-w-2xl text-lg leading-8 sm:text-xl"
+                className="mt-6 max-w-2xl text-lg leading-8 sm:text-xl lg:text-2xl lg:leading-9"
                 style={{ color: saanaColors.muted }}
               >
                 SaanaOS helps restaurants send SMS ordering links when calls are
@@ -167,7 +167,7 @@ export default function HomePage() {
                 rush.
               </p>
 
-              <div className="mt-7">
+              <div className="mt-8">
                 <TrustLine />
               </div>
 
@@ -179,8 +179,8 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-orange-100 bg-[#fffaf7] p-4 shadow-[0_24px_70px_rgba(7,30,65,0.12)] sm:p-6">
-              <div className="rounded-[22px] bg-white p-5 shadow-sm">
+            <div className="rounded-[28px] border border-orange-100 bg-[#fffaf7] p-3 shadow-[0_24px_70px_rgba(7,30,65,0.12)] sm:p-6">
+              <div className="rounded-[22px] bg-white p-4 shadow-sm sm:p-5">
                 <div
                   className="mb-4 inline-flex rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.1em]"
                   style={{
@@ -194,10 +194,10 @@ export default function HomePage() {
                   {howItWorksSteps.map((step, index) => (
                     <div
                       key={step}
-                      className="grid grid-cols-[52px_1fr] items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
-                    >
-                      <div
-                        className="grid h-12 w-12 place-items-center rounded-2xl text-lg font-black text-white"
+                        className="grid grid-cols-[44px_1fr] items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm sm:grid-cols-[52px_1fr] sm:gap-4 sm:p-4"
+                      >
+                        <div
+                          className="grid h-11 w-11 place-items-center rounded-2xl text-base font-black text-white sm:h-12 sm:w-12 sm:text-lg"
                         style={{
                           backgroundColor:
                             index === 2 ? saanaColors.orange : saanaColors.navy,
@@ -213,7 +213,7 @@ export default function HomePage() {
                           {step}
                         </p>
                         <p
-                          className="text-sm"
+                          className="text-sm leading-5"
                           style={{ color: saanaColors.muted }}
                         >
                           {index === 0

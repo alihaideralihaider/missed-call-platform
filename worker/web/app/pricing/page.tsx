@@ -95,7 +95,7 @@ export default function PricingPage() {
 
       <section className="relative z-10 overflow-hidden border-b border-orange-100 bg-white/90">
         <FloatingPattern className="-right-28 top-10 w-[420px] opacity-[0.07] sm:opacity-[0.08] lg:w-[560px] lg:opacity-[0.10]" />
-        <SectionShell className="relative z-10 pb-14 pt-12 sm:pb-20 sm:pt-16">
+        <SectionShell className="relative z-10 pb-14 pt-10 sm:pb-20 sm:pt-16">
           <div className="mx-auto max-w-4xl text-center">
             <div
               className="inline-flex rounded-full px-3 py-2 text-xs font-black uppercase tracking-[0.12em]"
@@ -108,14 +108,14 @@ export default function PricingPage() {
             </div>
 
             <h1
-              className="mt-6 text-5xl font-black leading-[0.98] tracking-normal sm:text-6xl lg:text-7xl"
+              className="mt-6 text-5xl font-black leading-[0.98] tracking-normal sm:text-6xl lg:text-[5.25rem] lg:leading-[0.94] xl:text-[5.75rem]"
               style={{ color: saanaColors.navy }}
             >
               Simple restaurant technology pricing.
             </h1>
 
             <p
-              className="mx-auto mt-6 max-w-3xl text-lg leading-8 sm:text-xl"
+              className="mx-auto mt-6 max-w-3xl text-lg leading-8 sm:text-xl lg:text-2xl lg:leading-9"
               style={{ color: saanaColors.muted }}
             >
               Start with missed-call recovery, then add website, menu, checkout,
