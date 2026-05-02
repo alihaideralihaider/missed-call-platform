@@ -1,5 +1,11 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { incrementRestaurantUsage } from "@/lib/restaurant-usage";
+import { sendSms } from "@/lib/messaging/sendSms";
+import {
+  createMissedCallRecoveryAttempt,
+  recordMissedCallRecoverySms,
+  recordMissedCallRecoverySmsFailure,
+} from "@/lib/attempts/universalAttemptsEngine";
 
 export const runtime = "nodejs";
 
@@ -156,43 +162,23 @@ function buildOrderLink(restaurantSlug: string) {
   return `${baseUrl}/r/${restaurantSlug}`;
 }
 
-function getTwilioAuthHeader() {
-  const accountSid = getRequiredEnv("TWILIO_ACCOUNT_SID");
-  const authToken = getRequiredEnv("TWILIO_AUTH_TOKEN");
-
-  return `Basic ${btoa(`${accountSid}:${authToken}`)}`;
-}
-
 async function sendOrderLinkSms(input: {
   to: string;
   orderLink: string;
+  restaurantId: string;
 }) {
-  const accountSid = getRequiredEnv("TWILIO_ACCOUNT_SID");
-  const fromNumber = getRequiredEnv("TWILIO_FROM_NUMBER");
-  const body = new URLSearchParams({
-    To: input.to,
-    From: fromNumber,
-    Body: `SaanaOS: Here is your order link: ${input.orderLink} Reply STOP to opt out.`,
+  const result = await sendSms({
+    to: input.to,
+    body: `SaanaOS: Here is your order link: ${input.orderLink} Reply STOP to opt out.`,
+    restaurantId: input.restaurantId,
+    messageType: "missed_call_recovery_link",
   });
 
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: getTwilioAuthHeader(),
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: body.toString(),
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Twilio SMS request failed: ${response.status} ${errorText}`);
+  if (!result.success) {
+    throw new Error(result.error || "SMS request failed.");
   }
 
-  return response.json();
+  return result.raw ?? { sid: result.messageId, provider: result.provider };
 }
 
 export async function POST(request: Request) {
@@ -269,6 +255,26 @@ export async function POST(request: Request) {
 
   if (resolvedFrom) {
     try {
+      await createMissedCallRecoveryAttempt({
+        restaurantId: voiceContext.restaurantId,
+        businessId: voiceContext.businessId,
+        restaurantSlug: voiceContext.restaurantSlug,
+        callSid,
+        from: resolvedFrom,
+        to: resolvedTo,
+      });
+    } catch (attemptError) {
+      console.error("attempt_job_create_failed", {
+        callSid,
+        from: resolvedFrom,
+        to: resolvedTo,
+        restaurant_id: voiceContext.restaurantId,
+        error:
+          attemptError instanceof Error ? attemptError.message : "unknown_error",
+      });
+    }
+
+    try {
       const optedOut = await hasOptOut(resolvedFrom, voiceContext.businessId);
 
       if (optedOut) {
@@ -292,13 +298,38 @@ export async function POST(request: Request) {
       );
 
       if (hasConsent) {
-        try {
-          const orderLink = buildOrderLink(voiceContext.restaurantSlug);
+        const orderLink = buildOrderLink(voiceContext.restaurantSlug);
 
-          await sendOrderLinkSms({
+        try {
+          const sms = await sendOrderLinkSms({
             to: resolvedFrom,
             orderLink,
+            restaurantId: voiceContext.restaurantId,
           });
+
+          try {
+            await recordMissedCallRecoverySms({
+              restaurantId: voiceContext.restaurantId,
+              businessId: voiceContext.businessId,
+              restaurantSlug: voiceContext.restaurantSlug,
+              callSid,
+              from: resolvedFrom,
+              to: resolvedTo,
+              orderLink,
+              messageType: "missed_call_recovery_link",
+              sms,
+            });
+          } catch (attemptError) {
+            console.error("attempt_message_record_failed", {
+              callSid,
+              from: resolvedFrom,
+              restaurant_id: voiceContext.restaurantId,
+              error:
+                attemptError instanceof Error
+                  ? attemptError.message
+                  : "unknown_error",
+            });
+          }
 
           try {
             await incrementRestaurantUsage({
@@ -331,6 +362,30 @@ export async function POST(request: Request) {
             },
           });
         } catch (error) {
+          try {
+            await recordMissedCallRecoverySmsFailure({
+              restaurantId: voiceContext.restaurantId,
+              businessId: voiceContext.businessId,
+              restaurantSlug: voiceContext.restaurantSlug,
+              callSid,
+              from: resolvedFrom,
+              to: resolvedTo,
+              orderLink,
+              messageType: "missed_call_recovery_link",
+              error,
+            });
+          } catch (attemptError) {
+            console.error("attempt_message_failure_record_failed", {
+              callSid,
+              from: resolvedFrom,
+              restaurant_id: voiceContext.restaurantId,
+              error:
+                attemptError instanceof Error
+                  ? attemptError.message
+                  : "unknown_error",
+            });
+          }
+
           console.error("returning_caller_sms_failed", {
             callSid,
             from: resolvedFrom,

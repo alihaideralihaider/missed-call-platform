@@ -1,5 +1,10 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { incrementRestaurantUsage } from "@/lib/restaurant-usage";
+import { sendSms } from "@/lib/messaging/sendSms";
+import {
+  recordMissedCallRecoverySms,
+  recordMissedCallRecoverySmsFailure,
+} from "@/lib/attempts/universalAttemptsEngine";
 
 export const runtime = "nodejs";
 
@@ -59,13 +64,6 @@ function buildOrderLink(restaurantSlug: string) {
     restaurantSlug,
     orderLink: `${baseUrl}/r/${restaurantSlug}`,
   };
-}
-
-function getTwilioAuthHeader() {
-  const accountSid = getRequiredEnv("TWILIO_ACCOUNT_SID");
-  const authToken = getRequiredEnv("TWILIO_AUTH_TOKEN");
-
-  return `Basic ${btoa(`${accountSid}:${authToken}`)}`;
 }
 
 async function resolveBusinessId(restaurantId: string) {
@@ -170,6 +168,7 @@ async function sendOrderLinkSms(input: {
   to: string;
   orderLink: string;
   businessId: string | null;
+  restaurantId: string;
 }) {
   if (await isOptedOut(input.to, input.businessId)) {
     console.log("sms_suppressed_opt_out", {
@@ -186,36 +185,29 @@ async function sendOrderLinkSms(input: {
     };
   }
 
-  const accountSid = getRequiredEnv("TWILIO_ACCOUNT_SID");
-  const fromNumber = getRequiredEnv("TWILIO_FROM_NUMBER");
-  const body = new URLSearchParams({
-    To: input.to,
-    From: fromNumber,
-    Body: `SaanaOS: Here is your order link: ${input.orderLink} Reply STOP to opt out.`,
+  const result = await sendSms({
+    to: input.to,
+    body: `SaanaOS: Here is your order link: ${input.orderLink} Reply STOP to opt out.`,
+    restaurantId: input.restaurantId,
+    messageType: "ivr_consent_order_link",
+    metadata: {
+      businessId: input.businessId,
+    },
   });
 
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: getTwilioAuthHeader(),
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: body.toString(),
-    },
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Twilio SMS request failed: ${response.status} ${errorText}`);
+  if (!result.success) {
+    throw new Error(result.error || "SMS request failed.");
   }
 
-  return (await response.json()) as {
+  return (result.raw ?? {
+    sid: result.messageId,
+    provider: result.provider,
+  }) as {
     sid?: string | null;
     status?: string | null;
     to?: string | null;
     from?: string | null;
+    provider?: string | null;
   };
 }
 
@@ -282,8 +274,12 @@ export async function POST(request: Request) {
     });
   }
 
+  let resolvedContext: Awaited<ReturnType<typeof resolveContextFromQuery>> = null;
+  let resolvedOrderLink = "";
+
   try {
     const context = await resolveContextFromQuery(url);
+    resolvedContext = context;
 
     if (!context) {
       console.warn("twilio_voice_consent_missing_mapping", {
@@ -305,13 +301,37 @@ export async function POST(request: Request) {
     }
 
     const { orderLink } = buildOrderLink(context.restaurantSlug);
+    resolvedOrderLink = orderLink;
     const businessId =
       context.businessId || (await resolveBusinessId(context.restaurantId));
     const sms = await sendOrderLinkSms({
       to: from,
       orderLink,
       businessId,
+      restaurantId: context.restaurantId,
     });
+
+    try {
+      await recordMissedCallRecoverySms({
+        restaurantId: context.restaurantId,
+        businessId,
+        restaurantSlug: context.restaurantSlug,
+        callSid,
+        from,
+        to,
+        orderLink,
+        messageType: "ivr_consent_order_link",
+        sms,
+      });
+    } catch (attemptError) {
+      console.error("attempt_message_record_failed", {
+        callSid,
+        from,
+        restaurant_id: context.restaurantId,
+        error:
+          attemptError instanceof Error ? attemptError.message : "unknown_error",
+      });
+    }
 
     if (!("suppressed" in sms && sms.suppressed === true)) {
       try {
@@ -367,6 +387,30 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    if (resolvedContext && from && resolvedOrderLink) {
+      try {
+        await recordMissedCallRecoverySmsFailure({
+          restaurantId: resolvedContext.restaurantId,
+          businessId: resolvedContext.businessId,
+          restaurantSlug: resolvedContext.restaurantSlug,
+          callSid,
+          from,
+          to,
+          orderLink: resolvedOrderLink,
+          messageType: "ivr_consent_order_link",
+          error,
+        });
+      } catch (attemptError) {
+        console.error("attempt_message_failure_record_failed", {
+          callSid,
+          from,
+          restaurant_id: resolvedContext.restaurantId,
+          error:
+            attemptError instanceof Error ? attemptError.message : "unknown_error",
+        });
+      }
+    }
+
     console.error("twilio_voice_consent_failed", {
       callSid,
       from,

@@ -1,6 +1,8 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextRequest, NextResponse } from "next/server";
 
+import { markMissedCallRecoveryOrderPlaced } from "@/lib/attempts/universalAttemptsEngine";
+
 type FetchLikeBinding = {
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
 };
@@ -10,6 +12,21 @@ function getErrorMessage(data: unknown) {
 
   const error = (data as { error?: unknown }).error;
   return typeof error === "string" ? error : "";
+}
+
+function buildOrderApiUrl(workerUrl: string) {
+  const url = new URL(workerUrl.trim());
+
+  if (url.pathname === "/" || url.pathname === "") {
+    url.pathname = "/api/orders";
+    return url.toString();
+  }
+
+  if (!url.pathname.endsWith("/api/orders")) {
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/api/orders`;
+  }
+
+  return url.toString();
 }
 
 export async function POST(req: NextRequest) {
@@ -24,10 +41,15 @@ export async function POST(req: NextRequest) {
       | undefined;
     const workerUrl = process.env.ORDER_API_BASE_URL?.trim();
 
-    console.log("API /orders hit");
-    console.log("ORDER_API_SERVICE bound:", Boolean(orderApiService));
-    console.log("ORDER_API_BASE_URL:", workerUrl);
-    console.log("PROXY_PAYLOAD_ITEMS", body?.items);
+    console.log("API /orders hit", {
+      hasOrderApiService: Boolean(orderApiService),
+      hasOrderApiBaseUrl: Boolean(workerUrl),
+      restaurantSlug:
+        typeof body?.restaurantSlug === "string" ? body.restaurantSlug : null,
+      itemCount: Array.isArray(body?.items) ? body.items.length : 0,
+      hasPickupAt: typeof body?.pickupAt === "string" && body.pickupAt.length > 0,
+      smsOptIn: body?.smsOptIn === true,
+    });
 
     if (!orderApiService && !workerUrl) {
       console.error("Missing ORDER_API_SERVICE and ORDER_API_BASE_URL");
@@ -45,9 +67,28 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(body),
     };
 
-    const res = orderApiService
-      ? await orderApiService.fetch(new URL("/api/orders", req.url), requestInit)
-      : await fetch(`${workerUrl!.replace(/\/+$/, "")}/api/orders`, requestInit);
+    let res: Response;
+
+    try {
+      res = orderApiService
+        ? await orderApiService.fetch(new URL("/api/orders", req.url), requestInit)
+        : await fetch(buildOrderApiUrl(workerUrl!), requestInit);
+    } catch (proxyError) {
+      console.error("API /orders proxy request failed:", {
+        hasOrderApiService: Boolean(orderApiService),
+        hasOrderApiBaseUrl: Boolean(workerUrl),
+        error:
+          proxyError instanceof Error ? proxyError.message : String(proxyError),
+      });
+
+      return NextResponse.json(
+        {
+          error:
+            "Order service is temporarily unavailable. Please try again shortly.",
+        },
+        { status: 503 }
+      );
+    }
 
     const contentType = res.headers.get("content-type") || "";
     const isJson = contentType.includes("application/json");
@@ -62,13 +103,58 @@ export async function POST(req: NextRequest) {
     }
 
     console.log("Worker response status:", res.status);
-    console.log("Worker response body:", data);
 
     if (!res.ok) {
       return NextResponse.json(
         { error: getErrorMessage(data) || "Worker error" },
         { status: res.status }
       );
+    }
+
+    const orderId =
+      data && typeof data === "object" && typeof (data as { orderId?: unknown }).orderId === "string"
+        ? (data as { orderId: string }).orderId
+        : "";
+    const orderNumber =
+      data &&
+      typeof data === "object" &&
+      typeof (data as { orderNumber?: unknown }).orderNumber === "string"
+        ? (data as { orderNumber: string }).orderNumber
+        : null;
+    const total =
+      data && typeof data === "object" && typeof (data as { total?: unknown }).total === "number"
+        ? (data as { total: number }).total
+        : null;
+
+    if (
+      orderId &&
+      typeof body?.restaurantSlug === "string" &&
+      typeof body?.customerPhone === "string"
+    ) {
+      try {
+        const attemptJobId = await markMissedCallRecoveryOrderPlaced({
+          restaurantSlug: body.restaurantSlug,
+          customerPhone: body.customerPhone,
+          orderId,
+          orderNumber,
+          total,
+        });
+
+        console.log("attempt_outcome_order_placed", {
+          attemptJobId,
+          orderId,
+          restaurantSlug: body.restaurantSlug,
+        });
+      } catch (attemptError) {
+        console.error("attempt_outcome_order_placed_failed", {
+          orderId,
+          restaurantSlug: body.restaurantSlug,
+          error:
+            attemptError instanceof Error
+              ? attemptError.message
+              : "unknown_error",
+        });
+      }
     }
 
     return NextResponse.json(data);
