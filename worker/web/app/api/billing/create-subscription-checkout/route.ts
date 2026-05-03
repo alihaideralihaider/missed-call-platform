@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
         getAppBaseUrl,
         getSubscriptionPriceId,
         isAddonKey,
+        isOptionalAddonKey,
         isSubscriptionPlanKey,
         stripePostForm,
       },
@@ -38,11 +39,11 @@ export async function POST(req: NextRequest) {
     const addons = Array.isArray(body?.addons)
       ? body.addons
           .map((entry: unknown) => String(entry || "").trim().toLowerCase())
-          .filter((entry: string): entry is "assisted_support" | "hosting" | "virtual_phone" =>
-            isAddonKey(entry)
+          .filter((entry: string): entry is "assisted_support" | "hosting" =>
+            isAddonKey(entry) && isOptionalAddonKey(entry)
           )
       : [];
-    const uniqueAddons: Array<"assisted_support" | "hosting" | "virtual_phone"> =
+    const uniqueAddons: Array<"assisted_support" | "hosting"> =
       Array.from(new Set(addons));
 
     if (!restaurantSlug || !isSubscriptionPlanKey(planKey)) {

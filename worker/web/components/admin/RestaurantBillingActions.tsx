@@ -4,6 +4,8 @@ import { useState } from "react";
 import {
   ADDON_KEYS,
   BILLING_ADD_ONS,
+  BILLING_INCLUDED_COMPONENTS,
+  BILLING_OPTIONAL_ADD_ONS,
   BILLING_SERVICES,
   SUBSCRIPTION_PLANS,
   type AddonKey,
@@ -58,9 +60,9 @@ const PLAN_DETAILS: Record<
   base_monthly: {
     badge: "Founding price locked forever",
     intro: "Simple launch plan for restaurants that want a clean ordering line.",
-    originalPrice: "Normally $59/month",
+    originalPrice: "Normally $69/month",
     features: [
-      "Dedicated ordering line included",
+      "Includes Virtual Phone & Messaging",
       "125 calls/month",
       "400 SMS/month",
       "Warning at 80%",
@@ -72,9 +74,9 @@ const PLAN_DETAILS: Record<
   pro_monthly: {
     badge: "Founding price locked forever",
     intro: "Everything in Basic plus stronger storefront tools.",
-    originalPrice: "Normally $69/month",
+    originalPrice: "Normally $79/month",
     features: [
-      "Dedicated ordering line included",
+      "Includes Virtual Phone & Messaging",
       "125 calls/month",
       "400 SMS/month",
       "Warning at 80%",
@@ -87,9 +89,9 @@ const PLAN_DETAILS: Record<
   pro_plus_monthly: {
     badge: "Founding price locked forever",
     intro: "Everything in Pro plus more hands-on support.",
-    originalPrice: "Normally $79/month",
+    originalPrice: "Normally $89/month",
     features: [
-      "Dedicated ordering line included",
+      "Includes Virtual Phone & Messaging",
       "125 calls/month",
       "400 SMS/month",
       "Warning at 80%",
@@ -241,14 +243,23 @@ export default function RestaurantBillingActions({
               </div>
               <div className="mt-4 space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Included platform component
+                </p>
+                {BILLING_INCLUDED_COMPONENTS.map((addOn) => (
+                  <div
+                    key={addOn.key}
+                    className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800"
+                  >
+                    <span className="font-semibold">{addOn.label}</span>
+                    <p className="mt-1 text-xs leading-5">{addOn.description}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
                   Optional add-ons
                 </p>
-                {BILLING_ADD_ONS.filter(
-                  (addOn) =>
-                    addOn.key === "assisted_support" ||
-                    addOn.key === "hosting" ||
-                    addOn.key === "virtual_phone"
-                ).map((addOn) => {
+                {BILLING_OPTIONAL_ADD_ONS.map((addOn) => {
                   const addonKey = addOn.key as AddonKey;
 
                   return (
@@ -329,13 +340,22 @@ export default function RestaurantBillingActions({
 
       <div className="rounded-2xl border border-neutral-200 bg-white p-4">
         <p className="text-sm font-semibold text-neutral-900">Monthly add-ons</p>
-        <p className="mt-1 text-sm text-neutral-500">Secure payment.</p>
+        <p className="mt-1 text-sm text-neutral-500">
+          Virtual Phone & Messaging is included with every missed-call recovery plan.
+        </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {BILLING_ADD_ONS.map((addOn) => (
+          {BILLING_ADD_ONS.map((addOn) => {
+            const isIncluded = addOn.key === "virtual_phone";
+
+            return (
             <div
               key={addOn.key}
-              className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4"
+              className={`rounded-2xl border p-4 ${
+                isIncluded
+                  ? "border-green-200 bg-green-50"
+                  : "border-neutral-200 bg-neutral-50"
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm font-semibold text-neutral-900">
@@ -349,10 +369,13 @@ export default function RestaurantBillingActions({
                 {addOn.description}
               </p>
               <p className="mt-4 text-xs font-medium text-neutral-500">
-                Select this add-on from a plan card above.
+                {isIncluded
+                  ? "Included automatically with missed-call recovery plans."
+                  : "Select this add-on from a plan card above."}
               </p>
             </div>
-          ))}
+          );
+          })}
         </div>
       </div>
 

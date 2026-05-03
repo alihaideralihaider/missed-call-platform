@@ -5,10 +5,12 @@ export const SUBSCRIPTION_PLAN_KEYS = [
 ] as const;
 export const SERVICE_KEYS = ["website_setup", "usage_pack"] as const;
 export const ADDON_KEYS = ["assisted_support", "hosting", "virtual_phone"] as const;
+export const OPTIONAL_ADDON_KEYS = ["assisted_support", "hosting"] as const;
 
 export type SubscriptionPlanKey = (typeof SUBSCRIPTION_PLAN_KEYS)[number];
 export type ServiceKey = (typeof SERVICE_KEYS)[number];
 export type AddonKey = (typeof ADDON_KEYS)[number];
+export type OptionalAddonKey = (typeof OPTIONAL_ADDON_KEYS)[number];
 
 type SubscriptionConfig = {
   envKey: string;
@@ -42,24 +44,24 @@ const SUBSCRIPTION_CONFIG: Record<SubscriptionPlanKey, SubscriptionConfig> = {
   base_monthly: {
     envKey: "STRIPE_PRICE_BASE_MONTHLY",
     label: "Basic",
-    priceLabel: "$29/month",
-    originalPriceLabel: "$59/month",
+    priceLabel: "$39/month",
+    originalPriceLabel: "$69/month",
     description:
-      "Dedicated ordering line included. Includes 125 calls/month, 400 SMS/month, missed call to SMS link, confirmed and ready notifications, and warning at 80% usage.",
+      "Includes Virtual Phone & Messaging, 125 calls/month, 400 SMS/month, missed call to SMS link, confirmed and ready notifications, and warning at 80% usage.",
   },
   pro_monthly: {
     envKey: "STRIPE_PRICE_PRO_MONTHLY",
     label: "Pro",
-    priceLabel: "$39/month",
-    originalPriceLabel: "$69/month",
+    priceLabel: "$49/month",
+    originalPriceLabel: "$79/month",
     description:
-      "Everything in Basic plus menu image upgrades, promotions display, a better storefront experience, and the same included ordering line, calls, SMS, and usage warning.",
+      "Everything in Basic plus menu image upgrades, promotions display, a better storefront experience, and the same included Virtual Phone & Messaging.",
   },
   pro_plus_monthly: {
     envKey: "STRIPE_PRICE_PRO_PLUS_MONTHLY",
     label: "Pro Plus",
-    priceLabel: "$49/month",
-    originalPriceLabel: "$79/month",
+    priceLabel: "$59/month",
+    originalPriceLabel: "$89/month",
     description:
       "Everything in Pro plus priority support and assisted onboarding coming soon, with founding pricing locked in for early restaurants.",
   },
@@ -92,7 +94,7 @@ const CHECKOUT_ADDON_CONFIG: Record<AddonKey, CheckoutAddOnConfig> = {
   },
   virtual_phone: {
     envKey: "STRIPE_PRICE_VIRTUAL_PHONE_MONTHLY",
-    label: "Virtual Phone & Usage",
+    label: "Virtual Phone & Messaging",
   },
 };
 
@@ -113,10 +115,11 @@ export const BILLING_ADD_ONS: AddOnConfig[] = [
   },
   {
     key: "virtual_phone",
-    label: "Virtual Phone & Usage",
-    priceLabel: "$10/mo",
-    description: "Includes +100 calls/month and +300 SMS/month.",
-    statusLabel: "Optional add-on",
+    label: "Virtual Phone & Messaging",
+    priceLabel: "Included",
+    description:
+      "Required for missed-call recovery, SMS ordering links, and customer updates.",
+    statusLabel: "Included platform component",
   },
 ];
 
@@ -130,6 +133,14 @@ export const BILLING_SERVICES = SERVICE_KEYS.map((key) => ({
   ...SERVICE_CONFIG[key],
 }));
 
+export const BILLING_OPTIONAL_ADD_ONS = BILLING_ADD_ONS.filter((addOn) =>
+  OPTIONAL_ADDON_KEYS.includes(addOn.key as OptionalAddonKey)
+);
+
+export const BILLING_INCLUDED_COMPONENTS = BILLING_ADD_ONS.filter(
+  (addOn) => addOn.key === "virtual_phone"
+);
+
 export function isSubscriptionPlanKey(
   value: string
 ): value is SubscriptionPlanKey {
@@ -142,6 +153,10 @@ export function isServiceKey(value: string): value is ServiceKey {
 
 export function isAddonKey(value: string): value is AddonKey {
   return ADDON_KEYS.includes(value as AddonKey);
+}
+
+export function isOptionalAddonKey(value: string): value is OptionalAddonKey {
+  return OPTIONAL_ADDON_KEYS.includes(value as OptionalAddonKey);
 }
 
 export function getStripeSecretKey() {

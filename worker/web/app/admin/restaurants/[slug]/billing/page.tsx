@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import RestaurantBillingActions from "@/components/admin/RestaurantBillingActions";
 import { getRestaurantAdminAccessBySlug } from "@/lib/admin/restaurant-access";
 import {
+  BILLING_INCLUDED_COMPONENTS,
   getAddonLabel,
   getServiceLabel,
   getSubscriptionLabel,
@@ -41,8 +42,8 @@ function normalizeAddons(value: unknown) {
   return value
     .map((entry) => String(entry || "").trim().toLowerCase())
     .filter(
-      (entry): entry is "assisted_support" | "hosting" | "virtual_phone" =>
-        isAddonKey(entry)
+      (entry): entry is "assisted_support" | "hosting" =>
+        isAddonKey(entry) && entry !== "virtual_phone"
     );
 }
 
@@ -105,8 +106,8 @@ export default async function RestaurantBillingPage({
             </p>
             <p className="mt-1 text-sm text-amber-800">
               First 100 restaurants lock in founding pricing forever. All plans
-              include a dedicated ordering line, 125 calls/month, 400 SMS/month,
-              and a warning at 80% usage.
+              include Virtual Phone & Messaging, 125 calls/month, 400 SMS/month,
+              SMS ordering links, customer updates, and a warning at 80% usage.
             </p>
           </div>
 
@@ -163,6 +164,24 @@ export default async function RestaurantBillingPage({
                 No active add-ons
               </p>
             )}
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4">
+            <p className="text-sm font-semibold text-green-900">
+              Included required platform component
+            </p>
+            <div className="mt-2 space-y-2">
+              {BILLING_INCLUDED_COMPONENTS.map((component) => (
+                <div key={component.key}>
+                  <p className="text-sm font-semibold text-green-900">
+                    {component.label}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-green-800">
+                    {component.description}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="mt-6">
