@@ -99,3 +99,9 @@ Outcome:
 The Universal Agent Metering Standard v1 is documented in [agent-metering-standard.md](./agent-metering-standard.md).
 
 Implementation is future work. Pricing and billing should not be finalized until normalized usage metrics are implemented, validated, and tied back to source runs, actions, attempts, outcomes, and delivery records.
+
+## Billing Architecture
+
+Billing Architecture v1 is documented as future work downstream of metering in [billing-architecture-v1.md](../billing/billing-architecture-v1.md).
+
+Billing implementation should start only after `usage_events` are implemented, idempotent, traceable, and validated against real agent runs, actions, attempts, outcomes, and delivery records.
