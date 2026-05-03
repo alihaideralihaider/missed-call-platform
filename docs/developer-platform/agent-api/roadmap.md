@@ -10,11 +10,16 @@ Scope:
 - normalize apply suggestion action shape
 - keep existing SaanaOS runtime behavior
 - keep validation inside existing source systems
-- prepare internal run/action logs
+- persist action logs for v1 suggest/apply modifier calls when `agent_run_id` is supplied
+- include action versioning and idempotent request logging for initial action traces
 
 Outcome:
 
 - AuthToolkit can describe SaanaOS agent behavior without exposing internal tables.
+- Initial platform tables exist for `agent_events`, `agent_runs`, and `agent_actions`.
+- Suggest/apply modifier calls can be traced through `GET /v1/agent/runs/{id}`.
+- Action logs include `action_version`, UTC timestamps, and duplicate `request_id` protection.
+- Agent runs can optionally link to Universal Attempts Engine jobs through `attempt_job_id` without changing attempts execution.
 
 ## Phase 2: Event Intake
 
@@ -29,10 +34,14 @@ Scope:
 - idempotency keys
 - request IDs
 - source system metadata
+- persisted `agent_events`
+- persisted `agent_runs`
+- optional `attempt_job_id` bridge for traceability from attempts to agent runs and actions
 
 Outcome:
 
-- external systems can trigger agent runs without direct integration into SaanaOS internals.
+- external systems can trigger and inspect accepted agent runs without direct integration into SaanaOS internals.
+- internal traces can connect `event -> attempt_job -> agent_run -> agent_actions -> outcome`.
 
 ## Phase 3: Sandbox
 
@@ -85,3 +94,8 @@ Outcome:
 
 - AuthToolkit becomes a developer-facing agent execution platform, with SaanaOS as the first internal implementation and RecoveryStack as the product family.
 
+## Metering Standard
+
+The Universal Agent Metering Standard v1 is documented in [agent-metering-standard.md](./agent-metering-standard.md).
+
+Implementation is future work. Pricing and billing should not be finalized until normalized usage metrics are implemented, validated, and tied back to source runs, actions, attempts, outcomes, and delivery records.
