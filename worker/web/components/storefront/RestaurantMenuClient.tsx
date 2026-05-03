@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import StickyCartBar from "@/components/storefront/StickyCartBar";
 import {
   addToCart,
+  cartTotal,
   syncCartWithMenu,
   type CartModifierSelection,
 } from "@/lib/cart";
@@ -45,6 +46,18 @@ type ModifierGroup = {
   selection_mode?: string | null;
   sort_order?: number | null;
   options: ModifierOption[];
+};
+
+type ModifierSuggestion = {
+  id: string;
+  title: string;
+  message: string;
+  itemId: string;
+  modifierGroupId: string;
+  modifierOptionId: string;
+  groupName: string;
+  optionName: string;
+  priceDelta: number;
 };
 
 type Promotion = {
@@ -166,6 +179,45 @@ function itemHasModifiers(item: MenuItem) {
   return getItemModifierGroups(item).length > 0;
 }
 
+function buildSelectedModifierEntries(
+  item: MenuItem,
+  selectionsByGroup: Record<string, string[]>
+) {
+  return getItemModifierGroups(item).flatMap((group) =>
+    (selectionsByGroup[group.id] || [])
+      .map((optionId) => {
+        const option = group.options.find((entry) => entry.id === optionId);
+        if (!option) return null;
+
+        return {
+          groupId: group.id,
+          groupName: group.name,
+          optionId: option.id,
+          optionName: option.name,
+          price: Number(option.price || 0),
+        } satisfies CartModifierSelection;
+      })
+      .filter(
+        (modifier): modifier is CartModifierSelection => modifier !== null
+      )
+  );
+}
+
+function getSuggestionCartId() {
+  if (typeof window === "undefined") return "";
+
+  const key = "saanaos_modifier_suggestion_cart_id";
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+
+  const next =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `cart_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  window.localStorage.setItem(key, next);
+  return next;
+}
+
 export default function RestaurantMenuClient({
   items,
   restaurantName,
@@ -187,7 +239,12 @@ export default function RestaurantMenuClient({
   const [selectedOptionsByGroup, setSelectedOptionsByGroup] = useState<
     Record<string, string[]>
   >({});
+  const selectedOptionsByGroupRef = useRef<Record<string, string[]>>({});
   const [modifierError, setModifierError] = useState("");
+  const [modifierSuggestion, setModifierSuggestion] =
+    useState<ModifierSuggestion | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionResponding, setSuggestionResponding] = useState(false);
 
   const safeItems = useMemo(() => {
     return Array.isArray(items) ? items : [];
@@ -264,26 +321,7 @@ export default function RestaurantMenuClient({
   const selectedModifierEntries = useMemo(() => {
     if (!activeItem) return [];
 
-    const groups = getItemModifierGroups(activeItem);
-
-    return groups.flatMap((group) =>
-      (selectedOptionsByGroup[group.id] || [])
-        .map((optionId) => {
-          const option = group.options.find((entry) => entry.id === optionId);
-          if (!option) return null;
-
-          return {
-            groupId: group.id,
-            groupName: group.name,
-            optionId: option.id,
-            optionName: option.name,
-            price: Number(option.price || 0),
-          } satisfies CartModifierSelection;
-        })
-        .filter(
-          (modifier): modifier is CartModifierSelection => modifier !== null
-        )
-    );
+    return buildSelectedModifierEntries(activeItem, selectedOptionsByGroup);
   }, [activeItem, selectedOptionsByGroup]);
   const activeItemTotal = useMemo(() => {
     if (!activeItem) return 0;
@@ -299,6 +337,62 @@ export default function RestaurantMenuClient({
     if (selectedModifierEntries.length === 0) return "";
     return selectedModifierEntries.map((modifier) => modifier.optionName).join(", ");
   }, [selectedModifierEntries]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadModifierSuggestion() {
+      if (!activeItem || !safeSlug || activeItemModifierGroups.length === 0) {
+        setModifierSuggestion(null);
+        return;
+      }
+
+      setSuggestionLoading(true);
+
+      try {
+        const res = await fetch("/api/agent/suggestions/modifier", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            restaurantSlug: safeSlug,
+            cartId: getSuggestionCartId(),
+            itemId: activeItem.id,
+            entryChannel: "storefront_item_modal",
+            context: {
+              cartSubtotal: cartTotal(),
+              orderType: "pickup",
+            },
+          }),
+        });
+
+        if (!res.ok) {
+          if (!cancelled) setModifierSuggestion(null);
+          return;
+        }
+
+        const data = (await res.json()) as {
+          suggestion?: ModifierSuggestion | null;
+        };
+
+        if (!cancelled) {
+          setModifierSuggestion(data.suggestion || null);
+        }
+      } catch (error) {
+        console.warn("modifier_suggestion_unavailable", error);
+        if (!cancelled) setModifierSuggestion(null);
+      } finally {
+        if (!cancelled) setSuggestionLoading(false);
+      }
+    }
+
+    loadModifierSuggestion();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeItem, activeItemModifierGroups.length, safeSlug]);
 
   function canAddItem(item: MenuItem) {
     return Boolean(safeSlug && !item.is_sold_out && isOpen);
@@ -320,16 +414,34 @@ export default function RestaurantMenuClient({
     });
   }
 
+  function updateSelectedOptionsByGroup(
+    updater:
+      | Record<string, string[]>
+      | ((current: Record<string, string[]>) => Record<string, string[]>)
+  ) {
+    const next =
+      typeof updater === "function"
+        ? updater(selectedOptionsByGroupRef.current)
+        : updater;
+
+    selectedOptionsByGroupRef.current = next;
+    setSelectedOptionsByGroup(next);
+  }
+
   function openItemModal(item: MenuItem) {
     setActiveItem(item);
-    setSelectedOptionsByGroup({});
+    updateSelectedOptionsByGroup({});
     setModifierError("");
+    setModifierSuggestion(null);
+    setSuggestionResponding(false);
   }
 
   function closeItemModal() {
     setActiveItem(null);
-    setSelectedOptionsByGroup({});
+    updateSelectedOptionsByGroup({});
     setModifierError("");
+    setModifierSuggestion(null);
+    setSuggestionResponding(false);
   }
 
   function handleAddItem(item: MenuItem) {
@@ -350,7 +462,7 @@ export default function RestaurantMenuClient({
 
   function toggleModifierOption(group: ModifierGroup, option: ModifierOption) {
     setModifierError("");
-    setSelectedOptionsByGroup((current) => {
+    updateSelectedOptionsByGroup((current) => {
       const selected = current[group.id] || [];
       const isSelected = selected.includes(option.id);
       const singleSelect = isSingleSelectGroup(group);
@@ -381,9 +493,33 @@ export default function RestaurantMenuClient({
     });
   }
 
-  function validateActiveItemModifiers() {
+  function selectModifierOption(group: ModifierGroup, option: ModifierOption) {
+    updateSelectedOptionsByGroup((current) => {
+      const selected = current[group.id] || [];
+      if (selected.includes(option.id)) return current;
+
+      if (isSingleSelectGroup(group)) {
+        return {
+          ...current,
+          [group.id]: [option.id],
+        };
+      }
+
+      const maxSelect = Number(group.max_select || group.options.length || 1);
+      if (selected.length >= maxSelect) return current;
+
+      return {
+        ...current,
+        [group.id]: [...selected, option.id],
+      };
+    });
+  }
+
+  function validateActiveItemModifiers(
+    selectionsByGroup = selectedOptionsByGroupRef.current
+  ) {
     for (const group of activeItemModifierGroups) {
-      const selected = selectedOptionsByGroup[group.id] || [];
+      const selected = selectionsByGroup[group.id] || [];
       const minSelect = Number(group.min_select || 0);
       const maxSelect = Number(group.max_select || group.options.length || 1);
 
@@ -402,7 +538,17 @@ export default function RestaurantMenuClient({
   function handleAddActiveItem() {
     if (!activeItem || !canAddItem(activeItem)) return;
 
-    const validationError = validateActiveItemModifiers();
+    const currentSelections = selectedOptionsByGroupRef.current;
+    const currentModifiers = buildSelectedModifierEntries(
+      activeItem,
+      currentSelections
+    );
+    const currentModifierTotal = currentModifiers.reduce(
+      (sum, modifier) => sum + Number(modifier.price || 0),
+      0
+    );
+    const currentItemTotal = Number(activeItem.price || 0) + currentModifierTotal;
+    const validationError = validateActiveItemModifiers(currentSelections);
 
     if (validationError) {
       setModifierError(validationError);
@@ -412,12 +558,62 @@ export default function RestaurantMenuClient({
     addToCart(safeSlug, {
       id: activeItem.id,
       name: activeItem.name,
-      price: activeItemTotal,
+      price: currentItemTotal,
       is_sold_out: activeItem.is_sold_out,
-      modifiers: selectedModifierEntries,
+      modifiers: currentModifiers,
     });
 
     closeItemModal();
+  }
+
+  async function handleSuggestionResponse(action: "accept" | "skip") {
+    if (!modifierSuggestion || suggestionResponding) return;
+
+    setSuggestionResponding(true);
+    setModifierError("");
+
+    try {
+      const res = await fetch("/api/agent/suggestions/apply", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          suggestionId: modifierSuggestion.id,
+          cartId: getSuggestionCartId(),
+          action,
+        }),
+      });
+
+      if (!res.ok) {
+        setModifierSuggestion(null);
+        return;
+      }
+
+      const data = (await res.json()) as {
+        modifierSelection?: CartModifierSelection;
+      };
+
+      if (action === "accept" && data.modifierSelection) {
+        const group = activeItemModifierGroups.find(
+          (entry) => entry.id === data.modifierSelection?.groupId
+        );
+        const option = group?.options.find(
+          (entry) => entry.id === data.modifierSelection?.optionId
+        );
+
+        if (group && option) {
+          selectModifierOption(group, option);
+        }
+      }
+
+      setModifierSuggestion(null);
+    } catch (error) {
+      console.warn("modifier_suggestion_apply_unavailable", error);
+      setModifierSuggestion(null);
+    } finally {
+      setSuggestionResponding(false);
+    }
   }
 
   return (
@@ -944,6 +1140,48 @@ export default function RestaurantMenuClient({
 
               <div className="min-h-0 flex-1 overflow-y-auto p-5">
                 <div className="space-y-5">
+                  {modifierSuggestion ? (
+                    <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-neutral-900">
+                            {modifierSuggestion.title}
+                          </p>
+                          <p className="mt-1 text-sm text-neutral-700">
+                            {modifierSuggestion.message}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-sm font-semibold text-neutral-900">
+                          {modifierSuggestion.priceDelta > 0
+                            ? `+${formatPrice(modifierSuggestion.priceDelta)}`
+                            : formatPrice(0)}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSuggestionResponse("accept")}
+                          disabled={suggestionResponding}
+                          className="rounded-full bg-neutral-900 px-4 py-2 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSuggestionResponse("skip")}
+                          disabled={suggestionResponding}
+                          className="rounded-full border border-neutral-300 bg-white px-4 py-2 text-xs font-semibold text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          No thanks
+                        </button>
+                      </div>
+                    </div>
+                  ) : suggestionLoading ? (
+                    <div className="sr-only" aria-live="polite">
+                      Checking add-on suggestions.
+                    </div>
+                  ) : null}
+
                   {activeItemModifierGroups.map((group) => {
                     const selected = selectedOptionsByGroup[group.id] || [];
                     const singleSelect = group.selection_mode === "single";
@@ -1036,7 +1274,7 @@ export default function RestaurantMenuClient({
                 <button
                   type="button"
                   onClick={handleAddActiveItem}
-                  disabled={!canAddItem(activeItem)}
+                  disabled={!canAddItem(activeItem) || suggestionResponding}
                   aria-label={`Add ${activeItem.name} to order for ${formatPrice(activeItemTotal)}`}
                   className="flex w-full items-center justify-center rounded-2xl bg-neutral-900 px-4 py-4 text-sm font-semibold text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
