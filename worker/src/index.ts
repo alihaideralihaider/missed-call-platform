@@ -807,9 +807,9 @@ function validateAndPriceModifiers(args: {
 
     const group = modifierConfig.groupsById.get(modifier.groupId);
     const normalizedModifier: NormalizedModifierSelection = {
-      groupId: modifier.groupId,
+      groupId: String(group?.id || modifier.groupId),
       groupName: String(group?.name || modifier.groupName || "Modifier").trim(),
-      optionId: modifier.optionId,
+      optionId: String(option?.id || modifier.optionId),
       optionName: String(option?.name || modifier.optionName || "Option").trim(),
       price: normalizeModifierOptionPrice(option),
     };
@@ -1450,6 +1450,8 @@ export default {
           (orderItem, index) =>
             (cleanedItems[index]?.modifiers || []).map((modifier) => ({
               order_item_id: orderItem.id,
+              modifier_group_id: modifier.groupId,
+              modifier_option_id: modifier.optionId,
               group_name: modifier.groupName,
               option_name: modifier.optionName,
               price_delta: modifier.price,

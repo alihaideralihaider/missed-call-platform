@@ -33,6 +33,7 @@ export default function RestaurantAdminNav({ slug }: Props) {
     { href: `${basePath}/menu`, label: "Menu" },
     { href: `${basePath}/assets`, label: "Assets" },
     { href: `${basePath}/promotions`, label: "Promotions" },
+    { href: `${basePath}/insights`, label: "Insights" },
   ];
 
   return (
