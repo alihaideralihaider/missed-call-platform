@@ -291,6 +291,152 @@ Expected:
 - `usage_events` contains `accepted_event` and `agent_run`
 - `billable=false`
 
+## Slice 2 Implementation Notes
+
+Slice 2 adds internal static offer action logging only:
+- Internal static offer decision logging only
+- No customer-facing delivery
+- No SMS
+- No payment link creation
+- No attempts
+- No webhook delivery yet
+- Action logs create `action_execution` usage with `billable=false`
+
+If `metadata.post_checkout_offer` contains a minimally valid static offer, the agent logs:
+
+```text
+action_type = create_static_offer
+result.decision = offer_created
+```
+
+If no static offer exists, the agent logs:
+
+```text
+action_type = suppress_offer
+result.decision = offer_suppressed
+suppression_reason = missing_static_offer
+```
+
+If a static offer exists but is invalid, the agent logs:
+
+```text
+action_type = suppress_offer
+result.decision = offer_suppressed
+suppression_reason = invalid_static_offer
+```
+
+Minimal valid static offer fields:
+- `offer_id`
+- `title`
+- `price`
+- `currency`
+
+Optional static offer fields:
+- `description`
+- `expires_at`
+- `add_on_url`
+- `payment_link`
+
+Sample curl with static offer:
+
+```bash
+curl -i -X POST https://www.saanaos.com/api/v1/agent/events \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: checkout-offer-test-001" \
+  -d '{
+    "event_type": "checkout_completed",
+    "source_system": "custom_checkout",
+    "source_account_id": "demo-custom-store",
+    "customer": {
+      "name": "Test Customer",
+      "phone": "+15555550123",
+      "email": "test@example.com",
+      "consent": {
+        "sms": true,
+        "whatsapp": false
+      }
+    },
+    "order": {
+      "id": "order_2001",
+      "items": [
+        {
+          "id": "item_1",
+          "name": "Test Product",
+          "quantity": 1,
+          "price": 25
+        }
+      ],
+      "total": 25,
+      "currency": "USD"
+    },
+    "metadata": {
+      "test": true,
+      "post_checkout_offer": {
+        "offer_id": "offer_drink_001",
+        "title": "Add a drink",
+        "description": "Add a drink to your order.",
+        "price": 3.5,
+        "currency": "USD",
+        "add_on_url": "https://example.com/add-drink"
+      }
+    }
+  }'
+```
+
+Expected:
+- HTTP 200
+- `agent_event` row created
+- `agent_run` row created
+- `agent_actions` row created with `action_type = create_static_offer`
+- `usage_events` contains `accepted_event`, `agent_run`, and `action_execution`
+- `billable=false`
+
+Sample curl without static offer:
+
+```bash
+curl -i -X POST https://www.saanaos.com/api/v1/agent/events \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: checkout-offer-test-002" \
+  -d '{
+    "event_type": "checkout_completed",
+    "source_system": "custom_checkout",
+    "source_account_id": "demo-custom-store",
+    "customer": {
+      "name": "Test Customer",
+      "phone": "+15555550123",
+      "email": "test@example.com",
+      "consent": {
+        "sms": true,
+        "whatsapp": false
+      }
+    },
+    "order": {
+      "id": "order_2002",
+      "items": [
+        {
+          "id": "item_1",
+          "name": "Test Product",
+          "quantity": 1,
+          "price": 25
+        }
+      ],
+      "total": 25,
+      "currency": "USD"
+    },
+    "metadata": {
+      "test": true
+    }
+  }'
+```
+
+Expected:
+- HTTP response shape unchanged
+- `agent_actions.action_type = suppress_offer`
+- `result.decision = offer_suppressed`
+- `result.suppression_reason = missing_static_offer`
+- `usage_events` contains `action_execution`
+- `billable=false`
+
 ## Observability
 
 Logs/events to inspect:

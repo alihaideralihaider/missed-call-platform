@@ -1,6 +1,7 @@
 import {
   agentApiError,
   createRequestId,
+  insertAgentAction,
   jsonNoStore,
   normalizeOptionalUuid,
 } from "@/lib/agent-api/v1";
@@ -58,6 +59,67 @@ function isObjectRecord(value: unknown) {
 
 function hasValue(value: unknown) {
   return String(value ?? "").trim().length > 0;
+}
+
+function buildStaticPostCheckoutOfferDecision(body: AgentEventV1Request) {
+  const metadata = asRecord(body.metadata);
+  const maybeOffer = metadata.post_checkout_offer;
+
+  if (maybeOffer === undefined || maybeOffer === null) {
+    return {
+      actionType: "suppress_offer",
+      status: "completed" as const,
+      result: {
+        decision: "offer_suppressed",
+        suppression_reason: "missing_static_offer",
+      },
+    };
+  }
+
+  const offer = asRecord(maybeOffer);
+  const hasValidOffer =
+    hasValue(offer.offer_id) &&
+    hasValue(offer.title) &&
+    typeof offer.price === "number" &&
+    Number.isFinite(offer.price) &&
+    hasValue(offer.currency);
+
+  if (!hasValidOffer) {
+    return {
+      actionType: "suppress_offer",
+      status: "completed" as const,
+      result: {
+        decision: "offer_suppressed",
+        suppression_reason: "invalid_static_offer",
+      },
+    };
+  }
+
+  return {
+    actionType: "create_static_offer",
+    status: "completed" as const,
+    result: {
+      decision: "offer_created",
+      offer: {
+        offer_id: String(offer.offer_id).trim(),
+        title: String(offer.title).trim(),
+        description: hasValue(offer.description)
+          ? String(offer.description).trim()
+          : null,
+        price: offer.price,
+        currency: String(offer.currency).trim(),
+        expires_at: hasValue(offer.expires_at)
+          ? String(offer.expires_at).trim()
+          : null,
+        add_on_url: hasValue(offer.add_on_url)
+          ? String(offer.add_on_url).trim()
+          : null,
+        payment_link: hasValue(offer.payment_link)
+          ? String(offer.payment_link).trim()
+          : null,
+      },
+    },
+  };
 }
 
 export async function POST(request: Request) {
@@ -298,6 +360,38 @@ export async function POST(request: Request) {
 
     if (runInsertError) {
       throw new Error(runInsertError.message);
+    }
+
+    if (isCheckoutCompleted) {
+      const offerDecision = buildStaticPostCheckoutOfferDecision(body);
+
+      try {
+        await insertAgentAction(admin, {
+          agentRunId,
+          actionType: offerDecision.actionType,
+          actionVersion: "v1",
+          status: offerDecision.status,
+          requestId: `${requestId}:${offerDecision.actionType}`,
+          payload: {
+            event_id: eventId,
+            agent_run_id: agentRunId,
+            source_system: sourceSystem,
+            source_account_id: sourceAccountId,
+            order_id: order.id ? String(order.id) : null,
+            order_total: typeof order.total === "number" ? order.total : null,
+            currency: order.currency ? String(order.currency).trim() : null,
+          },
+          result: offerDecision.result,
+        });
+      } catch (error) {
+        console.warn("post_checkout_static_offer_action_log_failed", {
+          requestId,
+          eventId,
+          agentRunId,
+          actionType: offerDecision.actionType,
+          error: error instanceof Error ? error.message : "unknown_error",
+        });
+      }
     }
 
     await Promise.all([
