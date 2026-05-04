@@ -632,6 +632,157 @@ checkout_completed
 -> billable=false
 ```
 
+## Slice 6 SFTP Batch Output Specification
+
+Status:
+Future spec only. Not built yet.
+
+### Purpose
+
+SFTP batch output gives clients a daily reconciliation file of post-checkout outcomes.
+
+### Delivery Policy
+
+- Webhooks are realtime delivery.
+- SFTP pull is batch delivery.
+- Clients download files from our SFTP.
+- No email delivery.
+- All timestamps are UTC.
+- Clients handle timezone conversion.
+
+### Batch Window
+
+Use UTC day window:
+
+```text
+00:00:00 UTC -> 23:59:59 UTC
+```
+
+Include a record if:
+
+```text
+occurred_at >= YYYY-MM-DDT00:00:00Z
+and occurred_at < next day YYYY-MM-DDT00:00:00Z
+```
+
+### File Naming
+
+Suggested pattern:
+
+```text
+post_checkout_outcomes_YYYY-MM-DD.csv
+```
+
+Example:
+
+```text
+post_checkout_outcomes_2026-05-04.csv
+```
+
+### SFTP Folder Structure
+
+Suggested:
+
+```text
+/sftp/{account_id}/outgoing/post-checkout/
+  post_checkout_outcomes_2026-05-04.csv
+```
+
+### Included Records
+
+Include one row per recorded post-checkout outcome.
+
+Outcome types:
+- `add_on_purchased`
+- `offer_expired`
+- `offer_suppressed`
+- `failed`
+
+Only include records that were recorded in the platform. Do not include rejected API requests.
+
+### CSV Columns
+
+- `event_id`
+- `agent_run_id`
+- `outcome_type`
+- `outcome_id`
+- `original_order_id`
+- `addon_offer_id`
+- `addon_amount`
+- `currency`
+- `source_system`
+- `source_account_id`
+- `customer_reference`
+- `webhook_delivered`
+- `occurred_at_utc`
+- `recorded_at_utc`
+- `metadata_json`
+
+### Example CSV
+
+```csv
+event_id,agent_run_id,outcome_type,outcome_id,original_order_id,addon_offer_id,addon_amount,currency,source_system,source_account_id,customer_reference,webhook_delivered,occurred_at_utc,recorded_at_utc,metadata_json
+evt_c9a1a485472d46798554ba33,run_d4f69818f24f45c5a0aaef24,add_on_purchased,addon_order_456,order_2101,offer_drink_001,3.50,USD,custom_checkout,demo-custom-store,+15555550123,true,2026-05-04T13:55:05Z,2026-05-04T13:55:05Z,"{""test"":true}"
+evt_example_expired,run_example_expired,offer_expired,offer_expired_001,order_2201,offer_drink_001,0.00,USD,custom_checkout,demo-custom-store,+15555550123,false,2026-05-04T14:20:00Z,2026-05-04T14:20:00Z,"{""reason"":""customer_ignored""}"
+```
+
+### Idempotency and Duplicates
+
+- Each outcome row should be uniquely identified by `agent_run_id + outcome_type + outcome_id` when `outcome_id` exists.
+- If `outcome_id` is missing, use `agent_run_id + outcome_type + recorded_at`.
+- Duplicate API replays should not create duplicate batch rows.
+- Re-generated files for the same UTC day should contain the same logical rows.
+
+### Retention
+
+Draft policy:
+- Keep generated batch files for 30 days by default.
+- Longer retention can be enterprise/custom later.
+
+### File Generation Timing
+
+Draft:
+- Generate after UTC day closes, for example 00:10 UTC.
+- This allows late writes shortly after midnight.
+- Do not promise exact SLA in v1.
+
+### Relationship To usage_events
+
+When batch generation is implemented later:
+- Record `batch_file_generated` usage event.
+- Record `sftp_file_downloaded` usage event if downloads are tracked.
+- Keep `billable=false` until billing validation.
+
+### Validation Checklist Before Build
+
+- Source data query defined
+- CSV columns finalized
+- Sample file approved
+- SFTP storage selected
+- Account folder model defined
+- Retention policy approved
+- No email fallback
+- UTC window confirmed
+- Webhook and batch payload consistency checked
+
+### Not Included In v1 Spec
+
+- No email attachments
+- No Excel-specific formatting
+- No custom per-client columns
+- No FTP push to client servers
+- No billing
+- No revenue-share calculation
+- No timezone-specific files
+
+### Cross-Links
+
+- [Post-Checkout Revenue Agent Deal Room Outline](./deal-room-outline.md)
+- [Post-Checkout Revenue Agent Technical Implementation Plan v1](./technical-implementation-plan-v1.md)
+- [Webhook and Batch Policy](../../attempts-engine/webhook-and-batch-policy.md)
+- [Usage Events v1](../../developer-platform/agent-api/usage-events.md)
+- [Billing Architecture v1](../../developer-platform/billing/billing-architecture-v1.md)
+
 ## Observability
 
 Logs/events to inspect:
