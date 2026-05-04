@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendSms } from "@/lib/messaging/sendSms";
+import { recordUsageEvent } from "@/lib/metering/usageEvents";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const MISSED_CALL_AGENT_TYPE = "missed_call_recovery";
@@ -411,6 +412,21 @@ export async function recordAttemptMessage(input: {
           expiredAt: new Date().toISOString(),
         },
       });
+
+      await recordUsageEvent({
+        metricKey: "outcome_recorded",
+        sourceType: "attempt_job",
+        sourceId: input.attemptJobId,
+        idempotencyKey: `usage:outcome_recorded:${input.attemptJobId}:max_attempts_reached`,
+        billable: false,
+        metadata: {
+          status: "expired",
+          outcome_event_type: "max_attempts_reached",
+          agent_type: MISSED_CALL_AGENT_TYPE,
+          attempt_count: job.attempt_count ?? null,
+          max_attempts: job.max_attempts ?? null,
+        },
+      });
     }
   }
 }
@@ -501,6 +517,7 @@ async function markAttemptExpired(args: {
   supabase: SupabaseClient;
   attemptJobId: string;
   reason: string;
+  agentType?: string | null;
 }) {
   const now = new Date().toISOString();
   const { error } = await args.supabase
@@ -526,6 +543,21 @@ async function markAttemptExpired(args: {
     payload: {
       reason: args.reason,
       expiredAt: now,
+    },
+  });
+
+  await recordUsageEvent({
+    accountId: null,
+    metricKey: "outcome_recorded",
+    sourceType: "attempt_job",
+    sourceId: args.attemptJobId,
+    idempotencyKey: `usage:outcome_recorded:${args.attemptJobId}:expired`,
+    billable: false,
+    metadata: {
+      status: "expired",
+      outcome_event_type: "expired",
+      agent_type: args.agentType ?? MISSED_CALL_AGENT_TYPE,
+      reason: args.reason,
     },
   });
 }
@@ -599,6 +631,7 @@ async function processDueMissedCallRecoveryJob(
       supabase,
       attemptJobId: job.id,
       reason: "expires_at_passed",
+      agentType: job.agent_type,
     });
     return { sent: false, suppressed: false, expired: true, failed: false };
   }
@@ -611,6 +644,7 @@ async function processDueMissedCallRecoveryJob(
       supabase,
       attemptJobId: job.id,
       reason: "max_attempts_reached",
+      agentType: job.agent_type,
     });
     return { sent: false, suppressed: false, expired: true, failed: false };
   }
@@ -646,6 +680,7 @@ async function processDueMissedCallRecoveryJob(
       supabase,
       attemptJobId: job.id,
       reason: "no_follow_up_message",
+      agentType: job.agent_type,
     });
     return { sent: false, suppressed: false, expired: true, failed: false };
   }
@@ -703,15 +738,32 @@ async function processDueMissedCallRecoveryJob(
     throw new Error(smsResult.error || "SMS attempt failed.");
   }
 
+  const attemptNumber = attemptCount + 1;
+
   await logAttemptEvent({
     supabase,
     attemptJobId: job.id,
     eventType: "attempt.executed",
     source: "saanaos.attempts",
     payload: {
-      attemptNumber: attemptCount + 1,
+      attemptNumber,
       messageType: message.messageType,
       providerMessageId,
+      status: "sent",
+    },
+  });
+
+  await recordUsageEvent({
+    accountId: job.account_id,
+    metricKey: "attempt_execution",
+    sourceType: "attempt_job",
+    sourceId: job.id,
+    idempotencyKey: `usage:attempt_execution:${job.id}:${attemptNumber}`,
+    billable: false,
+    metadata: {
+      attempt_number: attemptNumber,
+      message_type: message.messageType,
+      agent_type: job.agent_type,
       status: "sent",
     },
   });
@@ -874,6 +926,19 @@ export async function markMissedCallRecoveryOrderPlaced(input: {
         expiredAt: now,
       },
     });
+
+    await recordUsageEvent({
+      metricKey: "outcome_recorded",
+      sourceType: "attempt_job",
+      sourceId: job.id as string,
+      idempotencyKey: `usage:outcome_recorded:${job.id}:expired`,
+      billable: false,
+      metadata: {
+        status: "expired",
+        outcome_event_type: "expired",
+        agent_type: MISSED_CALL_AGENT_TYPE,
+      },
+    });
   }
 
   const { data: jobs, error: jobsError } = await supabase
@@ -934,6 +999,20 @@ export async function markMissedCallRecoveryOrderPlaced(input: {
       total: input.total ?? null,
       customerPhone: contactValue,
       restaurantSlug: input.restaurantSlug,
+    },
+  });
+
+  await recordUsageEvent({
+    metricKey: "outcome_recorded",
+    sourceType: "attempt_job",
+    sourceId: attemptJobId,
+    idempotencyKey: `usage:outcome_recorded:${attemptJobId}:order_placed`,
+    billable: false,
+    metadata: {
+      status: "succeeded",
+      outcome_event_type: "order_placed",
+      outcome_event_id: input.orderId,
+      agent_type: MISSED_CALL_AGENT_TYPE,
     },
   });
 

@@ -18,11 +18,13 @@ AuthToolkit is the infrastructure and developer layer. RecoveryStack is the agen
 - [Agent API Quickstart](./agent-api/quickstart.md): shows the event, action, and run lookup flow.
 - [Agent API Roadmap](./agent-api/roadmap.md): tracks staged platform API implementation.
 - [Universal Agent Metering Standard](./agent-api/agent-metering-standard.md): defines the usage and traceability standard every future agent must follow.
+- [Usage Events v1](./agent-api/usage-events.md): documents the first non-billable usage metering implementation.
 
 ## Billing and Usage
 
 - [Billing Architecture v1](./billing/billing-architecture-v1.md): documents the future usage-based billing architecture downstream of metering.
 - [Universal Agent Metering Standard](./agent-api/agent-metering-standard.md): defines future metric keys, usage rules, and billing-safe traceability.
+- [Usage Events v1](./agent-api/usage-events.md): explains current non-billable usage rows and future billing inputs.
 
 ## Current Live Implementation
 
