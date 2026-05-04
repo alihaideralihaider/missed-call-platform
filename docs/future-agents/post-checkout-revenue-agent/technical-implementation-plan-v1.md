@@ -526,6 +526,67 @@ checkout_completed
 -> usage_events billable=false
 ```
 
+## Slice 5 Implementation Notes
+
+Slice 5 adds optional webhook outcome delivery:
+- Optional webhook outcome delivery
+- No SMS
+- No payment links
+- No attempts
+- No SFTP yet
+- No billing
+- Successful webhook delivery records `webhook_delivery` usage with `billable=false`
+- Failed webhook delivery logs action failure but does not fail outcome recording
+
+Webhook delivery is requested through the outcome-recording endpoint:
+
+```text
+POST /api/v1/agent/outcomes/post-checkout
+```
+
+Delivery input:
+
+```json
+{
+  "delivery": {
+    "webhook_url": "https://webhook.site/YOUR_TEST_URL"
+  }
+}
+```
+
+The webhook URL must be a public `https` URL. `http`, localhost, and obvious private/internal hostnames are rejected.
+
+Sample curl:
+
+```bash
+curl -i -X POST https://www.saanaos.com/api/v1/agent/outcomes/post-checkout \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: checkout-outcome-webhook-test-001" \
+  -d '{
+    "agent_run_id": "PASTE_AGENT_RUN_ID",
+    "outcome_type": "add_on_purchased",
+    "outcome_id": "addon_order_456",
+    "original_order_id": "order_2101",
+    "addon_offer_id": "offer_drink_001",
+    "addon_amount": 3.5,
+    "currency": "USD",
+    "metadata": {
+      "test": true
+    },
+    "delivery": {
+      "webhook_url": "https://webhook.site/YOUR_TEST_URL"
+    }
+  }'
+```
+
+Expected:
+- HTTP 200
+- `record_post_checkout_outcome` action created
+- `send_webhook` action created
+- `outcome_recorded` usage created
+- `webhook_delivery` usage created only if webhook succeeds
+- `billable=false`
+
 ## Observability
 
 Logs/events to inspect:

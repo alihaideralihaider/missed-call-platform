@@ -17,6 +17,10 @@ type PostCheckoutOutcomeRequest = {
   addon_amount?: number;
   currency?: string;
   metadata?: Record<string, unknown>;
+  delivery?: {
+    webhook_url?: string;
+    webhook_secret?: string;
+  };
 };
 
 const SUPPORTED_POST_CHECKOUT_OUTCOMES = new Set([
@@ -37,6 +41,61 @@ function optionalString(value: unknown) {
   return normalized || null;
 }
 
+function normalizeWebhookUrl(value: unknown) {
+  const rawUrl = optionalString(value);
+
+  if (!rawUrl) {
+    return null;
+  }
+
+  let parsed: URL;
+
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error("invalid_webhook_url");
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new Error("invalid_webhook_url");
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  const isPrivateIpv4 =
+    hostname === "127.0.0.1" ||
+    hostname.startsWith("10.") ||
+    hostname.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+
+  if (
+    hostname === "localhost" ||
+    hostname === "::1" ||
+    hostname.endsWith(".local") ||
+    isPrivateIpv4
+  ) {
+    throw new Error("invalid_webhook_url");
+  }
+
+  return parsed.toString();
+}
+
+async function hasLoggedAgentAction(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  requestId: string
+) {
+  const { data, error } = await admin
+    .from("agent_actions")
+    .select("id")
+    .eq("request_id", requestId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Boolean(data?.id);
+}
+
 export async function POST(request: Request) {
   const requestId = createRequestId();
   const admin = createSupabaseAdminClient();
@@ -55,6 +114,18 @@ export async function POST(request: Request) {
     const currency = optionalString(body.currency);
     const metadata = asRecord(body.metadata);
     const hasAddonAmount = body.addon_amount !== undefined && body.addon_amount !== null;
+    let webhookUrl: string | null = null;
+    const webhookSecret = optionalString(body.delivery?.webhook_secret);
+
+    try {
+      webhookUrl = normalizeWebhookUrl(body.delivery?.webhook_url);
+    } catch {
+      return agentApiError(
+        "invalid_request",
+        "delivery.webhook_url must be a public https URL.",
+        requestId
+      );
+    }
 
     if (!idempotencyKey) {
       return agentApiError(
@@ -167,6 +238,127 @@ export async function POST(request: Request) {
         currency,
       },
     });
+
+    if (webhookUrl) {
+      const webhookActionRequestId = `idempotency:${idempotencyKey}:send_webhook`;
+      const webhookPayload = {
+        event_type: "post_checkout_outcome_recorded",
+        agent_run_id: agentRunId,
+        outcome_type: outcomeType,
+        outcome_id: outcomeId,
+        original_order_id: originalOrderId,
+        addon_offer_id: addonOfferId,
+        addon_amount: hasAddonAmount ? body.addon_amount : null,
+        currency,
+        status: "recorded",
+        timestamp: new Date().toISOString(),
+        metadata,
+      };
+
+      try {
+        const alreadyLogged = await hasLoggedAgentAction(admin, webhookActionRequestId);
+
+        if (!alreadyLogged) {
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+            "User-Agent": "AuthToolkit-PostCheckout-Agent/1.0",
+            "X-AuthToolkit-Event-Type": "post_checkout_outcome_recorded",
+            "X-AuthToolkit-Agent-Run-Id": agentRunId,
+            "X-AuthToolkit-Request-Id": requestId,
+          };
+
+          if (webhookSecret) {
+            // TODO: replace this test header with HMAC webhook signing before production use.
+            headers["X-AuthToolkit-Webhook-Secret"] = webhookSecret;
+          }
+
+          const webhookResponse = await fetch(webhookUrl, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(webhookPayload),
+          });
+          const delivered = webhookResponse.ok;
+
+          await insertAgentAction(admin, {
+            agentRunId,
+            actionType: "send_webhook",
+            actionVersion: "v1",
+            status: delivered ? "completed" : "failed",
+            requestId: webhookActionRequestId,
+            payload: {
+              webhook_url: webhookUrl,
+              event_type: "post_checkout_outcome_recorded",
+              agent_run_id: agentRunId,
+              outcome_type: outcomeType,
+            },
+            result: {
+              delivered,
+              status_code: webhookResponse.status,
+            },
+          });
+
+          if (delivered) {
+            await recordUsageEvent({
+              metricKey: "webhook_delivery",
+              sourceType: "agent_run",
+              sourceId: agentRunId,
+              idempotencyKey: `usage:webhook_delivery:${agentRunId}:${outcomeType}:${
+                outcomeId || requestId
+              }`,
+              billable: false,
+              metadata: {
+                runType: "post_checkout_revenue",
+                webhook_url: webhookUrl,
+                status_code: webhookResponse.status,
+                outcome_type: outcomeType,
+                delivered: true,
+              },
+            });
+          } else {
+            console.warn("post_checkout_outcome_webhook_delivery_failed", {
+              requestId,
+              agentRunId,
+              webhookUrl,
+              statusCode: webhookResponse.status,
+            });
+          }
+        }
+      } catch (error) {
+        console.warn("post_checkout_outcome_webhook_delivery_failed", {
+          requestId,
+          agentRunId,
+          webhookUrl,
+          error: error instanceof Error ? error.message : "unknown_error",
+        });
+
+        try {
+          await insertAgentAction(admin, {
+            agentRunId,
+            actionType: "send_webhook",
+            actionVersion: "v1",
+            status: "failed",
+            requestId: webhookActionRequestId,
+            payload: {
+              webhook_url: webhookUrl,
+              event_type: "post_checkout_outcome_recorded",
+              agent_run_id: agentRunId,
+              outcome_type: outcomeType,
+            },
+            result: {
+              delivered: false,
+              error: error instanceof Error ? error.message : "unknown_error",
+            },
+          });
+        } catch (actionError) {
+          console.warn("post_checkout_outcome_webhook_action_log_failed", {
+            requestId,
+            agentRunId,
+            error:
+              actionError instanceof Error ? actionError.message : "unknown_error",
+          });
+        }
+      }
+    }
 
     return jsonNoStore({
       agent_run_id: agentRunId,
