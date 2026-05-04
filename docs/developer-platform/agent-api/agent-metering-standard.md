@@ -234,8 +234,8 @@ Initial metric keys:
 This standard applies to:
 
 - Missed Call Recovery Agent
-- Post-Checkout Revenue Agent
-- Post-Checkout Growth Agent
+- Post-Checkout Revenue Agent future pattern
+- Post-Checkout Growth Agent future pattern
 - Lead Follow-Up Agent
 - Payment Follow-Up Agent
 - Review Request Agent

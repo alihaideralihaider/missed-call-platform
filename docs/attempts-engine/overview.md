@@ -31,8 +31,8 @@ Missed calls, abandoned carts, post-checkout offers, review requests, and lead f
 The Universal Attempts Engine gives SaanaOS a reusable foundation for:
 
 - missed-call recovery
-- post-checkout revenue follow-up
-- post-checkout growth follow-up
+- future post-checkout revenue follow-up
+- future post-checkout growth follow-up
 - lead follow-up
 - donation follow-up
 - future outcome-driven agents

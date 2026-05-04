@@ -18,7 +18,7 @@ Expanded flow:
 +----------------+
 | External Event |
 | missed_call    |
-| checkout_done  |
+| checkout_completed |
 +-------+--------+
         |
         v
