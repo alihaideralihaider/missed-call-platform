@@ -1,5 +1,7 @@
 # Agent API Roadmap
 
+For the full platform documentation index, see [Developer Platform Documentation](../README.md).
+
 ## Phase 1: Internal Wrapper
 
 Goal: wrap the existing SaanaOS agent behavior behind cleaner internal interfaces.
