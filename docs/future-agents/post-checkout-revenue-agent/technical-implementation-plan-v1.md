@@ -587,6 +587,51 @@ Expected:
 - `webhook_delivery` usage created only if webhook succeeds
 - `billable=false`
 
+## Slice 5 Validation Result
+
+Test date:
+2026-05-04
+
+Test run id:
+`run_d4f69818f24f45c5a0aaef24`
+
+Webhook test target:
+`webhook.site`
+
+Result:
+Webhook delivery succeeded.
+
+Outcome route response:
+`status = recorded`
+
+External webhook result:
+Webhook payload received externally.
+
+Verified `agent_actions`:
+- `create_static_offer`
+- `record_post_checkout_outcome`
+- `send_webhook`
+
+Verified `usage_events`:
+- `agent_run`
+- `action_execution`
+- `outcome_recorded`
+- `webhook_delivery`
+- `billable=false`
+
+No SMS, payment links, attempts, SFTP, or billing were involved.
+
+Validation trace:
+
+```text
+checkout_completed
+-> create_static_offer
+-> record_post_checkout_outcome
+-> send_webhook
+-> webhook_delivery usage
+-> billable=false
+```
+
 ## Observability
 
 Logs/events to inspect:
