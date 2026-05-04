@@ -30,6 +30,7 @@ AuthToolkit is the infrastructure and developer layer. RecoveryStack is the agen
 ## Future Agents
 
 - [Post-Checkout Revenue Agent Productization Loop](../future-agents/post-checkout-revenue-agent/productization-loop.md): applies the agent productization loop to the future Post-Checkout Revenue Agent pattern.
+- [Post-Checkout Revenue Agent Deal Room Outline](../future-agents/post-checkout-revenue-agent/deal-room-outline.md): translates the future Post-Checkout Revenue Agent into a buyer-facing deal-room structure.
 
 ## Current Live Implementation
 
