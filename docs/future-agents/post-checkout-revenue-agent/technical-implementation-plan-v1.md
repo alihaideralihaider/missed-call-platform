@@ -485,6 +485,47 @@ Expected:
 - `usage_events` row created with `metric_key = outcome_recorded`
 - `billable=false`
 
+## Slice 4 Implementation Notes
+
+Slice 4 verifies run lookup / trace readability only:
+- Run lookup / trace verification only
+- No customer-facing delivery
+- No SMS
+- No payment links
+- No attempts
+- No billing
+- No new usage rows for lookup
+
+Run lookup endpoint:
+
+```text
+GET /api/v1/agent/runs/{runId}
+```
+
+Sample curl:
+
+```bash
+curl -i https://www.saanaos.com/api/v1/agent/runs/PASTE_AGENT_RUN_ID
+```
+
+Expected:
+- HTTP 200
+- `run.metadata.run_type = post_checkout_revenue`
+- `actions` array includes `create_static_offer` or `suppress_offer`
+- `actions` array includes `record_post_checkout_outcome` after outcome is recorded
+- `action_version` is visible
+- `payload` and `result` are visible
+- This provides a Splunk-style trace for debugging and buyer/internal proof
+
+Trace example:
+
+```text
+checkout_completed
+-> create_static_offer
+-> record_post_checkout_outcome
+-> usage_events billable=false
+```
+
 ## Observability
 
 Logs/events to inspect:
