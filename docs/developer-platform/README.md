@@ -6,6 +6,7 @@ AuthToolkit is the infrastructure and developer layer. RecoveryStack is the agen
 
 ## Core Architecture
 
+- [Agent Productization Loop](./agent-productization-loop.md): defines the full technical, business, buyer, metering, billing, and learning loop every future agent must follow.
 - [Attempts Engine Overview](../attempts-engine/overview.md): explains the Universal Attempts Engine and the `Event -> Job -> Attempts -> Outcome` pattern.
 - [Attempts Engine Architecture](../attempts-engine/architecture.md): documents attempt jobs, messages, events, cron execution, outcomes, and Agent API traceability.
 - [Attempts Engine Execution Flow](../attempts-engine/execution-flow.md): describes the current missed-call recovery execution path.
@@ -63,8 +64,9 @@ Event -> Agent Run -> Actions -> Attempts -> Outcome -> Delivery -> Usage Meteri
 2. Agent API traceability
 3. Metering Standard
 4. Billing Architecture
-5. Usage Events implementation
-6. Rollups/reporting
-7. Plan rules
-8. Stripe invoice integration
-9. Post-Checkout Revenue Agent
+5. Agent Productization Loop for each new agent
+6. Usage Events implementation
+7. Rollups/reporting
+8. Plan rules
+9. Stripe invoice integration
+10. Post-Checkout Revenue Agent

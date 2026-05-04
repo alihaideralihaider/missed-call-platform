@@ -2,6 +2,8 @@
 
 For the full platform documentation index, see [Developer Platform Documentation](../README.md).
 
+Before new agent implementation, the [Agent Productization Loop](../agent-productization-loop.md) should be completed for that agent.
+
 ## Phase 1: Internal Wrapper
 
 Goal: wrap the existing SaanaOS agent behavior behind cleaner internal interfaces.
