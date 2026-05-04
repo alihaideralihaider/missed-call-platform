@@ -437,6 +437,54 @@ Expected:
 - `usage_events` contains `action_execution`
 - `billable=false`
 
+## Slice 3 Implementation Notes
+
+Slice 3 adds internal outcome recording only:
+- Internal outcome recording only
+- No customer-facing delivery yet
+- No payment link creation
+- No attempts
+- No webhook delivery yet
+- `outcome_recorded` usage is `billable=false`
+
+Outcome recording endpoint:
+
+```text
+POST /api/v1/agent/outcomes/post-checkout
+```
+
+Supported outcome types:
+- `add_on_purchased`
+- `offer_expired`
+- `offer_suppressed`
+- `failed`
+
+Sample curl:
+
+```bash
+curl -i -X POST https://www.saanaos.com/api/v1/agent/outcomes/post-checkout \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: checkout-outcome-test-001" \
+  -d '{
+    "agent_run_id": "PASTE_AGENT_RUN_ID",
+    "outcome_type": "add_on_purchased",
+    "outcome_id": "addon_order_123",
+    "original_order_id": "order_2101",
+    "addon_offer_id": "offer_drink_001",
+    "addon_amount": 3.5,
+    "currency": "USD",
+    "metadata": {
+      "test": true
+    }
+  }'
+```
+
+Expected:
+- HTTP 200
+- `agent_actions` row created with `action_type = record_post_checkout_outcome`
+- `usage_events` row created with `metric_key = outcome_recorded`
+- `billable=false`
+
 ## Observability
 
 Logs/events to inspect:
