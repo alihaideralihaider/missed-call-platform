@@ -19,7 +19,9 @@ type AgentEventV1Request = {
     id?: string;
   };
   customer?: Record<string, unknown>;
+  order?: Record<string, unknown>;
   source_system?: string;
+  source_account_id?: string;
   source_slug?: string;
   attempt_job_id?: string;
   metadata?: Record<string, unknown>;
@@ -34,6 +36,12 @@ const SUPPORTED_EVENT_TYPES = new Set([
   "payment_completed",
 ]);
 
+const CHECKOUT_COMPLETED_SOURCE_SYSTEMS = new Set([
+  "custom_checkout",
+  "saanaos",
+  "test",
+]);
+
 function createPublicId(prefix: string) {
   return createRequestId(prefix);
 }
@@ -42,6 +50,14 @@ function asRecord(value: unknown) {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function isObjectRecord(value: unknown) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasValue(value: unknown) {
+  return String(value ?? "").trim().length > 0;
 }
 
 export async function POST(request: Request) {
@@ -56,6 +72,9 @@ export async function POST(request: Request) {
       request.headers.get("Idempotency-Key")?.trim() ||
       request.headers.get("idempotency-key")?.trim() ||
       null;
+    const sourceSystem = String(body.source_system || "").trim().toLowerCase() || null;
+    const sourceAccountId = String(body.source_account_id || "").trim() || null;
+    const sourceSlug = String(body.source_slug || "").trim().toLowerCase() || null;
 
     if (!eventType) {
       return agentApiError("invalid_request", "event_type is required.", requestId);
@@ -68,6 +87,87 @@ export async function POST(request: Request) {
         requestId,
         422
       );
+    }
+
+    if (eventType === "checkout_completed") {
+      const customerInput = body.customer;
+      const orderInput = body.order;
+      const order = asRecord(orderInput);
+
+      if (!idempotencyKey) {
+        return agentApiError(
+          "invalid_request",
+          "Idempotency-Key header is required for checkout_completed events.",
+          requestId
+        );
+      }
+
+      if (!sourceSystem) {
+        return agentApiError(
+          "invalid_request",
+          "source_system is required for checkout_completed events.",
+          requestId
+        );
+      }
+
+      if (!CHECKOUT_COMPLETED_SOURCE_SYSTEMS.has(sourceSystem)) {
+        return agentApiError(
+          "invalid_request",
+          "source_system is unsupported for checkout_completed events.",
+          requestId
+        );
+      }
+
+      if (!sourceAccountId && !sourceSlug) {
+        return agentApiError(
+          "invalid_request",
+          "source_account_id or source_slug is required for checkout_completed events.",
+          requestId
+        );
+      }
+
+      if (!isObjectRecord(customerInput)) {
+        return agentApiError(
+          "invalid_request",
+          "customer object is required for checkout_completed events.",
+          requestId
+        );
+      }
+
+      if (!isObjectRecord(orderInput)) {
+        return agentApiError(
+          "invalid_request",
+          "order object is required for checkout_completed events.",
+          requestId
+        );
+      }
+
+      if (!hasValue(order.id)) {
+        return agentApiError(
+          "invalid_request",
+          "order.id is required for checkout_completed events.",
+          requestId
+        );
+      }
+
+      if (
+        typeof order.total !== "number" ||
+        !Number.isFinite(order.total)
+      ) {
+        return agentApiError(
+          "invalid_request",
+          "order.total is required for checkout_completed events.",
+          requestId
+        );
+      }
+
+      if (!hasValue(order.currency)) {
+        return agentApiError(
+          "invalid_request",
+          "order.currency is required for checkout_completed events.",
+          requestId
+        );
+      }
     }
 
     try {
@@ -118,14 +218,40 @@ export async function POST(request: Request) {
 
     const eventId = createPublicId("evt");
     const agentRunId = createPublicId("run");
-    const sourceSystem = String(body.source_system || "").trim().toLowerCase() || null;
-    const sourceSlug = String(body.source_slug || "").trim().toLowerCase() || null;
     const businessId = String(body.business?.id || "").trim() || null;
     const locationId = String(body.location?.id || "").trim() || null;
     const agentInstallationId =
       String(body.agent_installation?.id || "").trim() || null;
     const customer = asRecord(body.customer);
+    const order = asRecord(body.order);
     const metadata = asRecord(body.metadata);
+    const isCheckoutCompleted = eventType === "checkout_completed";
+    const eventMetadata = isCheckoutCompleted
+      ? {
+          ...metadata,
+          customer,
+          order,
+          source_account_id: sourceAccountId,
+          post_checkout_revenue: true,
+          run_type: "post_checkout_revenue",
+        }
+      : metadata;
+    const runMetadata = isCheckoutCompleted
+      ? {
+          run_type: "post_checkout_revenue",
+          source_account_id: sourceAccountId,
+          order_id: String(order.id || ""),
+          order_total: order.total,
+          currency: String(order.currency || "").trim(),
+          customer_reference: {
+            name: customer.name || null,
+            phone: customer.phone || null,
+            email: customer.email || null,
+          },
+          intention: "accepted_no_offer_execution_yet",
+        }
+      : {};
+    const usageAccountId = businessId || sourceAccountId;
 
     const { error: eventInsertError } = await admin.from("agent_events").insert({
       id: eventId,
@@ -136,7 +262,7 @@ export async function POST(request: Request) {
       location_id: locationId,
       agent_installation_id: agentInstallationId,
       customer,
-      metadata,
+      metadata: eventMetadata,
       idempotency_key: idempotencyKey,
       request_id: requestId,
       status: "accepted",
@@ -158,7 +284,7 @@ export async function POST(request: Request) {
       attempt_job_id: attemptJobId || null,
       status: "accepted",
       request_id: requestId,
-      metadata: {},
+      metadata: runMetadata,
     });
 
     if (runInsertError) {
@@ -167,7 +293,7 @@ export async function POST(request: Request) {
 
     await Promise.all([
       recordUsageEvent({
-        accountId: businessId,
+        accountId: usageAccountId,
         projectId: locationId,
         metricKey: "accepted_event",
         sourceType: "agent_event",
@@ -178,11 +304,13 @@ export async function POST(request: Request) {
           eventType,
           sourceSystem,
           sourceSlug,
+          sourceAccountId,
           agentInstallationId,
+          runType: isCheckoutCompleted ? "post_checkout_revenue" : null,
         },
       }),
       recordUsageEvent({
-        accountId: businessId,
+        accountId: usageAccountId,
         projectId: locationId,
         metricKey: "agent_run",
         sourceType: "agent_run",
@@ -194,8 +322,10 @@ export async function POST(request: Request) {
           eventType,
           sourceSystem,
           sourceSlug,
+          sourceAccountId,
           attemptJobId: attemptJobId || null,
           agentInstallationId,
+          runType: isCheckoutCompleted ? "post_checkout_revenue" : null,
         },
       }),
     ]);

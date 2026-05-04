@@ -226,6 +226,71 @@ Manual tests:
 - Verify idempotency replay does not double-count
 - Verify `billable=false`
 
+## Slice 1 Implementation Notes
+
+Slice 1 supports intake only:
+- `checkout_completed` intake only
+- No offer execution
+- No attempts
+- No delivery
+- Non-billable metering only
+
+The Agent API accepts generic custom-checkout events through:
+
+```text
+POST /api/v1/agent/events
+```
+
+Accepted source systems for this first slice:
+- `custom_checkout`
+- `saanaos`
+- `test`
+
+Sample curl:
+
+```bash
+curl -i -X POST https://www.saanaos.com/api/v1/agent/events \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: checkout-test-001" \
+  -d '{
+    "event_type": "checkout_completed",
+    "source_system": "custom_checkout",
+    "source_account_id": "demo-custom-store",
+    "customer": {
+      "name": "Test Customer",
+      "phone": "+15555550123",
+      "email": "test@example.com",
+      "consent": {
+        "sms": true,
+        "whatsapp": false
+      }
+    },
+    "order": {
+      "id": "order_1001",
+      "items": [
+        {
+          "id": "item_1",
+          "name": "Test Product",
+          "quantity": 1,
+          "price": 25
+        }
+      ],
+      "total": 25,
+      "currency": "USD"
+    },
+    "metadata": {
+      "test": true
+    }
+  }'
+```
+
+Expected:
+- HTTP 200
+- `agent_event` row created
+- `agent_run` row created
+- `usage_events` contains `accepted_event` and `agent_run`
+- `billable=false`
+
 ## Observability
 
 Logs/events to inspect:
