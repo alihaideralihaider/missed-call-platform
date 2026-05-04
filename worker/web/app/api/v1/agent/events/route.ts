@@ -252,6 +252,15 @@ export async function POST(request: Request) {
         }
       : {};
     const usageAccountId = businessId || sourceAccountId;
+    const checkoutUsageMetadata = isCheckoutCompleted
+      ? {
+          runType: "post_checkout_revenue",
+          sourceAccountId: sourceAccountId || null,
+          orderId: order.id ? String(order.id) : null,
+          orderTotal: typeof order.total === "number" ? order.total : null,
+          currency: order.currency ? String(order.currency).trim() : null,
+        }
+      : {};
 
     const { error: eventInsertError } = await admin.from("agent_events").insert({
       id: eventId,
@@ -304,9 +313,8 @@ export async function POST(request: Request) {
           eventType,
           sourceSystem,
           sourceSlug,
-          sourceAccountId,
           agentInstallationId,
-          runType: isCheckoutCompleted ? "post_checkout_revenue" : null,
+          ...checkoutUsageMetadata,
         },
       }),
       recordUsageEvent({
@@ -322,10 +330,9 @@ export async function POST(request: Request) {
           eventType,
           sourceSystem,
           sourceSlug,
-          sourceAccountId,
           attemptJobId: attemptJobId || null,
           agentInstallationId,
-          runType: isCheckoutCompleted ? "post_checkout_revenue" : null,
+          ...checkoutUsageMetadata,
         },
       }),
     ]);
