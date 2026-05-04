@@ -4,6 +4,8 @@ For the full platform documentation index, see [Developer Platform Documentation
 
 Before new agent implementation, the [Agent Productization Loop](../agent-productization-loop.md) should be completed for that agent.
 
+The [Post-Checkout Revenue Agent Productization Loop](../../future-agents/post-checkout-revenue-agent/productization-loop.md) is documented, but implementation remains future work.
+
 ## Phase 1: Internal Wrapper
 
 Goal: wrap the existing SaanaOS agent behavior behind cleaner internal interfaces.

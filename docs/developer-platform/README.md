@@ -27,6 +27,10 @@ AuthToolkit is the infrastructure and developer layer. RecoveryStack is the agen
 - [Universal Agent Metering Standard](./agent-api/agent-metering-standard.md): defines future metric keys, usage rules, and billing-safe traceability.
 - [Usage Events v1](./agent-api/usage-events.md): explains current non-billable usage rows and future billing inputs.
 
+## Future Agents
+
+- [Post-Checkout Revenue Agent Productization Loop](../future-agents/post-checkout-revenue-agent/productization-loop.md): applies the agent productization loop to the future Post-Checkout Revenue Agent pattern.
+
 ## Current Live Implementation
 
 SaanaOS missed-call recovery is the first live implementation.
