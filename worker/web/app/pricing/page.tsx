@@ -158,6 +158,11 @@ export default function PricingPage() {
             Recover missed calls and send customers an SMS ordering link with a
             dedicated phone line included.
           </p>
+          <div className="mt-6">
+            <CTAButton href="/missed-call-revenue-calculator" variant="secondary">
+              Estimate missed-call revenue
+            </CTAButton>
+          </div>
         </div>
 
         <div className="relative z-10 mt-10 grid gap-5 lg:grid-cols-2">

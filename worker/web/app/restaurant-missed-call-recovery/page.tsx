@@ -106,6 +106,9 @@ export default function RestaurantMissedCallRecoveryPage() {
               <CTAButton href="/pricing" variant="secondary">
                 See Pricing
               </CTAButton>
+              <CTAButton href="/missed-call-revenue-calculator" variant="secondary">
+                Estimate missed-call revenue
+              </CTAButton>
             </div>
           </div>
         </SectionShell>
