@@ -7,6 +7,7 @@ AuthToolkit is the infrastructure and developer layer. RecoveryStack is the agen
 ## Core Architecture
 
 - [Agent Productization Loop](./agent-productization-loop.md): defines the full technical, business, buyer, metering, billing, and learning loop every future agent must follow.
+- [Calculator Standard](./calculator-standard.md): defines the repeatable buyer-education calculator pattern used across live products and future agents.
 - [Attempts Engine Overview](../attempts-engine/overview.md): explains the Universal Attempts Engine and the `Event -> Job -> Attempts -> Outcome` pattern.
 - [Attempts Engine Architecture](../attempts-engine/architecture.md): documents attempt jobs, messages, events, cron execution, outcomes, and Agent API traceability.
 - [Attempts Engine Execution Flow](../attempts-engine/execution-flow.md): describes the current missed-call recovery execution path.
