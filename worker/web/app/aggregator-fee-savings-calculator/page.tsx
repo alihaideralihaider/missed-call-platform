@@ -11,13 +11,13 @@ import { TrustLine } from "@/components/marketing/TrustLine";
 import { saanaColors } from "@/lib/brand/colors";
 
 const defaults = {
-  missedCallsPerWeek: 25,
-  percentCallersWhoWouldOrder: 40,
+  monthlyAggregatorOrders: 300,
   averageOrderValue: 28,
-  percentRecoveredWithSms: 25,
-  weeksPerMonth: 4.33,
   aggregatorCommissionPercentage: 30,
-  monthlyFixedCost: 29,
+  percentOrdersShiftedDirect: 20,
+  currentDirectOrderPercentage: 10,
+  monthlyPlatformCost: 29,
+  averagePaymentProcessingPercentage: 3,
 };
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
@@ -38,61 +38,65 @@ type CalculatorInputs = typeof defaults;
 
 type Scenario = {
   label: string;
-  recoveredPercent: number;
-  recoveredOrders: number;
-  recoveredRevenue: number;
-  aggregatorFeeSavings: number;
+  shiftedPercent: number;
+  ordersShiftedDirect: number;
+  commissionSaved: number;
+  netMonthlySavings: number;
 };
 
-export default function MissedCallRevenueCalculatorPage() {
+export default function AggregatorFeeSavingsCalculatorPage() {
   const [inputs, setInputs] = useState<CalculatorInputs>(defaults);
 
   const results = useMemo(() => {
-    const monthlyMissedCalls = inputs.missedCallsPerWeek * inputs.weeksPerMonth;
-    const monthlyLostOrderOpportunities =
-      monthlyMissedCalls * (inputs.percentCallersWhoWouldOrder / 100);
-    const estimatedLostRevenue =
-      monthlyLostOrderOpportunities * inputs.averageOrderValue;
-    const estimatedRecoveredOrders =
-      monthlyLostOrderOpportunities * (inputs.percentRecoveredWithSms / 100);
-    const estimatedRecoveredRevenue =
-      estimatedRecoveredOrders * inputs.averageOrderValue;
-    const estimatedAggregatorFeeSavings =
-      estimatedRecoveredRevenue * (inputs.aggregatorCommissionPercentage / 100);
-    const estimatedNetAfterPlatform =
-      estimatedRecoveredRevenue - inputs.monthlyFixedCost;
+    const commissionRate = inputs.aggregatorCommissionPercentage / 100;
+    const processingRate = inputs.averagePaymentProcessingPercentage / 100;
+    const shiftedRate = inputs.percentOrdersShiftedDirect / 100;
+    const monthlyAggregatorRevenue =
+      inputs.monthlyAggregatorOrders * inputs.averageOrderValue;
+    const estimatedOrdersShiftedDirect =
+      inputs.monthlyAggregatorOrders * shiftedRate;
+    const estimatedDirectRevenueShifted =
+      estimatedOrdersShiftedDirect * inputs.averageOrderValue;
+    const estimatedCommissionSaved =
+      estimatedDirectRevenueShifted * commissionRate;
+    const estimatedPaymentProcessingCost =
+      estimatedDirectRevenueShifted * processingRate;
+    const estimatedNetSavings =
+      estimatedCommissionSaved -
+      estimatedPaymentProcessingCost -
+      inputs.monthlyPlatformCost;
+    const annualizedNetSavings = estimatedNetSavings * 12;
 
-    const buildScenario = (
-      label: string,
-      recoveredPercent: number,
-    ): Scenario => {
-      const recoveredOrders =
-        monthlyLostOrderOpportunities * (recoveredPercent / 100);
-      const recoveredRevenue = recoveredOrders * inputs.averageOrderValue;
+    const buildScenario = (label: string, shiftedPercent: number): Scenario => {
+      const ordersShiftedDirect =
+        inputs.monthlyAggregatorOrders * (shiftedPercent / 100);
+      const directRevenueShifted = ordersShiftedDirect * inputs.averageOrderValue;
+      const commissionSaved = directRevenueShifted * commissionRate;
+      const paymentProcessingCost = directRevenueShifted * processingRate;
       return {
         label,
-        recoveredPercent,
-        recoveredOrders,
-        recoveredRevenue,
-        aggregatorFeeSavings:
-          recoveredRevenue * (inputs.aggregatorCommissionPercentage / 100),
+        shiftedPercent,
+        ordersShiftedDirect,
+        commissionSaved,
+        netMonthlySavings:
+          commissionSaved - paymentProcessingCost - inputs.monthlyPlatformCost,
       };
     };
 
     return {
-      monthlyMissedCalls,
-      monthlyLostOrderOpportunities,
-      estimatedLostRevenue,
-      estimatedRecoveredOrders,
-      estimatedRecoveredRevenue,
-      estimatedAggregatorFeeSavings,
-      estimatedNetAfterPlatform,
+      monthlyAggregatorRevenue,
+      estimatedOrdersShiftedDirect,
+      estimatedDirectRevenueShifted,
+      estimatedCommissionSaved,
+      estimatedPaymentProcessingCost,
+      estimatedNetSavings,
+      annualizedNetSavings,
       scenarios: [
-        buildScenario("Conservative", inputs.percentRecoveredWithSms * 0.5),
-        buildScenario("Expected", inputs.percentRecoveredWithSms),
+        buildScenario("Conservative", inputs.percentOrdersShiftedDirect * 0.5),
+        buildScenario("Expected", inputs.percentOrdersShiftedDirect),
         buildScenario(
           "Aggressive",
-          Math.min(inputs.percentRecoveredWithSms * 1.5, 60),
+          Math.min(inputs.percentOrdersShiftedDirect * 1.5, 60),
         ),
       ],
     };
@@ -125,31 +129,30 @@ export default function MissedCallRevenueCalculatorPage() {
                   color: saanaColors.orange,
                 }}
               >
-                Missed Call Revenue Calculator
+                Aggregator Fee Savings Calculator
               </p>
               <h1
                 className="mt-6 text-5xl font-black leading-[0.98] tracking-normal sm:text-6xl lg:text-7xl"
                 style={{ color: saanaColors.navy }}
               >
-                Estimate how much revenue your restaurant may be losing from
-                missed calls.
+                Estimate how much your restaurant may save by moving more
+                pickup orders direct.
               </h1>
               <p
                 className="mt-6 max-w-3xl text-lg leading-8 sm:text-xl"
                 style={{ color: saanaColors.muted }}
               >
-                Use this simple calculator to estimate missed-call order
-                opportunity. This is an educational estimate, not a guarantee.
+                Use this calculator to estimate marketplace commission savings
+                when some orders shift from aggregator platforms to direct
+                ordering. This is an educational estimate, not a guarantee.
               </p>
               <div className="mt-7">
                 <TrustLine />
               </div>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <CTAButton href="#calculator">
-                  Calculate missed-call opportunity
-                </CTAButton>
-                <CTAButton href="/restaurant-missed-call-recovery" variant="secondary">
-                  Back to missed-call recovery
+                <CTAButton href="#calculator">Calculate fee savings</CTAButton>
+                <CTAButton href="/pricing" variant="secondary">
+                  View pricing
                 </CTAButton>
               </div>
             </div>
@@ -159,18 +162,18 @@ export default function MissedCallRevenueCalculatorPage() {
                 className="text-sm font-black uppercase tracking-[0.14em]"
                 style={{ color: saanaColors.orange }}
               >
-                Expected recovery estimate
+                Expected direct shift estimate
               </p>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <MetricCard
-                  label="Recovered orders"
-                  value={formatNumber(results.estimatedRecoveredOrders)}
-                  helper="estimated monthly orders recovered"
+                  label="Orders shifted direct"
+                  value={formatNumber(results.estimatedOrdersShiftedDirect)}
+                  helper="estimated monthly aggregator orders moved direct"
                 />
                 <MetricCard
-                  label="Recovered revenue"
-                  value={formatMoney(results.estimatedRecoveredRevenue)}
-                  helper="estimated direct monthly revenue"
+                  label="Net monthly savings"
+                  value={formatMoney(results.estimatedNetSavings)}
+                  helper="after payment processing and platform cost"
                 />
               </div>
               <p
@@ -180,8 +183,9 @@ export default function MissedCallRevenueCalculatorPage() {
                   color: saanaColors.navy,
                 }}
               >
-                Results depend on call volume, customer intent, menu prices,
-                hours, consent, SMS deliverability, and ordering experience.
+                Results depend on customer behavior, marketplace rates, pickup
+                demand, payment processing fees, direct ordering experience, and
+                marketing.
               </p>
             </div>
           </div>
@@ -195,7 +199,7 @@ export default function MissedCallRevenueCalculatorPage() {
             className="text-4xl font-black sm:text-5xl"
             style={{ color: saanaColors.navy }}
           >
-            Missed-call order opportunity
+            Direct ordering savings estimate
           </h2>
           <p className="mt-4 text-lg leading-8" style={{ color: saanaColors.muted }}>
             Adjust the assumptions. Percent fields use normal 0-100 values and
@@ -210,39 +214,15 @@ export default function MissedCallRevenueCalculatorPage() {
             </h3>
             <div className="mt-6 grid gap-4">
               <NumberInput
-                label="Missed calls per week"
-                value={inputs.missedCallsPerWeek}
-                onChange={(value) => updateInput("missedCallsPerWeek", value)}
-              />
-              <NumberInput
-                label="Percent callers who would order"
-                suffix="%"
-                max={100}
-                value={inputs.percentCallersWhoWouldOrder}
-                onChange={(value) =>
-                  updateInput("percentCallersWhoWouldOrder", value)
-                }
+                label="Monthly aggregator orders"
+                value={inputs.monthlyAggregatorOrders}
+                onChange={(value) => updateInput("monthlyAggregatorOrders", value)}
               />
               <NumberInput
                 label="Average order value"
                 prefix="$"
                 value={inputs.averageOrderValue}
                 onChange={(value) => updateInput("averageOrderValue", value)}
-              />
-              <NumberInput
-                label="Percent recovered with SMS"
-                suffix="%"
-                max={100}
-                value={inputs.percentRecoveredWithSms}
-                onChange={(value) =>
-                  updateInput("percentRecoveredWithSms", value)
-                }
-              />
-              <NumberInput
-                label="Weeks per month"
-                value={inputs.weeksPerMonth}
-                step="0.01"
-                onChange={(value) => updateInput("weeksPerMonth", value)}
               />
               <NumberInput
                 label="Aggregator commission percentage"
@@ -254,10 +234,37 @@ export default function MissedCallRevenueCalculatorPage() {
                 }
               />
               <NumberInput
-                label="Monthly fixed cost"
+                label="Percent orders shifted direct"
+                suffix="%"
+                max={100}
+                value={inputs.percentOrdersShiftedDirect}
+                onChange={(value) =>
+                  updateInput("percentOrdersShiftedDirect", value)
+                }
+              />
+              <NumberInput
+                label="Current direct order percentage"
+                suffix="%"
+                max={100}
+                value={inputs.currentDirectOrderPercentage}
+                onChange={(value) =>
+                  updateInput("currentDirectOrderPercentage", value)
+                }
+              />
+              <NumberInput
+                label="Monthly platform cost"
                 prefix="$"
-                value={inputs.monthlyFixedCost}
-                onChange={(value) => updateInput("monthlyFixedCost", value)}
+                value={inputs.monthlyPlatformCost}
+                onChange={(value) => updateInput("monthlyPlatformCost", value)}
+              />
+              <NumberInput
+                label="Average payment processing percentage"
+                suffix="%"
+                max={100}
+                value={inputs.averagePaymentProcessingPercentage}
+                onChange={(value) =>
+                  updateInput("averagePaymentProcessingPercentage", value)
+                }
               />
             </div>
           </div>
@@ -268,39 +275,39 @@ export default function MissedCallRevenueCalculatorPage() {
             </h3>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <MetricCard
-                label="Monthly missed calls"
-                value={formatNumber(results.monthlyMissedCalls)}
-                helper="missed calls per week multiplied by weeks per month"
+                label="Monthly aggregator revenue"
+                value={formatMoney(results.monthlyAggregatorRevenue)}
+                helper="aggregator orders multiplied by average order value"
               />
               <MetricCard
-                label="Lost order opportunities"
-                value={formatNumber(results.monthlyLostOrderOpportunities)}
-                helper="missed callers who may have ordered"
+                label="Orders shifted direct"
+                value={formatNumber(results.estimatedOrdersShiftedDirect)}
+                helper="estimated orders moved from marketplace to direct"
               />
               <MetricCard
-                label="Estimated lost revenue"
-                value={formatMoney(results.estimatedLostRevenue)}
-                helper="lost opportunities multiplied by average order value"
+                label="Direct revenue shifted"
+                value={formatMoney(results.estimatedDirectRevenueShifted)}
+                helper="order revenue handled through direct ordering"
               />
               <MetricCard
-                label="Recovered orders"
-                value={formatNumber(results.estimatedRecoveredOrders)}
-                helper="estimated orders recovered through SMS"
-              />
-              <MetricCard
-                label="Recovered revenue"
-                value={formatMoney(results.estimatedRecoveredRevenue)}
-                helper="estimated direct-order revenue recovered"
-              />
-              <MetricCard
-                label="Aggregator fee savings"
-                value={formatMoney(results.estimatedAggregatorFeeSavings)}
+                label="Commission saved"
+                value={formatMoney(results.estimatedCommissionSaved)}
                 helper="estimated marketplace commission avoided"
               />
               <MetricCard
-                label="Net after platform cost"
-                value={formatMoney(results.estimatedNetAfterPlatform)}
-                helper="recovered revenue minus monthly fixed cost"
+                label="Payment processing cost"
+                value={formatMoney(results.estimatedPaymentProcessingCost)}
+                helper="estimated direct payment processing cost"
+              />
+              <MetricCard
+                label="Net monthly savings"
+                value={formatMoney(results.estimatedNetSavings)}
+                helper="commission saved minus processing and platform cost"
+              />
+              <MetricCard
+                label="Annualized net savings"
+                value={formatMoney(results.annualizedNetSavings)}
+                helper="net monthly savings multiplied by 12"
                 wide
               />
             </div>
@@ -309,11 +316,11 @@ export default function MissedCallRevenueCalculatorPage() {
 
         <div className="relative z-10 mt-8 rounded-3xl border bg-white p-6 shadow-[0_18px_45px_rgba(7,30,65,0.08)]">
           <h3 className="text-2xl font-black" style={{ color: saanaColors.navy }}>
-            Recovery scenarios
+            Direct shift scenarios
           </h3>
           <p className="mt-3" style={{ color: saanaColors.muted }}>
-            Conservative uses half your recovery assumption. Aggressive uses
-            1.5x your recovery assumption, capped at 60%.
+            Conservative uses half your direct-shift assumption. Aggressive uses
+            1.5x your assumption, capped at 60%.
           </p>
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
             {results.scenarios.map((scenario) => (
@@ -330,9 +337,8 @@ export default function MissedCallRevenueCalculatorPage() {
             color: saanaColors.navy,
           }}
         >
-          This is an estimate, not a revenue guarantee. Customers must provide
-          proper consent where required. Promotional texting requires separate
-          consent.
+          This is an estimate, not a savings guarantee. Marketplace contracts
+          and rules may vary. This is not financial or legal advice.
         </div>
       </SectionShell>
 
@@ -342,22 +348,21 @@ export default function MissedCallRevenueCalculatorPage() {
           <InfoCard
             title="What this calculator teaches"
             items={[
-              "Missed calls are not just missed conversations.",
-              "Not every missed call becomes an order.",
-              "Direct ordering keeps more margin than marketplace orders.",
-              "SMS recovery must be bounded and consent-aware.",
-              "Even small recovery rates can matter with volume.",
+              "Aggregator fees add up with volume.",
+              "Not all orders can move direct.",
+              "Direct ordering still has payment processing costs.",
+              "Small shifts can matter.",
+              "Customer habit and convenience matter.",
             ]}
           />
           <InfoCard
             title="How SaanaOS helps"
             items={[
-              "Dedicated restaurant number.",
+              "Direct pickup ordering page.",
+              "SMS order links.",
               "Missed-call recovery.",
-              "SMS ordering link after consent.",
-              "Bounded follow-up attempts.",
-              "Direct pickup ordering.",
-              "No marketplace commission.",
+              "No marketplace commission on direct orders.",
+              "Simple setup for restaurants.",
             ]}
           />
         </div>
@@ -374,21 +379,20 @@ export default function MissedCallRevenueCalculatorPage() {
               Current live status
             </h2>
             <p className="mt-4 text-lg leading-8" style={{ color: saanaColors.muted }}>
-              SaanaOS missed-call recovery is live. The Universal Attempts
-              Engine powers bounded recovery attempts. Follow-up stops when an
-              order is placed or the job expires.
+              SaanaOS direct pickup ordering and missed-call recovery are live.
+              This calculator is educational. Savings are not guaranteed.
             </p>
           </div>
           <div className="rounded-[32px] border bg-white p-6 shadow-[0_18px_45px_rgba(7,30,65,0.08)]">
             <div className="grid gap-3 sm:grid-cols-3">
-              <StatusPill label="Live" detail="Missed-call recovery" />
-              <StatusPill label="Bounded" detail="Stops on order or expiry" />
-              <StatusPill label="Direct" detail="Pickup ordering path" />
+              <StatusPill label="Direct" detail="Pickup ordering page" />
+              <StatusPill label="Recovery" detail="SMS links after consent" />
+              <StatusPill label="Margin" detail="No marketplace commission" />
             </div>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <CTAButton href="/pricing">Start founding pricing</CTAButton>
               <CTAButton
-                href="mailto:navid@authtoolkit.com?subject=SaanaOS%20Missed%20Call%20Revenue%20Calculator"
+                href="mailto:navid@authtoolkit.com?subject=SaanaOS%20Aggregator%20Fee%20Savings%20Calculator"
                 variant="secondary"
               >
                 Request setup
@@ -401,30 +405,29 @@ export default function MissedCallRevenueCalculatorPage() {
       <SectionShell className="relative z-10 overflow-hidden bg-white/90">
         <div className="relative z-10 rounded-[32px] border bg-white p-8 shadow-[0_24px_70px_rgba(7,30,65,0.10)] sm:p-10">
           <h2 className="text-4xl font-black sm:text-5xl" style={{ color: saanaColors.navy }}>
-            Recover more direct restaurant orders.
+            Move more pickup orders direct.
           </h2>
           <p className="mt-4 max-w-2xl text-lg leading-8" style={{ color: saanaColors.muted }}>
-            Use the calculator as a planning tool, then review the missed-call
-            recovery flow, pricing, and technical proof.
+            Use the calculator as a planning tool, then review pricing,
+            missed-call recovery, and the missed-call revenue calculator.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <CTAButton href="/pricing">Start founding pricing</CTAButton>
             <CTAButton
-              href="mailto:navid@authtoolkit.com?subject=SaanaOS%20Missed%20Call%20Revenue%20Calculator"
+              href="mailto:navid@authtoolkit.com?subject=SaanaOS%20Aggregator%20Fee%20Savings%20Calculator"
               variant="secondary"
             >
               Request setup
             </CTAButton>
           </div>
           <div className="mt-6 flex flex-wrap gap-3 text-sm font-bold">
+            <TextLink href="/pricing">Pricing</TextLink>
             <TextLink href="/restaurant-missed-call-recovery">
               Missed-call recovery
             </TextLink>
-            <TextLink href="/pricing">Pricing</TextLink>
-            <TextLink href="/aggregator-fee-savings-calculator">
-              Compare aggregator fee savings
+            <TextLink href="/missed-call-revenue-calculator">
+              Missed-call revenue calculator
             </TextLink>
-            <TextLink href="/attempts-engine">Technical proof</TextLink>
           </div>
         </div>
       </SectionShell>
@@ -456,7 +459,10 @@ function NumberInput({
       <span className="text-sm font-black" style={{ color: saanaColors.navy }}>
         {label}
       </span>
-      <span className="mt-2 flex items-center rounded-2xl border bg-white px-4 py-3 shadow-sm" style={{ borderColor: saanaColors.border }}>
+      <span
+        className="mt-2 flex items-center rounded-2xl border bg-white px-4 py-3 shadow-sm"
+        style={{ borderColor: saanaColors.border }}
+      >
         {prefix ? (
           <span className="mr-2 font-black" style={{ color: saanaColors.orange }}>
             {prefix}
@@ -495,10 +501,9 @@ function MetricCard({
 }) {
   return (
     <div
-      className={[
-        "rounded-3xl border p-5",
-        wide ? "sm:col-span-2" : "",
-      ].join(" ")}
+      className={["rounded-3xl border p-5", wide ? "sm:col-span-2" : ""].join(
+        " ",
+      )}
       style={{
         backgroundColor: saanaColors.softBackground,
         borderColor: saanaColors.border,
@@ -532,15 +537,27 @@ function ScenarioCard({ scenario }: { scenario: Scenario }) {
         </h4>
         <span
           className="rounded-full px-3 py-1 text-xs font-black"
-          style={{ backgroundColor: saanaColors.softOrange, color: saanaColors.orange }}
+          style={{
+            backgroundColor: saanaColors.softOrange,
+            color: saanaColors.orange,
+          }}
         >
-          {decimalFormatter.format(scenario.recoveredPercent)}%
+          {decimalFormatter.format(scenario.shiftedPercent)}%
         </span>
       </div>
       <dl className="mt-5 space-y-3">
-        <ScenarioRow label="Recovered orders" value={formatNumber(scenario.recoveredOrders)} />
-        <ScenarioRow label="Recovered revenue" value={formatMoney(scenario.recoveredRevenue)} />
-        <ScenarioRow label="Fee savings" value={formatMoney(scenario.aggregatorFeeSavings)} />
+        <ScenarioRow
+          label="Orders shifted direct"
+          value={formatNumber(scenario.ordersShiftedDirect)}
+        />
+        <ScenarioRow
+          label="Commission saved"
+          value={formatMoney(scenario.commissionSaved)}
+        />
+        <ScenarioRow
+          label="Net monthly savings"
+          value={formatMoney(scenario.netMonthlySavings)}
+        />
       </dl>
     </div>
   );
@@ -548,7 +565,10 @@ function ScenarioCard({ scenario }: { scenario: Scenario }) {
 
 function ScenarioRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-t pt-3" style={{ borderColor: saanaColors.border }}>
+    <div
+      className="flex items-center justify-between gap-4 border-t pt-3"
+      style={{ borderColor: saanaColors.border }}
+    >
       <dt className="text-sm font-semibold" style={{ color: saanaColors.muted }}>
         {label}
       </dt>
@@ -567,7 +587,11 @@ function InfoCard({ title, items }: { title: string; items: string[] }) {
       </h2>
       <ul className="mt-6 space-y-3">
         {items.map((item) => (
-          <li key={item} className="flex gap-3 text-sm font-semibold leading-6" style={{ color: saanaColors.muted }}>
+          <li
+            key={item}
+            className="flex gap-3 text-sm font-semibold leading-6"
+            style={{ color: saanaColors.muted }}
+          >
             <span
               className="mt-2 h-2 w-2 shrink-0 rounded-full"
               style={{ backgroundColor: saanaColors.orange }}
