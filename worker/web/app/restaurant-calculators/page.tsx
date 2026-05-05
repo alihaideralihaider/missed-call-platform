@@ -173,6 +173,9 @@ export default function RestaurantCalculatorsPage() {
             <CTAButton href="/restaurant-missed-call-recovery" variant="secondary">
               Learn missed-call recovery
             </CTAButton>
+            <CTAButton href="/restaurant-missed-call-recovery-deal-room" variant="secondary">
+              View Deal Room
+            </CTAButton>
             <CTAButton href="/attempts-engine" variant="secondary">
               Technical proof
             </CTAButton>

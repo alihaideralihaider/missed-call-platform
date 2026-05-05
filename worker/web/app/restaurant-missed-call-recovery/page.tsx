@@ -204,8 +204,11 @@ export default function RestaurantMissedCallRecoveryPage() {
           <p className="mt-4 max-w-2xl text-lg leading-8" style={{ color: saanaColors.muted }}>
             Founding restaurants lock in intro pricing.
           </p>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <CTAButton href="/onboard">Book Your Setup</CTAButton>
+            <CTAButton href="/restaurant-missed-call-recovery-deal-room" variant="secondary">
+              View Deal Room
+            </CTAButton>
           </div>
         </div>
       </SectionShell>
