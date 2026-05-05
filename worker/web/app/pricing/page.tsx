@@ -165,6 +165,9 @@ export default function PricingPage() {
             <CTAButton href="/aggregator-fee-savings-calculator" variant="secondary">
               Estimate aggregator fee savings
             </CTAButton>
+            <CTAButton href="/restaurant-calculators" variant="secondary">
+              View all calculators
+            </CTAButton>
           </div>
         </div>
 

@@ -428,6 +428,7 @@ export default function AggregatorFeeSavingsCalculatorPage() {
             <TextLink href="/missed-call-revenue-calculator">
               Missed-call revenue calculator
             </TextLink>
+            <TextLink href="/restaurant-calculators">All calculators</TextLink>
           </div>
         </div>
       </SectionShell>
