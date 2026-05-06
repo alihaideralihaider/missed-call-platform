@@ -136,6 +136,7 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
   const [submitError, setSubmitError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [togglingItemId, setTogglingItemId] = useState("");
+  const [copiedOrderingLink, setCopiedOrderingLink] = useState("");
 
   const [previewingImport, setPreviewingImport] = useState(false);
   const [committingImport, setCommittingImport] = useState(false);
@@ -290,6 +291,15 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
     return items.find((item) => item.id === assetTargetItemId) || null;
   }, [items, assetTargetItemId]);
 
+  const orderingLinks = useMemo(() => {
+    const safeSlug = cleanSlug(restaurant?.slug || slug);
+
+    return {
+      main: safeSlug ? `/r/${safeSlug}` : "",
+      catering: safeSlug ? `/r/${safeSlug}/catering` : "",
+    };
+  }, [restaurant?.slug, slug]);
+
   const filteredAssets = useMemo(() => {
     const q = assetQuery.trim().toLowerCase();
 
@@ -324,6 +334,22 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  }
+
+  async function copyOrderingLink(label: string, url: string) {
+    if (!url) return;
+
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedOrderingLink(label);
+      setSuccessMessage(`${label} copied to clipboard.`);
+
+      window.setTimeout(() => {
+        setCopiedOrderingLink((current) => (current === label ? "" : current));
+      }, 2000);
+    } catch {
+      setSubmitError("Failed to copy ordering link.");
+    }
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -927,6 +953,73 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
                   </form>
                 </>
               )}
+            </div>
+
+            <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-neutral-900">
+                Public ordering links
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Copy these direct ordering paths for QR codes, window signs, and
+                restaurant materials.
+              </p>
+
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-neutral-900">
+                        Main ordering link
+                      </p>
+                      <p className="mt-1 break-all font-mono text-xs text-neutral-600">
+                        {orderingLinks.main || "/r/[slug]"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copyOrderingLink("Main ordering link", orderingLinks.main)
+                      }
+                      disabled={!orderingLinks.main}
+                      className="shrink-0 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 disabled:opacity-50"
+                    >
+                      {copiedOrderingLink === "Main ordering link" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-neutral-900">
+                        Catering ordering link
+                      </p>
+                      <p className="mt-1 break-all font-mono text-xs text-neutral-600">
+                        {orderingLinks.catering || "/r/[slug]/catering"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copyOrderingLink(
+                          "Catering ordering link",
+                          orderingLinks.catering
+                        )
+                      }
+                      disabled={!orderingLinks.catering}
+                      className="shrink-0 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 disabled:opacity-50"
+                    >
+                      {copiedOrderingLink === "Catering ordering link"
+                        ? "Copied"
+                        : "Copy"}
+                    </button>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-neutral-500">
+                    Create a category named Catering to show items on the
+                    catering link.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">

@@ -218,6 +218,20 @@ Phase 1 should include:
 - No scheduling engine yet
 - No complex lead form yet
 
+## Phase 1 Implementation Notes
+
+Implemented Phase 1 as a presentation and routing layer.
+
+- Added `/r/[slug]/catering`.
+- The catering route uses the existing menu/category model and shows active items from a category named `Catering`.
+- Cart, checkout, modifier selection, order validation, SMS, and attempts behavior remain unchanged.
+- Added admin copy links for:
+  - main ordering link: `/r/[slug]`
+  - catering ordering link: `/r/[slug]/catering`
+- QR image generation is still future work.
+- Catering-specific SMS copy is still future work.
+- Catering scheduling fields, event date, guest count, and catering-specific lead capture are still future work.
+
 ## Phase 2 Scope
 
 Phase 2 can include:

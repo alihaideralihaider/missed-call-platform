@@ -72,6 +72,10 @@ type Props = {
   items: MenuItem[];
   restaurantName: string;
   restaurantAddress?: string | null;
+  menuEyebrow?: string | null;
+  menuIntroTitle?: string | null;
+  menuIntroBody?: string | null;
+  menuIntroNotes?: string[];
   hasVibeUpgrade: boolean;
   hasMenuUpgrade: boolean;
   vibeImageUrl: string | null;
@@ -222,6 +226,10 @@ export default function RestaurantMenuClient({
   items,
   restaurantName,
   restaurantAddress = null,
+  menuEyebrow = null,
+  menuIntroTitle = null,
+  menuIntroBody = null,
+  menuIntroNotes = [],
   hasVibeUpgrade,
   hasMenuUpgrade,
   vibeImageUrl,
@@ -679,6 +687,33 @@ export default function RestaurantMenuClient({
               SMS order updates are available at checkout.
             </p>
           </div>
+
+          {menuIntroTitle || menuIntroBody || menuIntroNotes.length > 0 ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 sm:mt-4 sm:rounded-2xl sm:px-4">
+              {menuEyebrow ? (
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                  {menuEyebrow}
+                </p>
+              ) : null}
+              {menuIntroTitle ? (
+                <h2 className="mt-1 text-base font-bold text-neutral-900">
+                  {menuIntroTitle}
+                </h2>
+              ) : null}
+              {menuIntroBody ? (
+                <p className="mt-1 text-xs leading-5 text-neutral-700">
+                  {menuIntroBody}
+                </p>
+              ) : null}
+              {menuIntroNotes.length > 0 ? (
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-neutral-600">
+                  {menuIntroNotes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </header>
 
         <div className="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90">
