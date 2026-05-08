@@ -1,12 +1,17 @@
 import {
   agentApiError,
   createRequestId,
+  insertAgentAction,
   isSupportedSourceSystem,
   jsonNoStore,
+  maybeLoadAgentRun,
+  normalizeAgentRunId,
 } from "@/lib/agent-api/v1";
 import { POST as suggestModifier } from "@/app/api/agent/suggestions/modifier/route";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type SuggestModifierV1Request = {
+  agent_run_id?: string;
   business?: {
     id?: string;
   };
@@ -43,6 +48,29 @@ type InternalModifierSuggestionResponse = {
   } | null;
 };
 
+function formatSuggestionForV1(
+  suggestion: NonNullable<InternalModifierSuggestionResponse["suggestion"]>,
+  itemId: string
+) {
+  return {
+    id: suggestion.id,
+    item: {
+      id: suggestion.itemId || itemId,
+    },
+    modifier_group: {
+      id: suggestion.modifierGroupId,
+      name: suggestion.groupName || "",
+    },
+    modifier_option: {
+      id: suggestion.modifierOptionId,
+      name: suggestion.optionName || "",
+    },
+    price_delta: suggestion.priceDelta || 0,
+    message: suggestion.message || "",
+    reason: suggestion.reason || null,
+  };
+}
+
 export async function POST(request: Request) {
   const requestId = createRequestId();
 
@@ -60,6 +88,15 @@ export async function POST(request: Request) {
 
     const restaurantSlug = String(body.source_slug || "").trim().toLowerCase();
     const itemId = String(body.item?.id || "").trim();
+    const agentRunId = normalizeAgentRunId(body.agent_run_id);
+    const actionPayload = {
+      source_system: body.source_system,
+      source_slug: body.source_slug,
+      item: body.item || {},
+      cart: body.cart || {},
+      customer: body.customer || {},
+    };
+    const admin = agentRunId ? createSupabaseAdminClient() : null;
 
     if (!restaurantSlug) {
       return agentApiError("invalid_request", "source_slug is required.", requestId);
@@ -67,6 +104,14 @@ export async function POST(request: Request) {
 
     if (!itemId) {
       return agentApiError("invalid_request", "item.id is required.", requestId);
+    }
+
+    if (agentRunId && admin) {
+      const agentRun = await maybeLoadAgentRun(admin, agentRunId);
+
+      if (!agentRun) {
+        return agentApiError("not_found", "Agent run not found.", requestId, 404);
+      }
     }
 
     const internalRequest = new Request(request.url, {
@@ -87,11 +132,50 @@ export async function POST(request: Request) {
       }),
     });
 
-    const internalResponse = await suggestModifier(internalRequest);
-    const data = (await internalResponse.json()) as InternalModifierSuggestionResponse;
-    const suggestion = data.suggestion;
+    let internalResponse: Response;
+    let data: InternalModifierSuggestionResponse;
 
-    if (!suggestion) {
+    try {
+      internalResponse = await suggestModifier(internalRequest);
+      data = (await internalResponse.json()) as InternalModifierSuggestionResponse;
+    } catch (error) {
+      if (agentRunId && admin) {
+        await insertAgentAction(admin, {
+          agentRunId,
+          actionType: "suggest_modifier",
+          actionVersion: "v1",
+          status: "failed",
+          requestId,
+          payload: actionPayload,
+          result: {
+            error: error instanceof Error ? error.message : "unknown_error",
+          },
+        });
+      }
+
+      throw error;
+    }
+
+    const suggestion = data.suggestion;
+    const externalSuggestion = suggestion
+      ? formatSuggestionForV1(suggestion, itemId)
+      : null;
+
+    if (agentRunId && admin) {
+      await insertAgentAction(admin, {
+        agentRunId,
+        actionType: "suggest_modifier",
+        actionVersion: "v1",
+        status: internalResponse.ok ? "completed" : "failed",
+        requestId,
+        payload: actionPayload,
+        result: {
+          suggestion: externalSuggestion,
+        },
+      });
+    }
+
+    if (!externalSuggestion) {
       return jsonNoStore({
         suggestion: null,
         request_id: requestId,
@@ -99,23 +183,7 @@ export async function POST(request: Request) {
     }
 
     return jsonNoStore({
-      suggestion: {
-        id: suggestion.id,
-        item: {
-          id: suggestion.itemId || itemId,
-        },
-        modifier_group: {
-          id: suggestion.modifierGroupId,
-          name: suggestion.groupName || "",
-        },
-        modifier_option: {
-          id: suggestion.modifierOptionId,
-          name: suggestion.optionName || "",
-        },
-        price_delta: suggestion.priceDelta || 0,
-        message: suggestion.message || "",
-        reason: suggestion.reason || null,
-      },
+      suggestion: externalSuggestion,
       request_id: requestId,
     });
   } catch (error) {
@@ -131,4 +199,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

@@ -103,6 +103,35 @@ function formatPickupDisplay(order: Order): string {
   return order.pickup_time || "ASAP";
 }
 
+function getPromoSummary(notes: string): {
+  code: string;
+  discount?: string;
+  manualFulfillment?: boolean;
+  note?: string;
+} | null {
+  const lines = String(notes || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const promoLine = lines.find((line) => line.toLowerCase().startsWith("promo:"));
+
+  if (!promoLine) return null;
+
+  const valueAfter = (prefix: string) =>
+    lines
+      .find((line) => line.toLowerCase().startsWith(prefix.toLowerCase()))
+      ?.slice(prefix.length)
+      .trim();
+
+  return {
+    code: promoLine.slice("Promo:".length).trim(),
+    discount: valueAfter("Discount:"),
+    manualFulfillment:
+      valueAfter("Manual fulfillment:")?.toLowerCase() === "yes",
+    note: valueAfter("Note:"),
+  };
+}
+
 function statusPillClass(status: string): string {
   const normalized = status.trim().toLowerCase();
 
@@ -494,6 +523,31 @@ export default function RestaurantOrdersAdminPage({ params }: PageProps) {
                     key={order.id}
                     className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5"
                   >
+                    {(() => {
+                      const promoSummary = getPromoSummary(order.notes);
+
+                      return promoSummary ? (
+                        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                          <p className="font-semibold">
+                            Promo code: {promoSummary.code}
+                          </p>
+                          {promoSummary.discount ? (
+                            <p className="mt-1">
+                              Discount: {promoSummary.discount}
+                            </p>
+                          ) : null}
+                          {promoSummary.manualFulfillment ? (
+                            <p className="mt-1 font-medium">
+                              Manual fulfillment required.
+                            </p>
+                          ) : null}
+                          {promoSummary.note ? (
+                            <p className="mt-1">{promoSummary.note}</p>
+                          ) : null}
+                        </div>
+                      ) : null;
+                    })()}
+
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">

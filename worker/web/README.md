@@ -16,6 +16,31 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## SMS Provider Configuration
+
+Twilio is the default SMS provider. Signal House can be selected for testing
+without changing existing SMS routes.
+
+```bash
+SMS_PROVIDER_OVERRIDE=twilio
+SMS_FALLBACK_TO_TWILIO=true
+
+SIGNALHOUSE_API_KEY=
+SIGNALHOUSE_FROM_NUMBER=
+SIGNALHOUSE_BASE_URL=
+```
+
+To test a provider internally, send a protected request to:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/messaging/test-sms \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"twilio","to":"+15555555555","body":"Test SMS"}'
+```
+
+In production, include either `x-cron-secret: $CRON_SECRET` or
+`Authorization: Bearer $CRON_SECRET`.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

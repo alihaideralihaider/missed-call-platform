@@ -5,6 +5,7 @@ export type CartItem = {
   price: number;
   quantity: number;
   is_sold_out?: boolean;
+  category_name?: string | null;
   modifiers?: CartModifierSelection[];
 };
 
@@ -107,6 +108,10 @@ function sanitizeCartItem(item: unknown): CartItem | null {
   const price = Number(raw.price);
   const quantity = Number(raw.quantity);
   const is_sold_out = Boolean(raw.is_sold_out);
+  const category_name =
+    typeof raw.category_name === "string" && raw.category_name.trim()
+      ? raw.category_name.trim()
+      : null;
   const modifiers = sanitizeModifierSelections(raw.modifiers);
 
   if (!id || !name) return null;
@@ -122,6 +127,7 @@ function sanitizeCartItem(item: unknown): CartItem | null {
     price,
     quantity: Math.floor(quantity),
     is_sold_out,
+    category_name,
     modifiers,
   };
 }
@@ -183,6 +189,7 @@ export function addToCart(
     name: string;
     price: number;
     is_sold_out?: boolean;
+    category_name?: string | null;
     modifiers?: CartModifierSelection[];
   }
 ) {
@@ -200,6 +207,7 @@ export function addToCart(
     price: item.price,
     quantity: 1,
     is_sold_out: item.is_sold_out,
+    category_name: item.category_name,
     modifiers: sanitizeModifierSelections(item.modifiers),
   });
 
@@ -228,6 +236,7 @@ export function addToCart(
     existing.name = normalizedItem.name;
     existing.price = normalizedItem.price;
     existing.is_sold_out = normalizedItem.is_sold_out;
+    existing.category_name = normalizedItem.category_name;
     existing.modifiers = sanitizeModifierSelections(normalizedItem.modifiers);
     existing.lineId = buildCartLineId({
       id: normalizedItem.id,
@@ -387,6 +396,7 @@ export function syncCartWithMenu(
             : latest.price,
         quantity: cartItem.quantity,
         is_sold_out: latest.is_sold_out,
+        category_name: cartItem.category_name,
         modifiers: cartItem.modifiers,
       });
     })

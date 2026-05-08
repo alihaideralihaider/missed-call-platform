@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { incrementRestaurantUsage } from "@/lib/restaurant-usage";
+import { sendSms } from "@/lib/messaging/sendSms";
+import type { SmsProviderName } from "@/lib/messaging/types";
 
 type RouteContext = {
   params: Promise<{
@@ -110,73 +112,39 @@ function shouldSendStatusSms(status: OrderStatus) {
   return status !== "completed";
 }
 
-async function sendTwilioSms(args: {
+async function sendOrderStatusSms(args: {
   to: string;
   body: string;
+  restaurantId: string;
+  messageType: string;
 }): Promise<
-  | { ok: true; sid: string }
-  | { ok: false; error: string; sid?: string; errorCode?: string }
+  | { ok: true; sid: string; provider: SmsProviderName }
+  | { ok: false; error: string; sid?: string; errorCode?: string; provider: SmsProviderName }
 > {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_FROM_NUMBER;
-
-  if (!accountSid || !authToken || !fromNumber) {
-    return { ok: false, error: "Missing Twilio environment variables." };
-  }
-
-  const formBody = new URLSearchParams({
-    To: args.to,
-    From: fromNumber,
-    Body: args.body,
+  const result = await sendSms({
+    to: args.to,
+    body: args.body,
+    restaurantId: args.restaurantId,
+    messageType: args.messageType,
   });
 
-  try {
-    const auth =
-      typeof btoa === "function"
-        ? btoa(`${accountSid}:${authToken}`)
-        : Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+  const raw = result.raw as TwilioSendResponse | null;
 
-    const response = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: formBody.toString(),
-      }
-    );
-
-    const rawText = await response.text();
-
-    let parsed: TwilioSendResponse | null = null;
-    try {
-      parsed = rawText ? JSON.parse(rawText) : null;
-    } catch {
-      parsed = null;
-    }
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        error: parsed?.message || `Twilio send failed: ${response.status}`,
-        sid: parsed?.sid,
-        errorCode: parsed?.code ? String(parsed.code) : undefined,
-      };
-    }
-
+  if (result.success) {
     return {
       ok: true,
-      sid: parsed?.sid || "",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Unknown Twilio error",
+      sid: result.messageId || raw?.sid || "",
+      provider: result.provider,
     };
   }
+
+  return {
+    ok: false,
+    error: result.error || "SMS send failed.",
+    sid: result.messageId || raw?.sid,
+    errorCode: raw?.code ? String(raw.code) : undefined,
+    provider: result.provider,
+  };
 }
 
 async function resolveBusinessId(
@@ -234,6 +202,7 @@ async function logMessage(
     fromPhone?: string | null;
     messageBody?: string | null;
     providerMessageSid?: string | null;
+    provider?: SmsProviderName | null;
     status: string;
     errorCode?: string | null;
     errorMessage?: string | null;
@@ -247,7 +216,7 @@ async function logMessage(
     channel: "sms",
     direction: "outbound",
     event_type: args.eventType,
-    provider: "twilio",
+    provider: args.provider || "twilio",
     provider_message_sid: args.providerMessageSid || null,
     to_phone: args.toPhone || null,
     from_phone: args.fromPhone || process.env.TWILIO_FROM_NUMBER || null,
@@ -524,9 +493,11 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
           } else {
             smsAttempted = true;
 
-            const smsResult = await sendTwilioSms({
+            const smsResult = await sendOrderStatusSms({
               to: toPhone,
               body: smsBody,
+              restaurantId: restaurant.id,
+              messageType: `order_status_${nextStatus}`,
             });
 
             if (smsResult.ok) {
@@ -557,6 +528,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
                 toPhone,
                 messageBody: smsBody,
                 providerMessageSid: smsResult.sid,
+                provider: smsResult.provider,
                 status: "sent_to_provider",
                 metadata: {
                   order_number: updatedOrder.order_number,
@@ -575,6 +547,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
                 toPhone,
                 messageBody: smsBody,
                 providerMessageSid: smsResult.sid || null,
+                provider: smsResult.provider,
                 status: "provider_error",
                 errorCode: smsResult.errorCode || null,
                 errorMessage: smsResult.error,

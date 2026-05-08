@@ -37,6 +37,14 @@ type OptionOptimizationStats = {
   revenuePerShown: number;
 };
 
+type MessageVariant =
+  | "direct"
+  | "popular"
+  | "often"
+  | "recent_social_proof"
+  | "most_customers"
+  | "upgrade";
+
 function jsonNoStore(body: unknown, init?: { status?: number }) {
   return NextResponse.json(body, {
     status: init?.status,
@@ -62,6 +70,20 @@ function textIncludesAny(value: string, terms: string[]) {
 
 function isOptionalOption(option: AttachedModifierOption) {
   return !option.groupRequired && option.minSelect <= 0;
+}
+
+function formatSuggestionPrice(value: number) {
+  return `$${Number(value || 0).toFixed(2)}`;
+}
+
+function hashString(value: string) {
+  let hash = 0;
+
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+
+  return hash;
 }
 
 function suggestionResponse(row: {
@@ -90,6 +112,25 @@ function suggestionResponse(row: {
       priceDelta: toNumber(row.price_delta),
     },
   };
+}
+
+async function loadCustomerIds(args: {
+  admin: ReturnType<typeof createSupabaseAdminClient>;
+  restaurantId: string;
+  customerPhone: string;
+}) {
+  const phone = normalizePhone(args.customerPhone);
+  if (!phone) return [];
+
+  const { data } = await args.admin
+    .schema("food_ordering")
+    .from("customers")
+    .select("id")
+    .eq("restaurant_id", args.restaurantId)
+    .eq("phone", phone)
+    .limit(5);
+
+  return (data || []).map((customer) => String(customer.id));
 }
 
 async function loadAttachedOptions(args: {
@@ -211,30 +252,18 @@ async function loadAttachedOptions(args: {
 async function findPastOrderSuggestion(args: {
   admin: ReturnType<typeof createSupabaseAdminClient>;
   restaurantId: string;
-  customerPhone: string;
+  customerIds: string[];
   itemId: string;
   options: AttachedModifierOption[];
 }) {
-  const phone = normalizePhone(args.customerPhone);
-  if (!phone) return null;
-
-  const { data: customers } = await args.admin
-    .schema("food_ordering")
-    .from("customers")
-    .select("id")
-    .eq("restaurant_id", args.restaurantId)
-    .eq("phone", phone)
-    .limit(5);
-
-  const customerIds = (customers || []).map((customer) => String(customer.id));
-  if (!customerIds.length) return null;
+  if (!args.customerIds.length) return null;
 
   const { data: orders } = await args.admin
     .schema("food_ordering")
     .from("orders")
     .select("id")
     .eq("restaurant_id", args.restaurantId)
-    .in("customer_id", customerIds)
+    .in("customer_id", args.customerIds)
     .order("created_at", { ascending: false })
     .limit(25);
 
@@ -285,6 +314,52 @@ async function findPastOrderSuggestion(args: {
   return optionId ? args.options.find((option) => option.optionId === optionId) || null : null;
 }
 
+async function loadSuppressedOptionIds(args: {
+  admin: ReturnType<typeof createSupabaseAdminClient>;
+  restaurantId: string;
+  customerIds: string[];
+  itemId: string;
+  options: AttachedModifierOption[];
+}) {
+  if (!args.customerIds.length) return new Set<string>();
+
+  const optionIds = args.options.map((option) => option.optionId);
+  if (!optionIds.length) return new Set<string>();
+
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await args.admin
+    .from("agent_modifier_suggestions")
+    .select("modifier_option_id")
+    .eq("restaurant_id", args.restaurantId)
+    .eq("item_id", args.itemId)
+    .eq("status", "skipped")
+    .in("customer_id", args.customerIds)
+    .in("modifier_option_id", optionIds)
+    .gte("responded_at", cutoff);
+
+  if (error) {
+    console.error("modifier_suggestion_suppression_query_failed", {
+      restaurantId: args.restaurantId,
+      itemId: args.itemId,
+      error: error.message,
+    });
+    return new Set<string>();
+  }
+
+  const counts = new Map<string, number>();
+  for (const row of data || []) {
+    const optionId = String(row.modifier_option_id || "");
+    if (!optionId) continue;
+    counts.set(optionId, (counts.get(optionId) || 0) + 1);
+  }
+
+  return new Set(
+    [...counts.entries()]
+      .filter(([, count]) => count >= 2)
+      .map(([optionId]) => optionId)
+  );
+}
+
 function pickHeuristicSuggestion(args: {
   itemName: string;
   categoryName: string;
@@ -315,33 +390,13 @@ function pickHeuristicSuggestion(args: {
   return optionalOptions.find((option) => option.price > 0) || optionalOptions[0] || null;
 }
 
-async function pickOptimizedSuggestion(args: {
+async function loadOptionPerformanceStats(args: {
   admin: ReturnType<typeof createSupabaseAdminClient>;
   restaurantId: string;
   itemId: string;
   options: AttachedModifierOption[];
-}): Promise<OptionOptimizationStats | null> {
+}) {
   const optionalOptions = args.options.filter(isOptionalOption);
-  if (!optionalOptions.length) return null;
-
-  const optionsById = new Map(optionalOptions.map((option) => [option.optionId, option]));
-
-  const { data, error } = await args.admin
-    .from("agent_modifier_suggestions")
-    .select("modifier_option_id, status, price_delta")
-    .eq("restaurant_id", args.restaurantId)
-    .eq("item_id", args.itemId)
-    .in("modifier_option_id", [...optionsById.keys()]);
-
-  if (error) {
-    console.error("modifier_suggestion_optimization_query_failed", {
-      restaurantId: args.restaurantId,
-      itemId: args.itemId,
-      error: error.message,
-    });
-    return null;
-  }
-
   const statsByOptionId = new Map<string, OptionOptimizationStats>();
 
   for (const option of optionalOptions) {
@@ -354,6 +409,24 @@ async function pickOptimizedSuggestion(args: {
       acceptanceRate: 0,
       revenuePerShown: 0,
     });
+  }
+
+  if (!optionalOptions.length) return statsByOptionId;
+
+  const { data, error } = await args.admin
+    .from("agent_modifier_suggestions")
+    .select("modifier_option_id, status, price_delta")
+    .eq("restaurant_id", args.restaurantId)
+    .eq("item_id", args.itemId)
+    .in("modifier_option_id", optionalOptions.map((option) => option.optionId));
+
+  if (error) {
+    console.error("modifier_suggestion_optimization_query_failed", {
+      restaurantId: args.restaurantId,
+      itemId: args.itemId,
+      error: error.message,
+    });
+    return statsByOptionId;
   }
 
   for (const row of data || []) {
@@ -374,22 +447,22 @@ async function pickOptimizedSuggestion(args: {
     }
   }
 
-  const eligible = [...statsByOptionId.values()]
-    .map((stats) => {
-      const acceptanceRate =
-        stats.shownCount > 0 ? stats.acceptedCount / stats.shownCount : 0;
-      const revenuePerShown =
-        stats.shownCount > 0 ? stats.revenueAdded / stats.shownCount : 0;
+  for (const stats of statsByOptionId.values()) {
+    stats.acceptanceRate =
+      stats.shownCount > 0 ? stats.acceptedCount / stats.shownCount : 0;
+    stats.revenuePerShown =
+      stats.shownCount > 0 ? stats.revenueAdded / stats.shownCount : 0;
+  }
 
-      return {
-        ...stats,
-        acceptanceRate,
-        revenuePerShown,
-      };
-    })
-    .filter(
-      (stats) => stats.shownCount >= 20 && stats.acceptanceRate >= 0.1
-    );
+  return statsByOptionId;
+}
+
+function pickOptimizedSuggestion(
+  statsByOptionId: Map<string, OptionOptimizationStats>
+) {
+  const eligible = [...statsByOptionId.values()].filter(
+    (stats) => stats.shownCount >= 20 && stats.acceptanceRate >= 0.1
+  );
 
   if (!eligible.length) return null;
 
@@ -402,6 +475,70 @@ async function pickOptimizedSuggestion(args: {
     }
     return b.shownCount - a.shownCount;
   })[0];
+}
+
+function getSocialProofTier(stats: OptionOptimizationStats | undefined) {
+  const acceptedCount = stats?.acceptedCount || 0;
+  const acceptanceRate = stats?.acceptanceRate || 0;
+
+  if (acceptedCount >= 50 && acceptanceRate >= 0.5) return "most_customers";
+  if (acceptedCount >= 20) return "recent_social_proof";
+  if (acceptedCount >= 10) return "often";
+  if (acceptedCount >= 5) return "popular";
+  return "direct";
+}
+
+function pickSuggestionMessage(args: {
+  option: AttachedModifierOption;
+  itemId: string;
+  cartId?: string;
+  entryChannel?: string;
+  stats?: OptionOptimizationStats;
+}) {
+  const tier = getSocialProofTier(args.stats);
+  const price = formatSuggestionPrice(args.option.price);
+  const optionName = args.option.optionName;
+  const variantsByTier: Record<
+    string,
+    Array<{ variant: MessageVariant; message: string }>
+  > = {
+    direct: [
+      { variant: "direct", message: `Add ${optionName} for +${price}?` },
+      { variant: "upgrade", message: `Upgrade with ${optionName} for +${price}?` },
+      { variant: "direct", message: `Want to add ${optionName} for +${price}?` },
+    ],
+    popular: [
+      { variant: "popular", message: `Popular add-on: ${optionName} (+${price})` },
+      { variant: "popular", message: `${optionName} is a popular add-on (+${price}).` },
+      { variant: "upgrade", message: `Make it better with ${optionName} for +${price}?` },
+    ],
+    often: [
+      { variant: "often", message: `Customers often add ${optionName} — add it for +${price}?` },
+      { variant: "often", message: `${optionName} is often added with this item (+${price}).` },
+      { variant: "popular", message: `A frequent add-on: ${optionName} (+${price})` },
+    ],
+    recent_social_proof: [
+      { variant: "recent_social_proof", message: `10+ customers added ${optionName} recently — add it for +${price}?` },
+      { variant: "recent_social_proof", message: `Recently popular: ${optionName} (+${price})` },
+      { variant: "often", message: `Customers keep adding ${optionName} — add it for +${price}?` },
+    ],
+    most_customers: [
+      { variant: "most_customers", message: `Most customers add ${optionName} — add it for +${price}?` },
+      { variant: "most_customers", message: `${optionName} is a top add-on for this item (+${price}).` },
+      { variant: "popular", message: `Top add-on: ${optionName} (+${price})` },
+    ],
+  };
+
+  const variants = variantsByTier[tier] || variantsByTier.direct;
+  const seed = `${args.itemId}:${args.option.optionId}:${args.cartId || ""}:${args.entryChannel || ""}`;
+  const selected = variants[hashString(seed) % variants.length];
+
+  return {
+    title: tier === "direct" ? "Recommended add-on" : "Popular add-on",
+    message: selected.message,
+    messageVariant: selected.variant,
+    socialProofTier: tier,
+  };
 }
 
 export async function POST(request: Request) {
@@ -448,26 +585,42 @@ export async function POST(request: Request) {
     const cartSubtotal = toNumber(body.context?.cartSubtotal);
     let suggestionType = "optional_add_on";
     let reason = "Optional add-on available for this item.";
-    let optimization: Record<string, number> | null = null;
+    let optimization: Record<string, number> | undefined;
+    const customerIds = await loadCustomerIds({
+      admin,
+      restaurantId: restaurant.id,
+      customerPhone: body.customerPhone || "",
+    });
+    const suppressedOptionIds = await loadSuppressedOptionIds({
+      admin,
+      restaurantId: restaurant.id,
+      customerIds,
+      itemId,
+      options,
+    });
+    const candidateOptions = options.filter(
+      (option) => !suppressedOptionIds.has(option.optionId)
+    );
 
     let selected = await findPastOrderSuggestion({
       admin,
       restaurantId: restaurant.id,
-      customerPhone: body.customerPhone || "",
+      customerIds,
       itemId,
-      options,
+      options: candidateOptions,
+    });
+    const statsByOptionId = await loadOptionPerformanceStats({
+      admin,
+      restaurantId: restaurant.id,
+      itemId,
+      options: candidateOptions,
     });
 
     if (selected) {
       suggestionType = "past_order_modifier";
       reason = "You have ordered this add-on before.";
     } else {
-      const optimized = await pickOptimizedSuggestion({
-        admin,
-        restaurantId: restaurant.id,
-        itemId,
-        options,
-      });
+      const optimized = pickOptimizedSuggestion(statsByOptionId);
 
       if (optimized) {
         selected = optimized.option;
@@ -483,7 +636,7 @@ export async function POST(request: Request) {
         selected = pickHeuristicSuggestion({
           itemName,
           categoryName,
-          options,
+          options: candidateOptions,
           cartSubtotal,
         });
 
@@ -501,6 +654,15 @@ export async function POST(request: Request) {
       return jsonNoStore({ suggestion: null });
     }
 
+    const selectedStats = statsByOptionId.get(selected.optionId);
+    const messageSelection = pickSuggestionMessage({
+      option: selected,
+      itemId,
+      cartId: body.cartId ? String(body.cartId) : undefined,
+      entryChannel: body.entryChannel,
+      stats: selectedStats,
+    });
+
     const metadata = {
       itemId,
       itemName,
@@ -508,16 +670,21 @@ export async function POST(request: Request) {
       optionName: selected.optionName,
       entryChannel: body.entryChannel || null,
       orderType: body.context?.orderType || null,
-      title: "Recommended add-on",
-      message: `${selected.optionName} is available for ${itemName}.`,
-      optimization,
+      title: messageSelection.title,
+      message: messageSelection.message,
+      messageVariant: messageSelection.messageVariant,
+      socialProofTier: messageSelection.socialProofTier,
+      acceptedCount: selectedStats?.acceptedCount || 0,
+      acceptanceRate: selectedStats?.acceptanceRate || 0,
+      revenuePerShown: selectedStats?.revenuePerShown || 0,
+      ...(optimization ? { optimization } : {}),
     };
 
     const { data: row, error: insertError } = await admin
       .from("agent_modifier_suggestions")
       .insert({
         restaurant_id: restaurant.id,
-        customer_id: null,
+        customer_id: customerIds[0] || null,
         cart_id: body.cartId ? String(body.cartId) : null,
         item_id: itemId,
         modifier_group_id: selected.groupId,

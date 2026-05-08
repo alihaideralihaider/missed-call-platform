@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { lookupIpLocation } from "@/lib/platform/ip-geo";
 import { upsertIdentitySignalsForRestaurant } from "@/lib/platform/risk-links";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -30,7 +31,12 @@ function getRequestIp(req: Request): string {
 
 function isMissingColumnError(message: string, column: string): boolean {
   const normalized = message.toLowerCase();
-  return normalized.includes("schema cache") && normalized.includes(column);
+  return (
+    normalized.includes(column) &&
+    (normalized.includes("schema cache") ||
+      normalized.includes("column") ||
+      normalized.includes("does not exist"))
+  );
 }
 
 async function findAuthUserByEmail(
@@ -283,6 +289,93 @@ export async function POST(req: Request) {
           restaurantError?.message ?? "unknown error"
         }`
       );
+    }
+
+    if (sourceIp) {
+      const ipLocation = await lookupIpLocation(sourceIp);
+
+      if (ipLocation) {
+        const locationUpdatePayload = {
+          onboarding_ip_country: ipLocation.country,
+          onboarding_ip_region: ipLocation.region,
+          onboarding_ip_city: ipLocation.city,
+          onboarding_ip_lat: ipLocation.lat,
+          onboarding_ip_lon: ipLocation.lon,
+          onboarding_ip_lookup_at: new Date().toISOString(),
+        };
+
+        const mutableLocationPayload = {
+          ...locationUpdatePayload,
+        } as Record<string, string | number | null>;
+
+        let locationUpdate = await supabase
+          .schema("food_ordering")
+          .from("restaurants")
+          .update(mutableLocationPayload)
+          .eq("id", restaurant.id);
+
+        while (locationUpdate.error) {
+          const locationUpdateMessage = locationUpdate.error.message || "";
+          const missingCountry = isMissingColumnError(
+            locationUpdateMessage,
+            "onboarding_ip_country"
+          );
+          const missingRegion = isMissingColumnError(
+            locationUpdateMessage,
+            "onboarding_ip_region"
+          );
+          const missingCity = isMissingColumnError(
+            locationUpdateMessage,
+            "onboarding_ip_city"
+          );
+          const missingLat = isMissingColumnError(
+            locationUpdateMessage,
+            "onboarding_ip_lat"
+          );
+          const missingLon = isMissingColumnError(
+            locationUpdateMessage,
+            "onboarding_ip_lon"
+          );
+          const missingLookupAt = isMissingColumnError(
+            locationUpdateMessage,
+            "onboarding_ip_lookup_at"
+          );
+
+          if (
+            !missingCountry &&
+            !missingRegion &&
+            !missingCity &&
+            !missingLat &&
+            !missingLon &&
+            !missingLookupAt
+          ) {
+            console.warn("Onboarding IP location update failed:", {
+              restaurant_id: restaurant.id,
+              message: locationUpdateMessage,
+            });
+            break;
+          }
+
+          if (missingCountry) delete mutableLocationPayload.onboarding_ip_country;
+          if (missingRegion) delete mutableLocationPayload.onboarding_ip_region;
+          if (missingCity) delete mutableLocationPayload.onboarding_ip_city;
+          if (missingLat) delete mutableLocationPayload.onboarding_ip_lat;
+          if (missingLon) delete mutableLocationPayload.onboarding_ip_lon;
+          if (missingLookupAt) {
+            delete mutableLocationPayload.onboarding_ip_lookup_at;
+          }
+
+          if (Object.keys(mutableLocationPayload).length === 0) {
+            break;
+          }
+
+          locationUpdate = await supabase
+            .schema("food_ordering")
+            .from("restaurants")
+            .update(mutableLocationPayload)
+            .eq("id", restaurant.id);
+        }
+      }
     }
 
     // 2) Create tax settings

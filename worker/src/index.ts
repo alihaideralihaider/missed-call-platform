@@ -40,6 +40,10 @@ type CreateOrderPayload = {
   pickupAt?: string;
   smsOptIn?: boolean;
   notes?: string;
+  promo?: {
+    code?: string | null;
+    source?: string | null;
+  } | null;
   items: OrderItemInput[];
 };
 
@@ -65,6 +69,17 @@ type MenuItemRow = {
   price: number | string | null;
   is_sold_out: boolean | null;
   category_id: string;
+  category_name?: string | null;
+};
+
+type AppliedPromo = {
+  code: string;
+  source: string;
+  type: "percent" | "fixed" | "manual" | "source";
+  value: number;
+  discountAmount: number;
+  manualFulfillment: boolean;
+  note?: string;
 };
 
 type NormalizedModifierSelection = {
@@ -152,6 +167,123 @@ function toNumber(value: unknown): number {
 
 function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function normalizePromoCode(value: unknown): string {
+  return String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+}
+
+function itemIsCatering(item: { category_name?: string | null }): boolean {
+  return String(item.category_name || "").trim().toLowerCase() === "catering";
+}
+
+function evaluateStaticPromo(input: {
+  code: unknown;
+  source?: unknown;
+  subtotal: number;
+  items: Array<{ category_name?: string | null }>;
+}): { promo?: AppliedPromo; error?: string } {
+  const code = normalizePromoCode(input.code);
+  const source = String(input.source || "manual_checkout").trim() || "manual_checkout";
+  const subtotal = Math.max(0, roundMoney(input.subtotal));
+
+  if (!code) return {};
+
+  if (code === "MYSTERY10") {
+    return {
+      promo: {
+        code,
+        source,
+        type: "percent",
+        value: 10,
+        discountAmount: roundMoney(Math.min(subtotal, subtotal * 0.1)),
+        manualFulfillment: false,
+      },
+    };
+  }
+
+  if (code === "PICKUP5") {
+    if (subtotal < 40) {
+      return { error: "PICKUP5 requires a $40 minimum subtotal." };
+    }
+
+    return {
+      promo: {
+        code,
+        source,
+        type: "fixed",
+        value: 5,
+        discountAmount: roundMoney(Math.min(subtotal, 5)),
+        manualFulfillment: false,
+      },
+    };
+  }
+
+  if (code === "CATERING20") {
+    const hasCateringItem = input.items.some(itemIsCatering);
+
+    if (!hasCateringItem && subtotal < 100) {
+      return {
+        error:
+          "CATERING20 applies to catering or large orders of $100 or more.",
+      };
+    }
+
+    return {
+      promo: {
+        code,
+        source,
+        type: "percent",
+        value: 20,
+        discountAmount: roundMoney(Math.min(subtotal, subtotal * 0.2)),
+        manualFulfillment: false,
+      },
+    };
+  }
+
+  if (code === "FREEDRINK") {
+    return {
+      promo: {
+        code,
+        source,
+        type: "manual",
+        value: 0,
+        discountAmount: 0,
+        manualFulfillment: true,
+        note: "Free drink with qualifying pickup order",
+      },
+    };
+  }
+
+  if (code === "FREESAUCE") {
+    return {
+      promo: {
+        code,
+        source,
+        type: "manual",
+        value: 0,
+        discountAmount: 0,
+        manualFulfillment: true,
+        note: "Free side or sauce with qualifying pickup order",
+      },
+    };
+  }
+
+  if (code === "DIRECT") {
+    return {
+      promo: {
+        code,
+        source,
+        type: "source",
+        value: 0,
+        discountAmount: 0,
+        manualFulfillment: false,
+        note: "Direct order promo noted",
+      },
+    };
+  }
+
+  return { error: "Promo code not recognized." };
 }
 
 function normalizeTaxRate(value: unknown): number {
@@ -627,6 +759,7 @@ async function loadRestaurantMenuItems(
       category_id,
       menu_categories!inner (
         id,
+        name,
         menu_id,
         menus!inner (
           id,
@@ -647,6 +780,10 @@ async function loadRestaurantMenuItems(
     price: row.price,
     is_sold_out: row.is_sold_out,
     category_id: row.category_id,
+    category_name:
+      row.menu_categories && typeof row.menu_categories === "object"
+        ? String((row.menu_categories as { name?: unknown }).name || "")
+        : null,
   }));
 }
 
@@ -1387,9 +1524,31 @@ export default {
           customerId = newCustomer.id;
         }
 
-        const subtotal = roundMoney(
+        const originalSubtotal = roundMoney(
           cleanedItems.reduce((sum, item) => sum + item.lineTotal, 0)
         );
+        const promoEvaluation = evaluateStaticPromo({
+          code: body.promo?.code,
+          source: body.promo?.source,
+          subtotal: originalSubtotal,
+          items: cleanedItems.map((item) => ({
+            category_name:
+              matchedDbItems.find((dbItem) => dbItem.id === item.menuItemId)
+                ?.category_name || null,
+          })),
+        });
+
+        if (promoEvaluation.error) {
+          return jsonError(promoEvaluation.error);
+        }
+
+        const appliedPromo = promoEvaluation.promo || null;
+        const promoDiscount = appliedPromo
+          ? roundMoney(
+              Math.min(originalSubtotal, Math.max(0, appliedPromo.discountAmount))
+            )
+          : 0;
+        const subtotal = roundMoney(Math.max(0, originalSubtotal - promoDiscount));
         const tax =
           taxConfig.taxMode === "exclusive"
             ? roundMoney(subtotal * taxConfig.taxRate)
@@ -1415,7 +1574,23 @@ export default {
             pickup_time_label: pickupTimeLabel || null,
             pickup_at: requestedPickupDate.toISOString(),
             notes:
-              [pickupTimeLabel ? `Pickup: ${pickupTimeLabel}` : "", notes]
+              [
+                pickupTimeLabel ? `Pickup: ${pickupTimeLabel}` : "",
+                notes,
+                appliedPromo
+                  ? [
+                      `Promo: ${appliedPromo.code}`,
+                      `Type: ${appliedPromo.type}`,
+                      `Discount: $${promoDiscount.toFixed(2)}`,
+                      appliedPromo.manualFulfillment
+                        ? "Manual fulfillment: yes"
+                        : "",
+                      appliedPromo.note ? `Note: ${appliedPromo.note}` : "",
+                    ]
+                      .filter(Boolean)
+                      .join("\n")
+                  : "",
+              ]
                 .filter(Boolean)
                 .join("\n") || null,
             sms_opt_in: smsOptIn,
@@ -1607,9 +1782,21 @@ export default {
           success: true,
           orderId: insertedOrder.id,
           orderNumber: insertedOrder.order_number,
+          originalSubtotal,
           subtotal,
           tax,
           total,
+          promo: appliedPromo
+            ? {
+                code: appliedPromo.code,
+                source: appliedPromo.source,
+                type: appliedPromo.type,
+                value: appliedPromo.value,
+                discountAmount: promoDiscount,
+                manualFulfillment: appliedPromo.manualFulfillment,
+                note: appliedPromo.note || null,
+              }
+            : null,
         });
       } catch (error) {
         const message =

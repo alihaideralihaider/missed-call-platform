@@ -8,6 +8,7 @@ type RouteContext = {
 };
 
 function buildActionResponseMessage(action: string): string {
+  if (action === "approve") return "Onboarding approved for platform review.";
   if (action === "close") return "Onboarding closed.";
   if (action === "reject_fraud") return "Onboarding rejected as fraud.";
   if (action === "reactivate") return "Onboarding reactivated.";
@@ -29,14 +30,20 @@ export async function PATCH(req: Request, context: RouteContext) {
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action || "").trim().toLowerCase();
 
-    if (!["close", "reject_fraud", "reactivate", "block_ip"].includes(action)) {
+    if (
+      !["approve", "close", "reject_fraud", "reactivate", "block_ip"].includes(
+        action
+      )
+    ) {
       return NextResponse.json({ error: "Invalid action." }, { status: 400 });
     }
 
     const { data: restaurant, error: restaurantError } = await admin
       .schema("food_ordering")
       .from("restaurants")
-      .select("id, slug, onboarding_status, onboarding_source_ip")
+      .select(
+        "id, slug, onboarding_status, platform_review_status, onboarding_source_ip, is_active"
+      )
       .eq("id", restaurantId)
       .single();
 
@@ -87,52 +94,92 @@ export async function PATCH(req: Request, context: RouteContext) {
       });
     }
 
-    const nextOnboardingStatus =
-      action === "close"
-        ? "closed_by_platform"
+    const previousPlatformReviewStatus = String(
+      restaurant.platform_review_status || "unreviewed"
+    ).trim() || "unreviewed";
+    const nextPlatformReviewStatus =
+      action === "approve"
+        ? "approved"
+        : action === "close"
+        ? "closed"
         : action === "reject_fraud"
         ? "rejected_fraud"
-        : "pending_owner_activation";
-    const nextRestaurantActive = action === "reactivate";
-    const nextBusinessStatus =
-      action === "close"
-        ? "inactive"
-        : action === "reject_fraud"
-        ? "suspended"
-        : "active";
-    const nextMembershipActive = action === "reactivate";
+        : "needs_review";
+
+    const restaurantUpdatePayload: Record<string, unknown> = {
+      platform_review_status: nextPlatformReviewStatus,
+    };
+
+    if (["approve", "close", "reject_fraud"].includes(action)) {
+      restaurantUpdatePayload.onboarding_reviewed_at = new Date().toISOString();
+    }
+
+    if (action === "reject_fraud") {
+      restaurantUpdatePayload.is_active = false;
+      restaurantUpdatePayload.onboarding_status = "rejected_fraud";
+    } else if (
+      action === "reactivate" &&
+      ["closed_by_platform", "rejected_fraud"].includes(
+        String(restaurant.onboarding_status || "").trim().toLowerCase()
+      )
+    ) {
+      restaurantUpdatePayload.onboarding_status = "pending_owner_activation";
+      restaurantUpdatePayload.is_active = true;
+    }
 
     const { error: restaurantUpdateError } = await admin
       .schema("food_ordering")
       .from("restaurants")
-      .update({
-        onboarding_status: nextOnboardingStatus,
-        is_active: nextRestaurantActive,
-      })
+      .update(restaurantUpdatePayload)
       .eq("id", restaurant.id);
 
     if (restaurantUpdateError) {
       throw new Error(`Failed to update restaurant: ${restaurantUpdateError.message}`);
     }
 
-    const { error: membershipUpdateError } = await admin
-      .from("restaurant_users")
-      .update({
-        is_active: nextMembershipActive,
-        onboarding_status: nextOnboardingStatus,
-      })
-      .eq("restaurant_id", restaurant.id);
+    const membershipUpdatePayload: Record<string, unknown> = {};
+
+    if (action === "reject_fraud") {
+      membershipUpdatePayload.is_active = false;
+      membershipUpdatePayload.onboarding_status = "rejected_fraud";
+    } else if (action === "reactivate") {
+      membershipUpdatePayload.is_active = true;
+
+      if (
+        ["closed_by_platform", "rejected_fraud"].includes(
+          String(restaurant.onboarding_status || "").trim().toLowerCase()
+        )
+      ) {
+        membershipUpdatePayload.onboarding_status = "pending_owner_activation";
+      }
+    }
+
+    const { error: membershipUpdateError } = Object.keys(membershipUpdatePayload)
+      .length
+      ? await admin
+          .from("restaurant_users")
+          .update(membershipUpdatePayload)
+          .eq("restaurant_id", restaurant.id)
+      : { error: null };
 
     if (membershipUpdateError) {
       throw new Error(`Failed to update membership: ${membershipUpdateError.message}`);
     }
 
-    const { error: businessUpdateError } = await admin
-      .from("businesses")
-      .update({
-        status: nextBusinessStatus,
-      })
-      .eq("restaurant_id", restaurant.id);
+    const businessUpdatePayload: Record<string, unknown> = {};
+
+    if (action === "reject_fraud") {
+      businessUpdatePayload.status = "suspended";
+    } else if (action === "reactivate") {
+      businessUpdatePayload.status = "active";
+    }
+
+    const { error: businessUpdateError } = Object.keys(businessUpdatePayload).length
+      ? await admin
+          .from("businesses")
+          .update(businessUpdatePayload)
+          .eq("restaurant_id", restaurant.id)
+      : { error: null };
 
     if (businessUpdateError) {
       throw new Error(`Failed to update business: ${businessUpdateError.message}`);
@@ -141,13 +188,30 @@ export async function PATCH(req: Request, context: RouteContext) {
     await logPlatformActivity({
       entityType: "restaurant",
       entityId: restaurant.id,
-      eventType: `onboarding_${action}`,
+      eventType:
+        action === "approve"
+          ? "platform_review_approved"
+          : action === "close"
+          ? "platform_review_closed"
+          : action === "reject_fraud"
+          ? "platform_review_rejected_fraud"
+          : `onboarding_${action}`,
       actorUserId: access.userId,
       metadata: {
         restaurant_slug: restaurant.slug,
+        previous_platform_review_status: previousPlatformReviewStatus,
+        next_platform_review_status: nextPlatformReviewStatus,
         previous_onboarding_status: restaurant.onboarding_status,
-        next_onboarding_status: nextOnboardingStatus,
-        business_status: nextBusinessStatus,
+        current_onboarding_status:
+          action === "reject_fraud"
+            ? "rejected_fraud"
+            : action === "reactivate" &&
+              ["closed_by_platform", "rejected_fraud"].includes(
+                String(restaurant.onboarding_status || "").trim().toLowerCase()
+              )
+            ? "pending_owner_activation"
+            : restaurant.onboarding_status,
+        previous_is_active: restaurant.is_active,
       },
     });
 

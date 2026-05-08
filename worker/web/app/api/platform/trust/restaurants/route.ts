@@ -9,6 +9,7 @@ type RestaurantRow = {
   contact_email: string | null;
   contact_phone: string | null;
   onboarding_status: string | null;
+  platform_review_status: string | null;
   is_active: boolean | null;
   created_at: string | null;
 };
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
       .schema("food_ordering")
       .from("restaurants")
       .select(
-        "id, name, slug, contact_email, contact_phone, onboarding_status, is_active, created_at"
+        "id, name, slug, contact_email, contact_phone, onboarding_status, platform_review_status, is_active, created_at"
       )
       .order("created_at", { ascending: false });
 
@@ -92,7 +93,9 @@ export async function GET(req: Request) {
             restaurant.contact_email,
             restaurant.contact_phone,
             restaurant.onboarding_status,
+            restaurant.platform_review_status,
             restaurant.business_status,
+            restaurant.is_active ? "active" : "inactive",
           ]
             .filter(Boolean)
             .some((value) =>

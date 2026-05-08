@@ -13,12 +13,15 @@ type Restaurant = {
   has_vibe_upgrade?: boolean;
   has_menu_upgrade?: boolean;
   has_promotions_upgrade?: boolean;
+  vibe_image_url?: string | null;
 };
 
 type MenuItem = {
   id: string;
   name: string;
+  category_id?: string | null;
   category_name?: string | null;
+  image_url?: string | null;
 };
 
 type Promotion = {
@@ -64,6 +67,32 @@ type Category = {
   name: string;
 };
 
+type RestaurantAsset = {
+  id: string;
+  menu_item_id?: string | null;
+  original_file_name?: string | null;
+  public_url?: string | null;
+  alt_text?: string | null;
+};
+
+type PromotionTemplate =
+  | ""
+  | "pickup_10_percent"
+  | "five_off_40"
+  | "free_drink"
+  | "free_side"
+  | "catering_tray"
+  | "mystery_next_order"
+  | "custom";
+
+type ImageSource = "existing" | "ai" | "url";
+
+type ImageChoice = {
+  id: string;
+  label: string;
+  url: string;
+};
+
 function cleanSlug(value: unknown): string {
   const s = String(value ?? "").trim().toLowerCase();
   return s && s !== "undefined" && s !== "null" ? s : "";
@@ -98,6 +127,20 @@ function toDateTimeLocalValue(value?: string | null) {
   const mi = pad(date.getMinutes());
 
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
+function getPreviewImageUrl(value?: string | null): string {
+  const url = String(value || "").trim();
+
+  if (
+    url.startsWith("https://") ||
+    url.startsWith("http://") ||
+    url.startsWith("/")
+  ) {
+    return url;
+  }
+
+  return "";
 }
 
 function summarizeRule(rule?: PromotionRule | null) {
@@ -146,18 +189,34 @@ function summarizeTarget(
   return "Target not set";
 }
 
+function formatCurrencyInput(value: string) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) && n > 0 ? `$${n.toFixed(2)}` : "";
+}
+
+function uniqueImageChoices(choices: ImageChoice[]) {
+  const seen = new Set<string>();
+  return choices.filter((choice) => {
+    if (!choice.url || seen.has(choice.url)) return false;
+    seen.add(choice.url);
+    return true;
+  });
+}
+
 export default function RestaurantPromotionsPage({ params }: PageProps) {
   const [slug, setSlug] = useState("");
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [assets, setAssets] = useState<RestaurantAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
 
   const [editingPromotionId, setEditingPromotionId] = useState<string | null>(null);
+  const [promotionTemplate, setPromotionTemplate] = useState<PromotionTemplate>("");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -168,6 +227,11 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
   const [endsAt, setEndsAt] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [aiImageUrl, setAiImageUrl] = useState("");
+  const [aiImagePrompt, setAiImagePrompt] = useState("");
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [imageSource, setImageSource] = useState<ImageSource>("existing");
+  const [selectedExistingImageUrl, setSelectedExistingImageUrl] = useState("");
+  const [imageSelectionTouched, setImageSelectionTouched] = useState(false);
   const [targetType, setTargetType] = useState<"restaurant" | "category" | "menu_item">("restaurant");
   const [targetId, setTargetId] = useState("");
 
@@ -212,6 +276,7 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
       setPromotions(Array.isArray(data?.promotions) ? data.promotions : []);
       setMenuItems(Array.isArray(data?.menuItems) ? data.menuItems : []);
       setCategories(Array.isArray(data?.categories) ? data.categories : []);
+      setAssets(Array.isArray(data?.assets) ? data.assets : []);
 
       setLoading(false);
       setRefreshing(false);
@@ -246,6 +311,110 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
     return new Map(categories.map((item) => [item.id, item]));
   }, [categories]);
 
+  const existingImageChoices = useMemo(() => {
+    const choices: ImageChoice[] = [];
+
+    if (targetType === "restaurant") {
+      const vibeUrl = getPreviewImageUrl(restaurant?.vibe_image_url);
+
+      if (vibeUrl) {
+        choices.push({
+          id: "restaurant-vibe",
+          label: "Current restaurant vibe image",
+          url: vibeUrl,
+        });
+      }
+
+      assets
+        .filter((asset) => !asset.menu_item_id)
+        .forEach((asset) => {
+          const url = getPreviewImageUrl(asset.public_url);
+          if (!url) return;
+          choices.push({
+            id: asset.id,
+            label: asset.alt_text || asset.original_file_name || "Restaurant asset",
+            url,
+          });
+        });
+    }
+
+    if (targetType === "menu_item") {
+      const selectedItem = menuItems.find((item) => item.id === targetId);
+      const selectedItemImageUrl = getPreviewImageUrl(selectedItem?.image_url);
+
+      if (selectedItemImageUrl) {
+        choices.push({
+          id: `${selectedItem?.id}-current-image`,
+          label: `${selectedItem?.name || "Selected item"} image`,
+          url: selectedItemImageUrl,
+        });
+      }
+
+      assets
+        .filter((asset) => asset.menu_item_id === targetId)
+        .forEach((asset) => {
+          const url = getPreviewImageUrl(asset.public_url);
+          if (!url) return;
+          choices.push({
+            id: asset.id,
+            label: asset.alt_text || asset.original_file_name || "Menu item asset",
+            url,
+          });
+        });
+
+      menuItems
+        .filter((item) => item.id !== targetId)
+        .forEach((item) => {
+          const url = getPreviewImageUrl(item.image_url);
+          if (!url) return;
+          choices.push({
+            id: `${item.id}-fallback-image`,
+            label: `${item.name} image`,
+            url,
+          });
+        });
+    }
+
+    if (targetType === "category") {
+      menuItems
+        .filter((item) => item.category_id === targetId)
+        .forEach((item) => {
+          const url = getPreviewImageUrl(item.image_url);
+          if (!url) return;
+          choices.push({
+            id: `${item.id}-category-image`,
+            label: item.name,
+            url,
+          });
+        });
+
+      const categoryItemIds = new Set(
+        menuItems
+          .filter((item) => item.category_id === targetId)
+          .map((item) => item.id)
+      );
+
+      assets
+        .filter((asset) => asset.menu_item_id && categoryItemIds.has(asset.menu_item_id))
+        .forEach((asset) => {
+          const url = getPreviewImageUrl(asset.public_url);
+          if (!url) return;
+          const linkedItem = menuItemMap.get(String(asset.menu_item_id || ""));
+          choices.push({
+            id: asset.id,
+            label:
+              asset.alt_text ||
+              asset.original_file_name ||
+              linkedItem?.name ||
+              "Category item asset",
+            url,
+          });
+        });
+    }
+
+    return uniqueImageChoices(choices);
+  }, [assets, menuItemMap, menuItems, restaurant?.vibe_image_url, targetId, targetType]);
+
   const filteredPromotions = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return promotions;
@@ -260,8 +429,134 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
     });
   }, [promotions, query]);
 
+  useEffect(() => {
+    if (imageSource !== "existing" || imageSelectionTouched) return;
+
+    const suggestedUrl = existingImageChoices[0]?.url || "";
+    setSelectedExistingImageUrl(suggestedUrl);
+    setImageUrl(suggestedUrl);
+  }, [existingImageChoices, imageSelectionTouched, imageSource]);
+
+  function applyExistingImageSuggestion() {
+    if (imageSelectionTouched) return;
+
+    const suggestedUrl = existingImageChoices[0]?.url || "";
+    setImageSource("existing");
+    setSelectedExistingImageUrl(suggestedUrl);
+    setImageUrl(suggestedUrl);
+    setAiImageUrl("");
+  }
+
+  function handleTargetTypeChange(value: "restaurant" | "category" | "menu_item") {
+    setTargetType(value);
+    setTargetId("");
+  }
+
+  function handleTargetIdChange(value: string) {
+    setTargetId(value);
+  }
+
+  function handleImageSourceChange(value: ImageSource) {
+    setImageSource(value);
+    setImageSelectionTouched(true);
+
+    if (value === "existing") {
+      const suggestedUrl = selectedExistingImageUrl || existingImageChoices[0]?.url || "";
+      setSelectedExistingImageUrl(suggestedUrl);
+      setImageUrl(suggestedUrl);
+      setAiImageUrl("");
+    } else if (value === "ai") {
+      setImageUrl("");
+    } else {
+      setAiImageUrl("");
+    }
+  }
+
+  function handleExistingImageChange(value: string) {
+    setSelectedExistingImageUrl(value);
+    setImageUrl(value);
+    setAiImageUrl("");
+    setImageSelectionTouched(true);
+  }
+
+  function getTargetLabel() {
+    if (targetType === "category") {
+      return categories.find((category) => category.id === targetId)?.name || "selected category";
+    }
+
+    if (targetType === "menu_item") {
+      return menuItems.find((item) => item.id === targetId)?.name || "selected menu item";
+    }
+
+    return "whole restaurant";
+  }
+
+  function buildStarterAiPrompt() {
+    return [
+      `Create a restaurant promotion image for ${restaurant?.name || "this restaurant"}.`,
+      `Promotion: ${name || "restaurant special"}.`,
+      `Target: ${getTargetLabel()}.`,
+      `Offer summary: ${promotionSummary.join(" ")}`,
+      "Style: appetizing food marketing image, realistic restaurant photography, warm lighting.",
+      "Do not include readable discount text, logos, watermarks, phone numbers, QR codes, or menus.",
+    ].join(" ");
+  }
+
+  async function handleGeneratePromotionImage() {
+    if (!slug || generatingImage) return;
+
+    setSubmitError("");
+    setSuccessMessage("");
+    setGeneratingImage(true);
+
+    try {
+      const prompt = (aiImagePrompt || buildStarterAiPrompt()).trim();
+      const res = await fetch(
+        `/api/admin/restaurants/${slug}/promotions/generate-image`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt,
+            promotionName: name || null,
+            targetLabel: getTargetLabel(),
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSubmitError(data?.error || "Failed to generate promotion image.");
+        setGeneratingImage(false);
+        return;
+      }
+
+      const generatedUrl = getPreviewImageUrl(data?.generatedUrl);
+
+      if (!generatedUrl) {
+        setSubmitError("Image generated but no generatedUrl was returned.");
+        setGeneratingImage(false);
+        return;
+      }
+
+      setAiImagePrompt(prompt);
+      setAiImageUrl(generatedUrl);
+      setImageUrl(generatedUrl);
+      setImageSelectionTouched(true);
+      setSuccessMessage("Promotion image generated. Review it, then save the promotion.");
+      setGeneratingImage(false);
+    } catch {
+      setSubmitError("Something went wrong while generating the promotion image.");
+      setGeneratingImage(false);
+    }
+  }
+
   function resetForm() {
     setEditingPromotionId(null);
+    setPromotionTemplate("");
     setName("");
     setDescription("");
     setPromotionType("percent_off");
@@ -271,6 +566,11 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
     setEndsAt("");
     setImageUrl("");
     setAiImageUrl("");
+    setAiImagePrompt("");
+    setGeneratingImage(false);
+    setImageSource("existing");
+    setSelectedExistingImageUrl("");
+    setImageSelectionTouched(false);
     setTargetType("restaurant");
     setTargetId("");
     setBuyQuantity("");
@@ -288,6 +588,7 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
 
   function startEdit(promo: Promotion) {
     setEditingPromotionId(promo.id);
+    setPromotionTemplate("custom");
     setName(promo.name || "");
     setDescription(promo.description || "");
     setPromotionType(promo.promotion_type || "percent_off");
@@ -297,6 +598,11 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
     setEndsAt(toDateTimeLocalValue(promo.ends_at));
     setImageUrl(promo.image_url || "");
     setAiImageUrl("");
+    setAiImagePrompt("");
+    setGeneratingImage(false);
+    setImageSource(promo.image_url ? "url" : "existing");
+    setSelectedExistingImageUrl("");
+    setImageSelectionTouched(Boolean(promo.image_url));
     setTargetType((promo.target?.target_type as "restaurant" | "category" | "menu_item") || "restaurant");
     setTargetId(String(promo.target?.target_id || ""));
     setBuyQuantity(promo.rule?.buy_quantity ? String(promo.rule.buy_quantity) : "");
@@ -318,6 +624,105 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
     setNextOrderOnly(Boolean(promo.rule?.next_order_only));
     setSubmitError("");
     setSuccessMessage("");
+  }
+
+  function handlePromotionTemplateChange(value: PromotionTemplate) {
+    setPromotionTemplate(value);
+
+    if (!value || value === "custom") return;
+
+    setBuyQuantity("");
+    setGetQuantity("");
+    setMaxDiscountAmount("");
+    setFirstOrderOnly(false);
+
+    if (value === "pickup_10_percent") {
+      setName((current) => current || "10% off pickup orders");
+      setDescription((current) => current || "Customers get 10% off qualifying pickup orders.");
+      setPromotionType("percent_off");
+      setDiscountPercent("10");
+      setDiscountAmount("");
+      setMinOrderSubtotal("");
+      setMaxDiscountAmount("");
+      setPickupOnly(true);
+      setNextOrderOnly(false);
+      return;
+    }
+
+    if (value === "five_off_40") {
+      setName((current) => current || "$5 off orders over $40");
+      setDescription((current) => current || "Customers get $5 off pickup orders of $40 or more.");
+      setPromotionType("amount_off");
+      setDiscountPercent("");
+      setDiscountAmount("5");
+      setMinOrderSubtotal("40");
+      setMaxDiscountAmount("5");
+      setPickupOnly(true);
+      setNextOrderOnly(false);
+      return;
+    }
+
+    if (value === "free_drink") {
+      setName((current) => current || "Free drink with pickup order");
+      setDescription("Free drink with qualifying pickup order.");
+      setPromotionType("pickup_special");
+      setDiscountPercent("");
+      setDiscountAmount("");
+      setMinOrderSubtotal("15");
+      setPickupOnly(true);
+      setNextOrderOnly(false);
+      return;
+    }
+
+    if (value === "free_side") {
+      setName((current) => current || "Free side or sauce with pickup order");
+      setDescription("Free side or sauce with qualifying pickup order.");
+      setPromotionType("pickup_special");
+      setDiscountPercent("");
+      setDiscountAmount("");
+      setMinOrderSubtotal("15");
+      setPickupOnly(true);
+      setNextOrderOnly(false);
+      return;
+    }
+
+    if (value === "catering_tray") {
+      const cateringCategory = categories.find(
+        (category) => category.name.trim().toLowerCase() === "catering"
+      );
+
+      setName((current) => current || "Catering tray discount");
+      setDescription((current) => current || "Customers get 10% off qualifying catering tray orders.");
+      setPromotionType("percent_off");
+      setDiscountPercent("10");
+      setDiscountAmount("");
+      setMinOrderSubtotal("100");
+      setPickupOnly(true);
+      setNextOrderOnly(false);
+
+      if (cateringCategory) {
+        setTargetType("category");
+        setTargetId(cateringCategory.id);
+      } else {
+        setTargetType("restaurant");
+        setTargetId("");
+      }
+
+      return;
+    }
+
+    if (value === "mystery_next_order") {
+      setName((current) => current || "Mystery QR next-order offer");
+      setDescription((current) => current || "Use this with Mystery Offer QR.");
+      setPromotionType("percent_off");
+      setDiscountPercent("10");
+      setDiscountAmount("");
+      setMinOrderSubtotal("");
+      setMaxDiscountAmount("");
+      setPickupOnly(true);
+      setFirstOrderOnly(false);
+      setNextOrderOnly(true);
+    }
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -427,6 +832,91 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
   }
 
   const promotionsEnabled = restaurant?.has_promotions_upgrade ?? true;
+  const formImagePreviewUrl = getPreviewImageUrl(aiImageUrl || imageUrl);
+  const promotionSummary = useMemo(() => {
+    const lines: string[] = [];
+    const discountPercentNumber = Number(discountPercent || 0);
+    const discountAmountText = formatCurrencyInput(discountAmount);
+    const minOrderText = formatCurrencyInput(minOrderSubtotal);
+    const maxDiscountText = formatCurrencyInput(maxDiscountAmount);
+
+    if (promotionType === "pickup_special" && description.trim()) {
+      lines.push(`Customers can claim ${description.trim().replace(/\.$/, "").toLowerCase()}.`);
+    } else if (discountPercentNumber > 0) {
+      lines.push(
+        `Customers get ${discountPercentNumber}% off${pickupOnly ? " pickup orders" : " orders"}.`
+      );
+    } else if (discountAmountText) {
+      lines.push(
+        `Customers get ${discountAmountText} off${pickupOnly ? " pickup orders" : " orders"}${
+          minOrderText ? ` of ${minOrderText} or more` : ""
+        }.`
+      );
+    } else {
+      lines.push("Promotion details are ready for a custom offer.");
+    }
+
+    if (minOrderText && !lines[0]?.includes(minOrderText)) {
+      lines.push(`Minimum order amount is ${minOrderText}.`);
+    }
+
+    if (maxDiscountText) {
+      lines.push(`Maximum discount is ${maxDiscountText}.`);
+    }
+
+    if (firstOrderOnly) {
+      lines.push("This is only for first-time customers.");
+    }
+
+    if (nextOrderOnly) {
+      lines.push("This is only for next order offers.");
+    }
+
+    if (targetType === "category") {
+      const categoryName =
+        categories.find((category) => category.id === targetId)?.name ||
+        "the selected category";
+      lines.push(`This applies to ${categoryName}.`);
+    } else if (targetType === "menu_item") {
+      const itemName =
+        menuItems.find((item) => item.id === targetId)?.name ||
+        "the selected menu item";
+      lines.push(`This applies to ${itemName}.`);
+    } else {
+      lines.push("This applies to the whole restaurant.");
+    }
+
+    if (startsAt || endsAt) {
+      lines.push(
+        `Valid ${startsAt ? `from ${formatDateTime(startsAt)}` : "immediately"}${
+          endsAt ? ` to ${formatDateTime(endsAt)}` : ""
+        }.`
+      );
+    }
+
+    if (promotionTemplate === "mystery_next_order") {
+      lines.push("Use this with Mystery Offer QR.");
+    }
+
+    return lines;
+  }, [
+    categories,
+    description,
+    discountAmount,
+    discountPercent,
+    endsAt,
+    firstOrderOnly,
+    maxDiscountAmount,
+    menuItems,
+    minOrderSubtotal,
+    nextOrderOnly,
+    pickupOnly,
+    promotionTemplate,
+    promotionType,
+    startsAt,
+    targetId,
+    targetType,
+  ]);
 
   return (
     <main className="min-h-screen bg-neutral-100">
@@ -493,6 +983,32 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
               ) : null}
 
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <label className="mb-2 block text-sm font-semibold text-neutral-900">
+                    Promotion template
+                  </label>
+                  <p className="mb-3 text-xs text-neutral-600">
+                    Choose a template first. You can adjust the details before saving.
+                  </p>
+                  <select
+                    value={promotionTemplate}
+                    onChange={(e) =>
+                      handlePromotionTemplateChange(e.target.value as PromotionTemplate)
+                    }
+                    disabled={!promotionsEnabled}
+                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-3 text-sm outline-none focus:border-emerald-400 disabled:opacity-60"
+                  >
+                    <option value="">Select a template</option>
+                    <option value="pickup_10_percent">10% off pickup orders</option>
+                    <option value="five_off_40">$5 off orders over $40</option>
+                    <option value="free_drink">Free drink with pickup order</option>
+                    <option value="free_side">Free side or sauce with pickup order</option>
+                    <option value="catering_tray">Catering tray discount</option>
+                    <option value="mystery_next_order">Mystery QR next-order offer</option>
+                    <option value="custom">Custom promotion</option>
+                  </select>
+                </div>
+
                 <div>
                   <label className="mb-2 block text-sm font-medium text-neutral-700">
                     Promotion name
@@ -578,7 +1094,7 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
                     <select
                       value={targetType}
                       onChange={(e) =>
-                        setTargetType(
+                        handleTargetTypeChange(
                           e.target.value as "restaurant" | "category" | "menu_item"
                         )
                       }
@@ -599,7 +1115,7 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
                     </label>
                     <select
                       value={targetId}
-                      onChange={(e) => setTargetId(e.target.value)}
+                      onChange={(e) => handleTargetIdChange(e.target.value)}
                       disabled={!promotionsEnabled}
                       className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm outline-none focus:border-neutral-400 disabled:opacity-60"
                     >
@@ -620,7 +1136,7 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
                     </label>
                     <select
                       value={targetId}
-                      onChange={(e) => setTargetId(e.target.value)}
+                      onChange={(e) => handleTargetIdChange(e.target.value)}
                       disabled={!promotionsEnabled}
                       className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm outline-none focus:border-neutral-400 disabled:opacity-60"
                     >
@@ -665,46 +1181,137 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
 
                 <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                   <h3 className="text-sm font-semibold text-neutral-900">
-                    Promotion images
+                    Image source
                   </h3>
                   <p className="mt-1 text-xs text-neutral-500">
-                    Add a direct image URL now. AI-generated promo image URL is included so we can wire generated promo creatives into this page next.
+                    Choose an existing restaurant or menu image, generate with AI, or paste a direct image URL.
                   </p>
 
                   <div className="mt-4 grid gap-4">
                     <div>
                       <label className="mb-2 block text-sm font-medium text-neutral-700">
-                        Promotion image URL
+                        Image source
                       </label>
-                      <input
-                        type="text"
-                        value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
-                        placeholder="https://..."
+                      <select
+                        value={imageSource}
+                        onChange={(e) =>
+                          handleImageSourceChange(e.target.value as ImageSource)
+                        }
                         disabled={!promotionsEnabled}
-                        className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 disabled:opacity-60"
-                      />
+                        className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm outline-none focus:border-neutral-400 disabled:opacity-60"
+                      >
+                        <option value="existing">Use existing asset</option>
+                        <option value="ai">Generate with AI</option>
+                        <option value="url">Paste image URL</option>
+                      </select>
                     </div>
 
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-neutral-700">
-                        AI-generated image URL
-                      </label>
-                      <input
-                        type="text"
-                        value={aiImageUrl}
-                        onChange={(e) => setAiImageUrl(e.target.value)}
-                        placeholder="Generated image URL will go here"
-                        disabled={!promotionsEnabled}
-                        className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 disabled:opacity-60"
-                      />
-                    </div>
+                    {imageSource === "existing" ? (
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-neutral-700">
+                          {targetType === "menu_item"
+                            ? "Menu item image"
+                            : targetType === "category"
+                            ? "Category image"
+                            : "Restaurant image"}
+                        </label>
+                        {existingImageChoices.length > 0 ? (
+                          <select
+                            value={selectedExistingImageUrl}
+                            onChange={(e) => handleExistingImageChange(e.target.value)}
+                            disabled={!promotionsEnabled}
+                            className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm outline-none focus:border-neutral-400 disabled:opacity-60"
+                          >
+                            {existingImageChoices.map((choice) => (
+                              <option key={choice.id} value={choice.url}>
+                                {choice.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-neutral-300 bg-white px-3 py-3 text-sm text-neutral-500">
+                            {targetType === "menu_item"
+                              ? "The selected menu item does not have an image yet. You can use AI or paste an image URL."
+                              : targetType === "category"
+                              ? "No item images were found in this category. You can use AI or paste an image URL."
+                              : "No restaurant vibe image found. You can use AI or paste an image URL."}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
 
-                    {imageUrl || aiImageUrl ? (
+                    {imageSource === "url" ? (
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-neutral-700">
+                          Promotion image URL
+                        </label>
+                        <input
+                          type="text"
+                          value={imageUrl}
+                          onChange={(e) => {
+                            setImageUrl(e.target.value);
+                            setImageSelectionTouched(true);
+                          }}
+                          placeholder="https://..."
+                          disabled={!promotionsEnabled}
+                          className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 disabled:opacity-60"
+                        />
+                      </div>
+                    ) : null}
+
+                    {imageSource === "ai" ? (
+                      <>
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-neutral-700">
+                            AI prompt
+                          </label>
+                          <textarea
+                            value={aiImagePrompt}
+                            onChange={(e) => setAiImagePrompt(e.target.value)}
+                            placeholder="Describe the promotion image, e.g. Chicken over rice catering tray with warm restaurant lighting"
+                            rows={4}
+                            disabled={!promotionsEnabled || generatingImage}
+                            className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 disabled:opacity-60"
+                          />
+                          <p className="mt-2 text-xs text-neutral-500">
+                            Leave blank to use a starter prompt from the restaurant, promotion, target, and summary. Discount text should stay in the promotion card, not inside the image.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleGeneratePromotionImage}
+                          disabled={!promotionsEnabled || generatingImage}
+                          className="rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                        >
+                          {generatingImage ? "Generating..." : "Generate image"}
+                        </button>
+
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-neutral-700">
+                            AI-generated image URL
+                          </label>
+                          <input
+                            type="text"
+                            value={aiImageUrl}
+                            onChange={(e) => {
+                              setAiImageUrl(e.target.value);
+                              setImageUrl(e.target.value);
+                              setImageSelectionTouched(true);
+                            }}
+                            placeholder="Generated image URL will go here"
+                            disabled={!promotionsEnabled}
+                            className="w-full rounded-xl border border-neutral-200 px-3 py-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 disabled:opacity-60"
+                          />
+                        </div>
+                      </>
+                    ) : null}
+
+                    {formImagePreviewUrl ? (
                       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
                         <div className="aspect-[16/9] bg-neutral-100">
                           <img
-                            src={aiImageUrl || imageUrl}
+                            src={formImagePreviewUrl}
                             alt="Promotion preview"
                             className="h-full w-full object-cover"
                           />
@@ -718,6 +1325,9 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
                   <h3 className="text-sm font-semibold text-neutral-900">
                     Promotion rule
                   </h3>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Templates fill these details for you. Keep them as-is or adjust before saving.
+                  </p>
 
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <div>
@@ -775,7 +1385,7 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
 
                     <div>
                       <label className="mb-2 block text-sm font-medium text-neutral-700">
-                        Min order subtotal
+                        Minimum order amount
                       </label>
                       <input
                         type="number"
@@ -789,7 +1399,7 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
 
                     <div>
                       <label className="mb-2 block text-sm font-medium text-neutral-700">
-                        Max discount amount
+                        Maximum discount
                       </label>
                       <input
                         type="number"
@@ -822,7 +1432,7 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
                         disabled={!promotionsEnabled}
                         className="h-4 w-4 rounded border-neutral-300"
                       />
-                      <span className="text-sm text-neutral-800">First order only</span>
+                      <span className="text-sm text-neutral-800">First-time customer only</span>
                     </label>
 
                     <label className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3">
@@ -833,8 +1443,21 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
                         disabled={!promotionsEnabled}
                         className="h-4 w-4 rounded border-neutral-300"
                       />
-                      <span className="text-sm text-neutral-800">Next order only</span>
+                      <span className="text-sm text-neutral-800">Only for next order offers</span>
                     </label>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <h3 className="text-sm font-semibold text-neutral-900">
+                    Promotion summary
+                  </h3>
+                  <div className="mt-3 space-y-2">
+                    {promotionSummary.map((line) => (
+                      <p key={line} className="text-sm text-neutral-700">
+                        {line}
+                      </p>
+                    ))}
                   </div>
                 </div>
 
@@ -949,7 +1572,7 @@ export default function RestaurantPromotionsPage({ params }: PageProps) {
                   const isActive =
                     String(promo.status || "").toLowerCase() === "active";
 
-                  const previewUrl = promo.image_url || null;
+                  const previewUrl = getPreviewImageUrl(promo.image_url);
 
                   return (
                     <div

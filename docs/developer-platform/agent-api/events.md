@@ -38,6 +38,7 @@ POST /v1/agent/events
   },
   "source_system": "saanaos",
   "source_slug": "demo-restaurant",
+  "attempt_job_id": "550e8400-e29b-41d4-a716-446655440000",
   "metadata": {}
 }
 ```
@@ -52,6 +53,34 @@ POST /v1/agent/events
   "request_id": "req_123"
 }
 ```
+
+The v1 event endpoint now persists accepted events internally:
+
+- `agent_events` stores the inbound business event, source fields, customer payload, metadata, request ID, and optional idempotency key.
+- `agent_runs` stores the run linked to the event and can optionally store `attempt_job_id`.
+- `agent_actions` exists for future action logging.
+
+Webhook delivery is not implemented yet.
+
+`attempt_job_id` is optional. When present, it links the Agent API run to the Universal Attempts Engine for traceability:
+
+```text
+event -> attempt_job -> agent_run -> agent_actions -> outcome
+```
+
+This bridge does not change attempts execution behavior. Timestamps remain UTC ISO-8601.
+
+## Idempotency
+
+Send an `Idempotency-Key` header to safely retry event creation:
+
+```http
+Idempotency-Key: evt_checkout_456
+```
+
+If the same idempotency key already exists, the API returns the existing `event_id` and linked `agent_run_id` with a fresh `request_id`.
+
+Payload conflict detection for reused idempotency keys is a future improvement.
 
 ## missed_call
 
@@ -69,6 +98,7 @@ POST /v1/agent/events
   },
   "source_system": "saanaos",
   "source_slug": "demo-restaurant",
+  "attempt_job_id": "550e8400-e29b-41d4-a716-446655440000",
   "metadata": {
     "call_sid": "CA_demo_123",
     "to": "+15555550000",
@@ -196,4 +226,3 @@ Notes:
   }
 }
 ```
-

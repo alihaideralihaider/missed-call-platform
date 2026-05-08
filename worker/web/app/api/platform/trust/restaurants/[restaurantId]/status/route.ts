@@ -8,9 +8,9 @@ type RouteContext = {
 };
 
 function buildMessage(action: string): string {
-  if (action === "suspend") return "Restaurant suspended.";
-  if (action === "reactivate") return "Restaurant reactivated.";
-  if (action === "close") return "Restaurant closed.";
+  if (action === "suspend") return "Account suspended.";
+  if (action === "reactivate") return "Account reactivated.";
+  if (action === "close") return "Account closed.";
   return "Restaurant updated.";
 }
 
@@ -35,7 +35,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     const { data: restaurant, error: restaurantError } = await admin
       .schema("food_ordering")
       .from("restaurants")
-      .select("id, slug, onboarding_status")
+      .select("id, slug, onboarding_status, platform_review_status, is_active")
       .eq("id", restaurantId)
       .single();
 
@@ -47,12 +47,23 @@ export async function PATCH(req: Request, context: RouteContext) {
       action === "suspend"
         ? "suspended"
         : action === "close"
-        ? "inactive"
-        : "active";
+          ? "inactive"
+          : "active";
     const nextRestaurantActive = action === "reactivate";
     const nextMembershipActive = action === "reactivate";
+    const nextPlatformReviewStatus =
+      action === "suspend"
+        ? "needs_review"
+        : action === "close"
+          ? "closed"
+          : "approved";
     const nextOnboardingStatus =
-      action === "close" ? "closed_by_platform" : restaurant.onboarding_status;
+      action === "reactivate" &&
+      ["closed_by_platform", "rejected_fraud"].includes(
+        String(restaurant.onboarding_status || "").trim().toLowerCase()
+      )
+        ? "pending_owner_activation"
+        : restaurant.onboarding_status;
 
     const { error: businessError } = await admin
       .from("businesses")
@@ -69,6 +80,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       .update({
         is_active: nextRestaurantActive,
         onboarding_status: nextOnboardingStatus,
+        platform_review_status: nextPlatformReviewStatus,
       })
       .eq("id", restaurant.id);
 
@@ -80,8 +92,8 @@ export async function PATCH(req: Request, context: RouteContext) {
       is_active: nextMembershipActive,
     };
 
-    if (action === "close") {
-      membershipUpdatePayload.onboarding_status = "closed_by_platform";
+    if (action === "reactivate" && nextOnboardingStatus !== restaurant.onboarding_status) {
+      membershipUpdatePayload.onboarding_status = nextOnboardingStatus;
     }
 
     const { error: membershipError } = await admin
@@ -96,10 +108,18 @@ export async function PATCH(req: Request, context: RouteContext) {
     await logPlatformActivity({
       entityType: "restaurant",
       entityId: restaurant.id,
-      eventType: `restaurant_${action}`,
+      eventType:
+        action === "suspend"
+          ? "account_suspended"
+          : action === "close"
+            ? "account_closed"
+            : "account_reactivated",
       actorUserId: access.userId,
       metadata: {
         restaurant_slug: restaurant.slug,
+        previous_is_active: restaurant.is_active,
+        previous_platform_review_status: restaurant.platform_review_status,
+        next_platform_review_status: nextPlatformReviewStatus,
         business_status: nextBusinessStatus,
         onboarding_status: nextOnboardingStatus,
       },

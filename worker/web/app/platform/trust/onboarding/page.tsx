@@ -11,6 +11,14 @@ type ReviewStatus =
   | "rejected_fraud"
   | string;
 
+type PlatformReviewStatus =
+  | "unreviewed"
+  | "needs_review"
+  | "approved"
+  | "closed"
+  | "rejected_fraud"
+  | string;
+
 type OnboardingRecord = {
   id: string;
   name: string;
@@ -18,16 +26,25 @@ type OnboardingRecord = {
   contact_email: string | null;
   contact_phone: string | null;
   onboarding_status: ReviewStatus;
+  platform_review_status: PlatformReviewStatus;
   is_active: boolean | null;
   business_status: string | null;
   onboarding_source_ip: string | null;
+  onboarding_ip_country: string | null;
+  onboarding_ip_region: string | null;
+  onboarding_ip_city: string | null;
   onboarding_user_agent: string | null;
+  onboarding_reviewed_at: string | null;
   created_at: string | null;
   repeated_ip_count: number;
   repeated_phone_count: number;
   repeated_email_count: number;
   repeated_user_agent_count: number;
   linked_restaurants_count: number;
+  same_city_count: number;
+  same_region_count: number;
+  same_country_count: number;
+  distinct_ips_same_city_count: number;
   risk_flags: string[];
 };
 
@@ -55,18 +72,22 @@ function formatDateTime(value?: string | null): string {
   }).format(date);
 }
 
-function statusClass(status: string): string {
+function reviewStatusClass(status: string): string {
   const normalized = String(status || "").trim().toLowerCase();
 
-  if (normalized === "pending_owner_activation") {
+  if (normalized === "unreviewed") {
     return "bg-yellow-100 text-yellow-800";
   }
 
-  if (normalized === "pending_phone_verification") {
-    return "bg-blue-100 text-blue-800";
+  if (normalized === "needs_review") {
+    return "bg-amber-100 text-amber-800";
   }
 
-  if (normalized === "closed_by_platform") {
+  if (normalized === "approved") {
+    return "bg-green-100 text-green-800";
+  }
+
+  if (normalized === "closed") {
     return "bg-neutral-200 text-neutral-800";
   }
 
@@ -74,11 +95,20 @@ function statusClass(status: string): string {
     return "bg-red-100 text-red-800";
   }
 
-  if (normalized === "active") {
-    return "bg-green-100 text-green-800";
-  }
-
   return "bg-neutral-100 text-neutral-700";
+}
+
+function formatLocation(record: Pick<
+  OnboardingRecord,
+  "onboarding_ip_city" | "onboarding_ip_region" | "onboarding_ip_country"
+>) {
+  const parts = [
+    record.onboarding_ip_city,
+    record.onboarding_ip_region,
+    record.onboarding_ip_country,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(", ") : "—";
 }
 
 export default function PlatformOnboardingReviewPage() {
@@ -149,8 +179,8 @@ export default function PlatformOnboardingReviewPage() {
   const pendingCount = useMemo(
     () =>
       records.filter((record) =>
-        ["pending_owner_activation", "pending_phone_verification"].includes(
-          String(record.onboarding_status || "").toLowerCase()
+        ["unreviewed", "needs_review"].includes(
+          String(record.platform_review_status || "").toLowerCase()
         )
       ).length,
     [records]
@@ -204,7 +234,8 @@ export default function PlatformOnboardingReviewPage() {
               Onboarding Review
             </h1>
             <p className="mt-1 text-sm text-neutral-500">
-              Review suspicious, incomplete, or manually closed restaurant onboardings.
+              Review restaurants that still need platform trust review. Product
+              access can remain active while platform review is still pending.
             </p>
           </div>
 
@@ -260,7 +291,7 @@ export default function PlatformOnboardingReviewPage() {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by restaurant, slug, email, phone, status, or IP"
+            placeholder="Search by restaurant, slug, email, phone, review status, owner activation, or IP"
             className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-400"
           />
         </div>
@@ -280,13 +311,12 @@ export default function PlatformOnboardingReviewPage() {
           ) : (
             <div className="space-y-4">
               {records.map((record) => {
-                const normalizedStatus = String(record.onboarding_status || "")
+                const normalizedReviewStatus = String(
+                  record.platform_review_status || ""
+                )
                   .trim()
                   .toLowerCase();
                 const isUpdating = updatingId === record.id;
-                const canReactivate =
-                  normalizedStatus === "closed_by_platform" ||
-                  normalizedStatus === "rejected_fraud";
 
                 return (
                   <div
@@ -300,11 +330,11 @@ export default function PlatformOnboardingReviewPage() {
                             {record.name}
                           </h2>
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(
-                              record.onboarding_status
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${reviewStatusClass(
+                              record.platform_review_status
                             )}`}
                           >
-                            {record.onboarding_status}
+                            Platform review: {record.platform_review_status}
                           </span>
                         </div>
 
@@ -314,12 +344,25 @@ export default function PlatformOnboardingReviewPage() {
                           <p>Phone: {record.contact_phone || "—"}</p>
                           <p>Created: {formatDateTime(record.created_at)}</p>
                           <p>Business status: {record.business_status || "—"}</p>
+                          <p>Product access: {record.is_active ? "active" : "inactive"}</p>
+                          <p>Owner activation: {record.onboarding_status || "—"}</p>
+                          <p>
+                            Platform review reviewed at:{" "}
+                            {formatDateTime(record.onboarding_reviewed_at)}
+                          </p>
                           <p>Onboarding IP: {record.onboarding_source_ip || "—"}</p>
+                          <p>IP location: {formatLocation(record)}</p>
                           <p>Repeated IP count: {record.repeated_ip_count}</p>
                           <p>Repeated phone count: {record.repeated_phone_count || 0}</p>
                           <p>Repeated email count: {record.repeated_email_count || 0}</p>
                           <p>
                             Repeated device count: {record.repeated_user_agent_count || 0}
+                          </p>
+                          <p>Same city count: {record.same_city_count || 0}</p>
+                          <p>Same region count: {record.same_region_count || 0}</p>
+                          <p>
+                            Distinct IPs from same city:{" "}
+                            {record.distinct_ips_same_city_count || 0}
                           </p>
                           <p>
                             Linked restaurants: {record.linked_restaurants_count || 0}
@@ -334,6 +377,15 @@ export default function PlatformOnboardingReviewPage() {
                         >
                           View details
                         </Link>
+
+                        <button
+                          type="button"
+                          onClick={() => runAction(record.id, "approve")}
+                          disabled={isUpdating}
+                          className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                        >
+                          Approve onboarding
+                        </button>
 
                         <button
                           type="button"
@@ -361,17 +413,6 @@ export default function PlatformOnboardingReviewPage() {
                         >
                           Block onboarding IP
                         </button>
-
-                        {canReactivate ? (
-                          <button
-                            type="button"
-                            onClick={() => runAction(record.id, "reactivate")}
-                            disabled={isUpdating}
-                            className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                          >
-                            Reactivate onboarding
-                          </button>
-                        ) : null}
                       </div>
                     </div>
 
@@ -396,6 +437,13 @@ export default function PlatformOnboardingReviewPage() {
                             {flag}
                           </span>
                         ))}
+                      </div>
+                    ) : null}
+
+                    {normalizedReviewStatus === "needs_review" ? (
+                      <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        This record is still in the queue because platform review is marked
+                        as <span className="font-semibold">needs_review</span>.
                       </div>
                     ) : null}
                   </div>

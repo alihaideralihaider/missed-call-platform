@@ -13,9 +13,14 @@ type RestaurantRow = {
   contact_email: string | null;
   contact_phone: string | null;
   onboarding_status: string | null;
+  platform_review_status: string | null;
   onboarding_source_ip: string | null;
+  onboarding_ip_country: string | null;
+  onboarding_ip_region: string | null;
+  onboarding_ip_city: string | null;
   onboarding_user_agent: string | null;
   is_active: boolean | null;
+  onboarding_reviewed_at: string | null;
   created_at: string | null;
 };
 
@@ -51,9 +56,9 @@ export async function GET(req: Request) {
       .schema("food_ordering")
       .from("restaurants")
       .select(
-        "id, name, slug, contact_email, contact_phone, onboarding_status, onboarding_source_ip, onboarding_user_agent, is_active, created_at"
+        "id, name, slug, contact_email, contact_phone, onboarding_status, platform_review_status, onboarding_source_ip, onboarding_ip_country, onboarding_ip_region, onboarding_ip_city, onboarding_user_agent, is_active, onboarding_reviewed_at, created_at"
       )
-      .neq("onboarding_status", "active")
+      .in("platform_review_status", ["unreviewed", "needs_review"])
       .order("created_at", { ascending: false });
 
     if (restaurantsError) {
@@ -113,8 +118,12 @@ export async function GET(req: Request) {
             restaurant.contact_email,
             restaurant.contact_phone,
             restaurant.onboarding_status,
+            restaurant.platform_review_status,
             restaurant.business_status,
             restaurant.onboarding_source_ip,
+            restaurant.onboarding_ip_city,
+            restaurant.onboarding_ip_region,
+            restaurant.onboarding_ip_country,
           ]
             .filter(Boolean)
             .some((value) =>

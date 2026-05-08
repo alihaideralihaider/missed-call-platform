@@ -60,6 +60,16 @@ const customerExperience = [
   "Customer can opt out where required.",
 ];
 
+const mysteryQrPoints = [
+  "Restaurant prints one QR code for receipts, counter cards, takeout bags, menus, window decals, business cards, and catering flyers.",
+  "Customer scans and enters their phone number to reveal a mystery offer.",
+  "Consent is restaurant-specific.",
+  "SaanaOS does not share or sell customer data to third parties.",
+  "Offers are restaurant-approved.",
+  "Offer window expires after 30 days.",
+  "Expired scans can still send customers to normal ordering or catering.",
+];
+
 const complianceNotes = [
   "SMS consent matters.",
   "Transactional recovery and promotional texting are different.",
@@ -217,6 +227,53 @@ export default function RestaurantMissedCallRecoveryDealRoomPage() {
       </SectionShell>
 
       <SectionShell className="relative z-10 overflow-hidden bg-white/90">
+        <FloatingPattern className="-right-40 top-12 hidden w-[430px] opacity-[0.07] lg:block" />
+        <div className="relative z-10 grid gap-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
+          <div>
+            <p
+              className="inline-flex rounded-full px-3 py-2 text-xs font-black uppercase tracking-[0.12em]"
+              style={{
+                backgroundColor: saanaColors.softOrange,
+                color: saanaColors.orange,
+              }}
+            >
+              Mystery QR Offers
+            </p>
+            <h2 className="mt-4 text-4xl font-black sm:text-5xl" style={{ color: saanaColors.navy }}>
+              Turn printed materials into direct pickup order paths.
+            </h2>
+            <p className="mt-4 text-lg leading-8" style={{ color: saanaColors.muted }}>
+              Turn receipts, counter cards, takeout bags, menus, window decals,
+              business cards, and catering flyers into direct pickup orders.
+            </p>
+            <p
+              className="mt-5 rounded-2xl px-4 py-3 text-sm font-black leading-6"
+              style={{
+                backgroundColor: saanaColors.softOrange,
+                color: saanaColors.navy,
+              }}
+            >
+              You approve the offers. SaanaOS decides when to show them.
+            </p>
+            <p className="mt-4 text-sm font-semibold leading-6" style={{ color: saanaColors.muted }}>
+              Phase 1 does not auto-apply checkout discounts or provide actual
+              QR revenue tracking yet. Revenue should be discussed as estimated
+              or potential until redemption tracking is implemented.
+            </p>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <CTAButton href="/mystery-qr-revenue-calculator">
+                Estimate Mystery QR revenue
+              </CTAButton>
+              <CTAButton href="/pricing" variant="secondary">
+                Add to pickup flow
+              </CTAButton>
+            </div>
+          </div>
+          <ChecklistCard title="How Mystery QR works" items={mysteryQrPoints} compact />
+        </div>
+      </SectionShell>
+
+      <SectionShell className="relative z-10 overflow-hidden bg-white/90">
         <FloatingPattern className="-left-40 top-12 hidden w-[400px] opacity-[0.06] lg:block" />
         <div className="relative z-10 grid gap-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
           <div>
@@ -291,6 +348,12 @@ export default function RestaurantMissedCallRecoveryDealRoomPage() {
             description="Estimate how much commission your restaurant may save by shifting more pickup orders direct."
             href="/aggregator-fee-savings-calculator"
             cta="Estimate fee savings"
+          />
+          <CalculatorCard
+            title="Mystery QR Revenue Estimate Calculator"
+            description="Estimate how much direct pickup revenue receipt stickers, counter cards, takeout bags, and catering flyers could influence."
+            href="/mystery-qr-revenue-calculator"
+            cta="Estimate Mystery QR revenue"
           />
         </div>
       </SectionShell>

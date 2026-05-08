@@ -39,6 +39,7 @@ const missedCallPlans = [
     bullets: [
       "Everything in Basic",
       "More monthly call & SMS usage",
+      "Mystery QR Offers",
       "Priority setup support",
       "Stronger recovery for busy locations",
       "Built for growing restaurants",

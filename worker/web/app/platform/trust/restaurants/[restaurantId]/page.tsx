@@ -11,9 +11,17 @@ type DetailRecord = {
   contact_email: string | null;
   contact_phone: string | null;
   onboarding_status: string | null;
+  platform_review_status: string | null;
   onboarding_source_ip: string | null;
+  onboarding_ip_country: string | null;
+  onboarding_ip_region: string | null;
+  onboarding_ip_city: string | null;
+  onboarding_ip_lat: number | null;
+  onboarding_ip_lon: number | null;
+  onboarding_ip_lookup_at: string | null;
   onboarding_user_agent: string | null;
   is_active: boolean | null;
+  onboarding_reviewed_at: string | null;
   created_at: string | null;
   business: {
     id: string;
@@ -57,6 +65,10 @@ type DetailRecord = {
     repeated_email_count: number;
     repeated_user_agent_count: number;
     linked_restaurants_count: number;
+    same_city_count: number;
+    same_region_count: number;
+    same_country_count: number;
+    distinct_ips_same_city_count: number;
     risk_flags: string[];
     linked_signals: Array<{
       signal_type: string;
@@ -71,6 +83,20 @@ type DetailRecord = {
         created_at: string | null;
       }>;
       created_at: string | null;
+    }>;
+    location_links: Array<{
+      scope: string;
+      label: string;
+      linked_restaurant_count: number;
+      distinct_ip_count: number;
+      linked_restaurants: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        onboarding_status: string | null;
+        platform_review_status: string | null;
+        created_at: string | null;
+      }>;
     }>;
   };
 };
@@ -103,6 +129,29 @@ function badgeClass(status: string): string {
   if (normalized === "blocked") return "bg-red-100 text-red-800";
   if (normalized === "watch") return "bg-yellow-100 text-yellow-800";
   return "bg-neutral-100 text-neutral-700";
+}
+
+function platformReviewBadgeClass(status: string): string {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "unreviewed") return "bg-yellow-100 text-yellow-800";
+  if (normalized === "needs_review") return "bg-amber-100 text-amber-800";
+  if (normalized === "approved") return "bg-green-100 text-green-800";
+  if (normalized === "closed") return "bg-neutral-200 text-neutral-800";
+  if (normalized === "rejected_fraud") return "bg-red-100 text-red-800";
+  return "bg-neutral-100 text-neutral-700";
+}
+
+function formatLocation(record: Pick<
+  DetailRecord,
+  "onboarding_ip_city" | "onboarding_ip_region" | "onboarding_ip_country"
+>) {
+  const parts = [
+    record.onboarding_ip_city,
+    record.onboarding_ip_region,
+    record.onboarding_ip_country,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(", ") : "—";
 }
 
 export default function PlatformRestaurantDetailPage() {
@@ -214,7 +263,8 @@ export default function PlatformRestaurantDetailPage() {
               {record?.name || "Restaurant Detail"}
             </h1>
             <p className="mt-1 text-sm text-neutral-500">
-              Review onboarding, business status, owner access, IP risk, and recent platform actions in one place.
+              Review product access, owner activation, platform review, IP risk,
+              and recent platform actions in one place.
             </p>
           </div>
 
@@ -255,7 +305,7 @@ export default function PlatformRestaurantDetailPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
               <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
                 <p className="text-sm text-neutral-500">Business status</p>
                 <div className="mt-2">
@@ -270,16 +320,32 @@ export default function PlatformRestaurantDetailPage() {
               </div>
 
               <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-                <p className="text-sm text-neutral-500">Onboarding</p>
+                <p className="text-sm text-neutral-500">Owner activation</p>
                 <p className="mt-2 text-lg font-bold text-neutral-900">
                   {record.onboarding_status || "—"}
                 </p>
               </div>
 
               <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-                <p className="text-sm text-neutral-500">Restaurant active</p>
+                <p className="text-sm text-neutral-500">Product access</p>
                 <p className="mt-2 text-lg font-bold text-neutral-900">
-                  {record.is_active ? "Yes" : "No"}
+                  {record.is_active ? "Active" : "Inactive"}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+                <p className="text-sm text-neutral-500">Platform review</p>
+                <div className="mt-2">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${platformReviewBadgeClass(
+                      record.platform_review_status || ""
+                    )}`}
+                  >
+                    {record.platform_review_status || "unreviewed"}
+                  </span>
+                </div>
+                <p className="mt-3 text-xs text-neutral-500">
+                  Reviewed: {formatDateTime(record.onboarding_reviewed_at)}
                 </p>
               </div>
             </div>
@@ -293,7 +359,14 @@ export default function PlatformRestaurantDetailPage() {
                     <p>Email: {record.contact_email || "—"}</p>
                     <p>Phone: {record.contact_phone || "—"}</p>
                     <p>Created: {formatDateTime(record.created_at)}</p>
+                    <p>Product access: {record.is_active ? "active" : "inactive"}</p>
+                    <p>Owner activation: {record.onboarding_status || "—"}</p>
+                    <p>
+                      Platform review: {record.platform_review_status || "unreviewed"}
+                    </p>
                     <p>Onboarding IP: {record.onboarding_source_ip || "—"}</p>
+                    <p>IP location: {formatLocation(record)}</p>
+                    <p>IP lookup: {formatDateTime(record.onboarding_ip_lookup_at)}</p>
                   </div>
 
                   {record.onboarding_user_agent ? (
@@ -405,6 +478,18 @@ export default function PlatformRestaurantDetailPage() {
                     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700 md:col-span-2">
                       Total linked restaurants: {record.risk_links.linked_restaurants_count}
                     </div>
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                      Same city count: {record.risk_links.same_city_count}
+                    </div>
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                      Same region count: {record.risk_links.same_region_count}
+                    </div>
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                      Same country count: {record.risk_links.same_country_count}
+                    </div>
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                      Distinct IPs from same city: {record.risk_links.distinct_ips_same_city_count}
+                    </div>
                   </div>
 
                   <div className="mt-4 space-y-3">
@@ -444,6 +529,75 @@ export default function PlatformRestaurantDetailPage() {
                                   <p>Slug: {linkedRestaurant.slug}</p>
                                   <p>
                                     Status: {linkedRestaurant.onboarding_status || "—"}
+                                  </p>
+                                  <p>
+                                    Created: {formatDateTime(linkedRestaurant.created_at)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
+                  <h2 className="text-lg font-bold text-neutral-900">Location Signals</h2>
+                  <div className="mt-4 space-y-2 text-sm text-neutral-600">
+                    <p>IP address: {record.onboarding_source_ip || "—"}</p>
+                    <p>Location: {formatLocation(record)}</p>
+                    <p>Lookup time: {formatDateTime(record.onboarding_ip_lookup_at)}</p>
+                    {record.onboarding_ip_lat !== null && record.onboarding_ip_lon !== null ? (
+                      <p>
+                        Coordinates: {record.onboarding_ip_lat}, {record.onboarding_ip_lon}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {record.risk_links.location_links.length === 0 ? (
+                      <p className="text-sm text-neutral-500">
+                        No location clustering signals found for this restaurant.
+                      </p>
+                    ) : (
+                      record.risk_links.location_links.map((link) => (
+                        <div
+                          key={`${link.scope}-${link.label}`}
+                          className="rounded-xl border border-neutral-200 bg-neutral-50 p-4"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-neutral-900">
+                              {humanize(link.scope)}
+                            </p>
+                            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-neutral-700">
+                              {link.linked_restaurant_count} linked
+                            </span>
+                          </div>
+                          <div className="mt-2 space-y-1 text-sm text-neutral-600">
+                            <p>Location: {link.label}</p>
+                            <p>Distinct IPs: {link.distinct_ip_count}</p>
+                          </div>
+
+                          {link.linked_restaurants.length > 0 ? (
+                            <div className="mt-3 space-y-2">
+                              {link.linked_restaurants.map((linkedRestaurant) => (
+                                <div
+                                  key={linkedRestaurant.id}
+                                  className="rounded-lg border border-neutral-200 bg-white p-3 text-sm text-neutral-700"
+                                >
+                                  <p className="font-semibold text-neutral-900">
+                                    {linkedRestaurant.name}
+                                  </p>
+                                  <p>Slug: {linkedRestaurant.slug}</p>
+                                  <p>
+                                    Owner activation:{" "}
+                                    {linkedRestaurant.onboarding_status || "—"}
+                                  </p>
+                                  <p>
+                                    Platform review:{" "}
+                                    {linkedRestaurant.platform_review_status || "—"}
                                   </p>
                                   <p>
                                     Created: {formatDateTime(linkedRestaurant.created_at)}

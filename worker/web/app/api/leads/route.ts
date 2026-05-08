@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { sendSms } from "@/lib/messaging/sendSms";
 
 type LeadPayload = {
   name: string;
@@ -66,9 +67,6 @@ async function sendEmailAlert(payload: LeadPayload) {
 }
 
 async function sendSmsAlert(payload: LeadPayload) {
-  const accountSid = requiredEnv("TWILIO_ACCOUNT_SID");
-  const authToken = requiredEnv("TWILIO_AUTH_TOKEN");
-  const fromPhone = requiredEnv("TWILIO_FROM_NUMBER");
   const toPhone = requiredEnv("LEAD_ALERT_TO_PHONE");
 
   const body =
@@ -80,28 +78,14 @@ async function sendSmsAlert(payload: LeadPayload) {
     `Locations: ${payload.locations}\n` +
     `Pain: ${payload.volume}`;
 
-  const form = new URLSearchParams();
-  form.set("To", normalizePhone(toPhone));
-  form.set("From", normalizePhone(fromPhone));
-  form.set("Body", body);
+  const result = await sendSms({
+    to: normalizePhone(toPhone),
+    body,
+    messageType: "lead_alert",
+  });
 
-  const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
-
-  const res = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: form.toString(),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Twilio error: ${text}`);
+  if (!result.success) {
+    throw new Error(result.error || "SMS alert failed.");
   }
 }
 

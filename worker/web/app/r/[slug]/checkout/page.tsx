@@ -20,6 +20,16 @@ type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
+type AppliedPromo = {
+  code: string;
+  type: "percent" | "fixed" | "manual" | "source";
+  value: number;
+  discountAmount: number;
+  manualFulfillment: boolean;
+  message: string;
+  note?: string;
+};
+
 function cleanSlug(value: unknown): string {
   const s = String(value ?? "").trim().toLowerCase();
   return s && s !== "undefined" && s !== "null" ? s : "";
@@ -49,6 +59,134 @@ function normalizeTaxRate(value: unknown): number {
   return raw >= 1 ? raw / 100 : raw;
 }
 
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function normalizePromoCode(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+function cartHasCateringItem(items: CartItem[]): boolean {
+  return items.some(
+    (item) =>
+      String(item.category_name || "")
+        .trim()
+        .toLowerCase() === "catering"
+  );
+}
+
+function evaluateStaticPromoCode(
+  rawCode: string,
+  subtotal: number,
+  items: CartItem[]
+): { promo?: AppliedPromo; error?: string } {
+  const code = normalizePromoCode(rawCode);
+  const safeSubtotal = Math.max(0, roundMoney(subtotal));
+
+  if (!code) {
+    return { error: "Enter a promo code." };
+  }
+
+  if (code === "MYSTERY10") {
+    const discountAmount = roundMoney(Math.min(safeSubtotal, safeSubtotal * 0.1));
+    return {
+      promo: {
+        code,
+        type: "percent",
+        value: 10,
+        discountAmount,
+        manualFulfillment: false,
+        message: "MYSTERY10 applied: 10% off pickup orders.",
+      },
+    };
+  }
+
+  if (code === "PICKUP5") {
+    if (safeSubtotal < 40) {
+      return { error: "PICKUP5 requires a $40 minimum subtotal." };
+    }
+
+    return {
+      promo: {
+        code,
+        type: "fixed",
+        value: 5,
+        discountAmount: roundMoney(Math.min(safeSubtotal, 5)),
+        manualFulfillment: false,
+        message: "PICKUP5 applied: $5 off pickup orders of $40 or more.",
+      },
+    };
+  }
+
+  if (code === "CATERING20") {
+    if (!cartHasCateringItem(items) && safeSubtotal < 100) {
+      return {
+        error:
+          "CATERING20 applies to catering or large orders of $100 or more.",
+      };
+    }
+
+    const discountAmount = roundMoney(Math.min(safeSubtotal, safeSubtotal * 0.2));
+    return {
+      promo: {
+        code,
+        type: "percent",
+        value: 20,
+        discountAmount,
+        manualFulfillment: false,
+        message: "CATERING20 applied: 20% off catering or large orders.",
+      },
+    };
+  }
+
+  if (code === "FREEDRINK") {
+    return {
+      promo: {
+        code,
+        type: "manual",
+        value: 0,
+        discountAmount: 0,
+        manualFulfillment: true,
+        message:
+          "Free drink promo accepted. The restaurant will verify at pickup.",
+        note: "Free drink with qualifying pickup order",
+      },
+    };
+  }
+
+  if (code === "FREESAUCE") {
+    return {
+      promo: {
+        code,
+        type: "manual",
+        value: 0,
+        discountAmount: 0,
+        manualFulfillment: true,
+        message:
+          "Free side or sauce promo accepted. The restaurant will verify at pickup.",
+        note: "Free side or sauce with qualifying pickup order",
+      },
+    };
+  }
+
+  if (code === "DIRECT") {
+    return {
+      promo: {
+        code,
+        type: "source",
+        value: 0,
+        discountAmount: 0,
+        manualFulfillment: false,
+        message: "Direct order promo noted.",
+        note: "Direct order promo noted",
+      },
+    };
+  }
+
+  return { error: "Promo code not recognized." };
+}
+
 export default function CheckoutPage({ params }: PageProps) {
   const [slug, setSlug] = useState("");
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
@@ -62,6 +200,10 @@ export default function CheckoutPage({ params }: PageProps) {
   const [notes, setNotes] = useState("");
   const [smsOptIn, setSmsOptIn] = useState(false);
   const [smsConsentTouched, setSmsConsentTouched] = useState(false);
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+  const [promoMessage, setPromoMessage] = useState("");
+  const [promoError, setPromoError] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -222,11 +364,24 @@ export default function CheckoutPage({ params }: PageProps) {
     [items]
   );
 
-  const tax = useMemo(
-    () => (taxMode === "exclusive" ? subtotal * salesTaxRate : 0),
-    [salesTaxRate, subtotal, taxMode]
+  const promoDiscount = useMemo(
+    () =>
+      appliedPromo
+        ? Math.min(subtotal, Math.max(0, appliedPromo.discountAmount))
+        : 0,
+    [appliedPromo, subtotal]
   );
-  const total = useMemo(() => subtotal + tax, [subtotal, tax]);
+
+  const discountedSubtotal = useMemo(
+    () => roundMoney(Math.max(0, subtotal - promoDiscount)),
+    [promoDiscount, subtotal]
+  );
+
+  const tax = useMemo(
+    () => (taxMode === "exclusive" ? discountedSubtotal * salesTaxRate : 0),
+    [discountedSubtotal, salesTaxRate, taxMode]
+  );
+  const total = useMemo(() => discountedSubtotal + tax, [discountedSubtotal, tax]);
 
   const itemCount = useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
@@ -243,6 +398,22 @@ export default function CheckoutPage({ params }: PageProps) {
       clearCart();
     }
   }, [cartBelongsToThisRestaurant, cartRestaurantSlug]);
+
+  useEffect(() => {
+    if (!appliedPromo) return;
+
+    const result = evaluateStaticPromoCode(appliedPromo.code, subtotal, items);
+    if (result.promo) {
+      setAppliedPromo(result.promo);
+      setPromoMessage(result.promo.message);
+      setPromoError("");
+      return;
+    }
+
+    setAppliedPromo(null);
+    setPromoMessage("");
+    setPromoError(result.error || "Promo code no longer applies.");
+  }, [appliedPromo?.code, items, subtotal]);
 
   const pickupEvaluation = useMemo(
     () => evaluateRestaurantHours(restaurantHours, restaurantTimezone, now),
@@ -264,6 +435,29 @@ export default function CheckoutPage({ params }: PageProps) {
 
   const selectedPickupLabel = selectedPickupOption?.label || "";
   const selectedPickupAt = selectedPickupOption?.pickupAt || "";
+
+  function applyPromoCode() {
+    const result = evaluateStaticPromoCode(promoCodeInput, subtotal, items);
+
+    if (result.error || !result.promo) {
+      setAppliedPromo(null);
+      setPromoMessage("");
+      setPromoError(result.error || "Promo code not recognized.");
+      return;
+    }
+
+    setAppliedPromo(result.promo);
+    setPromoCodeInput(result.promo.code);
+    setPromoMessage(result.promo.message);
+    setPromoError("");
+  }
+
+  function clearPromoCode() {
+    setAppliedPromo(null);
+    setPromoCodeInput("");
+    setPromoMessage("");
+    setPromoError("");
+  }
 
   useEffect(() => {
     if (!pickupOptions.length) {
@@ -373,6 +567,12 @@ export default function CheckoutPage({ params }: PageProps) {
         pickupAt: selectedPickupAt,
         notes: notes.trim(),
         smsOptIn,
+        promo: appliedPromo
+          ? {
+              code: appliedPromo.code,
+              source: "manual_checkout",
+            }
+          : null,
         items: items.map((item) => ({
           id: item.id,
           name: item.name,
@@ -733,6 +933,80 @@ export default function CheckoutPage({ params }: PageProps) {
               ))}
             </div>
 
+            <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-4">
+              <label
+                htmlFor="promoCode"
+                className="block text-sm font-semibold text-neutral-900"
+              >
+                Promo code
+              </label>
+              <p className="mt-1 text-xs text-neutral-500">
+                Enter one restaurant promo code at checkout.
+              </p>
+
+              <div className="mt-3 flex gap-2">
+                <input
+                  id="promoCode"
+                  type="text"
+                  value={promoCodeInput}
+                  onChange={(e) => {
+                    setPromoCodeInput(e.target.value.toUpperCase());
+                    setPromoError("");
+                    setPromoMessage("");
+                    if (appliedPromo) {
+                      setAppliedPromo(null);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      applyPromoCode();
+                    }
+                  }}
+                  placeholder="MYSTERY10"
+                  className="min-w-0 flex-1 rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-semibold uppercase tracking-wide outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-neutral-400 focus:border-neutral-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+                  autoComplete="off"
+                />
+                {appliedPromo ? (
+                  <button
+                    type="button"
+                    onClick={clearPromoCode}
+                    className="rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm font-semibold text-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+                  >
+                    Remove
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={applyPromoCode}
+                    className="rounded-2xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+                  >
+                    Apply
+                  </button>
+                )}
+              </div>
+
+              {promoError ? (
+                <p className="mt-2 text-sm text-red-600" role="alert">
+                  {promoError}
+                </p>
+              ) : null}
+
+              {promoMessage ? (
+                <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-sm font-semibold text-emerald-900">
+                    {promoMessage}
+                  </p>
+                  {appliedPromo?.manualFulfillment ? (
+                    <p className="mt-1 text-xs text-emerald-800">
+                      This offer will be noted for the restaurant and verified at
+                      pickup.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
             <div className="mt-4 border-t border-neutral-200 pt-4 text-sm">
               <div className="flex items-center justify-between text-neutral-600">
                 <span>
@@ -740,6 +1014,17 @@ export default function CheckoutPage({ params }: PageProps) {
                 </span>
                 <span>${subtotal.toFixed(2)}</span>
               </div>
+
+              {appliedPromo ? (
+                <div className="mt-2 flex items-center justify-between text-emerald-700">
+                  <span>Promo ({appliedPromo.code})</span>
+                  <span>
+                    {promoDiscount > 0
+                      ? `-$${promoDiscount.toFixed(2)}`
+                      : "Accepted"}
+                  </span>
+                </div>
+              ) : null}
 
               <div className="mt-2 flex items-center justify-between text-neutral-600">
                 <span>Sales tax</span>

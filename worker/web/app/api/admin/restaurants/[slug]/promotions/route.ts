@@ -136,7 +136,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     const { data: restaurant, error: restaurantError } = await supabase
       .schema("food_ordering")
       .from("restaurants")
-      .select("id, name, slug, has_vibe_upgrade, has_menu_upgrade")
+      .select("id, name, slug, has_vibe_upgrade, has_menu_upgrade, vibe_image_url")
       .eq("slug", slug)
       .single();
 
@@ -191,6 +191,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     const shapedMenuItems = menuItems.map((item: any) => ({
       id: item.id,
       name: item.name,
+      category_id: item.category_id,
       category_name: categoryNameMap.get(String(item.category_id)) || null,
       image_url: item.image_url || null,
     }));
@@ -199,6 +200,23 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       id: category.id,
       name: category.name,
     }));
+
+    const { data: assetsData } = await supabase
+      .schema("food_ordering")
+      .from("menu_item_assets")
+      .select("id, menu_item_id, original_file_name, public_url, alt_text, created_at")
+      .eq("restaurant_id", restaurant.id)
+      .order("created_at", { ascending: false });
+
+    const shapedAssets = (assetsData || [])
+      .filter((asset: any) => Boolean(asset.public_url))
+      .map((asset: any) => ({
+        id: asset.id,
+        menu_item_id: asset.menu_item_id || null,
+        original_file_name: asset.original_file_name || null,
+        public_url: asset.public_url,
+        alt_text: asset.alt_text || null,
+      }));
 
     const { data: promotionsData, error: promotionsError } = await supabase
       .schema("growth")
@@ -262,6 +280,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       promotions: shapedPromotions,
       menuItems: shapedMenuItems,
       categories: shapedCategories,
+      assets: shapedAssets,
     });
   } catch (error) {
     return NextResponse.json(
@@ -373,22 +392,28 @@ export async function POST(req: NextRequest, context: RouteContext) {
         ? body.targetType
         : "restaurant";
 
-    const { data: target, error: targetError } = await supabase
-      .schema("growth")
-      .from("promotion_targets")
-      .insert({
-        promotion_id: promotion.id,
-        target_type: targetType,
-        target_id: targetType === "restaurant" ? null : toNullableString(body.targetId),
-      })
-      .select("id, promotion_id, target_type, target_id")
-      .single();
+    let target = null;
 
-    if (targetError) {
-      return NextResponse.json(
-        { error: targetError.message || "Failed to create promotion target." },
-        { status: 500 }
-      );
+    if (targetType !== "restaurant") {
+      const { data: targetData, error: targetError } = await supabase
+        .schema("growth")
+        .from("promotion_targets")
+        .insert({
+          promotion_id: promotion.id,
+          target_type: targetType,
+          target_id: toNullableString(body.targetId),
+        })
+        .select("id, promotion_id, target_type, target_id")
+        .single();
+
+      if (targetError) {
+        return NextResponse.json(
+          { error: targetError.message || "Failed to create promotion target." },
+          { status: 500 }
+        );
+      }
+
+      target = targetData;
     }
 
     return NextResponse.json({

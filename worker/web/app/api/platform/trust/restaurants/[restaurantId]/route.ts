@@ -37,7 +37,7 @@ export async function GET(_req: Request, context: RouteContext) {
       .schema("food_ordering")
       .from("restaurants")
       .select(
-        "id, name, slug, contact_email, contact_phone, onboarding_status, onboarding_source_ip, onboarding_user_agent, is_active, created_at"
+        "id, name, slug, contact_email, contact_phone, onboarding_status, platform_review_status, onboarding_source_ip, onboarding_ip_country, onboarding_ip_region, onboarding_ip_city, onboarding_ip_lat, onboarding_ip_lon, onboarding_ip_lookup_at, onboarding_user_agent, is_active, onboarding_reviewed_at, created_at"
       )
       .eq("id", restaurantId)
       .maybeSingle();
@@ -135,8 +135,13 @@ export async function GET(_req: Request, context: RouteContext) {
           repeated_email_count: 0,
           repeated_user_agent_count: 0,
           linked_restaurants_count: 0,
+          same_city_count: 0,
+          same_region_count: 0,
+          same_country_count: 0,
+          distinct_ips_same_city_count: 0,
           risk_flags: [],
           linked_signals: [],
+          location_links: [],
         },
       },
     });

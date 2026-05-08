@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type RestaurantRecord = {
   id: string;
@@ -10,6 +10,7 @@ type RestaurantRecord = {
   contact_email: string | null;
   contact_phone: string | null;
   onboarding_status: string | null;
+  platform_review_status: string | null;
   is_active: boolean | null;
   business_status: string | null;
   created_at: string | null;
@@ -49,6 +50,18 @@ function statusClass(status: string): string {
   return "bg-neutral-100 text-neutral-700";
 }
 
+function reviewStatusClass(status: string): string {
+  const normalized = String(status || "").trim().toLowerCase();
+
+  if (normalized === "approved") return "bg-green-100 text-green-800";
+  if (normalized === "needs_review") return "bg-amber-100 text-amber-800";
+  if (normalized === "closed") return "bg-neutral-200 text-neutral-800";
+  if (normalized === "rejected_fraud") return "bg-red-100 text-red-800";
+  if (normalized === "unreviewed") return "bg-yellow-100 text-yellow-800";
+
+  return "bg-neutral-100 text-neutral-700";
+}
+
 export default function PlatformRestaurantControlsPage() {
   const [records, setRecords] = useState<RestaurantRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,42 +83,49 @@ export default function PlatformRestaurantControlsPage() {
     return () => window.clearTimeout(timeoutId);
   }, [query]);
 
-  async function loadRecords(nextPage = page, nextQuery = debouncedQuery) {
-    setLoading(true);
-    setError("");
+  const loadRecords = useCallback(
+    async (nextPage = page, nextQuery = debouncedQuery) => {
+      setLoading(true);
+      setError("");
 
-    try {
-      const params = new URLSearchParams({
-        page: String(nextPage),
-        limit: "20",
-      });
-      if (nextQuery) {
-        params.set("query", nextQuery);
-      }
+      try {
+        const params = new URLSearchParams({
+          page: String(nextPage),
+          limit: "20",
+        });
+        if (nextQuery) {
+          params.set("query", nextQuery);
+        }
 
-      const response = await fetch(`/api/platform/trust/restaurants?${params}`, {
-        cache: "no-store",
-      });
-      const data = await response.json();
+        const response = await fetch(`/api/platform/trust/restaurants?${params}`, {
+          cache: "no-store",
+        });
+        const data = await response.json();
 
-      if (!response.ok) {
-        setError(data?.error || "Failed to load restaurant controls.");
+        if (!response.ok) {
+          setError(data?.error || "Failed to load restaurant controls.");
+          setLoading(false);
+          return;
+        }
+
+        setRecords(Array.isArray(data?.records) ? data.records : []);
+        setPagination(data?.pagination || null);
         setLoading(false);
-        return;
+      } catch {
+        setError("Something went wrong while loading restaurant controls.");
+        setLoading(false);
       }
-
-      setRecords(Array.isArray(data?.records) ? data.records : []);
-      setPagination(data?.pagination || null);
-      setLoading(false);
-    } catch {
-      setError("Something went wrong while loading restaurant controls.");
-      setLoading(false);
-    }
-  }
+    },
+    [debouncedQuery, page]
+  );
 
   useEffect(() => {
-    loadRecords(page, debouncedQuery);
-  }, [page, debouncedQuery]);
+    async function run() {
+      await loadRecords(page, debouncedQuery);
+    }
+
+    void run();
+  }, [page, debouncedQuery, loadRecords]);
 
   const suspendedCount = useMemo(
     () =>
@@ -163,7 +183,8 @@ export default function PlatformRestaurantControlsPage() {
               Restaurant Controls
             </h1>
             <p className="mt-1 text-sm text-neutral-500">
-              Suspend, reactivate, or close restaurants independently of onboarding review.
+              Search any restaurant and manage account access independently of
+              onboarding review.
             </p>
           </div>
 
@@ -266,7 +287,14 @@ export default function PlatformRestaurantControlsPage() {
                               record.business_status || ""
                             )}`}
                           >
-                            {record.business_status || "unknown"}
+                            Business: {record.business_status || "unknown"}
+                          </span>
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${reviewStatusClass(
+                              record.platform_review_status || ""
+                            )}`}
+                          >
+                            Review: {record.platform_review_status || "unreviewed"}
                           </span>
                         </div>
 
@@ -274,8 +302,14 @@ export default function PlatformRestaurantControlsPage() {
                           <p>Slug: {record.slug}</p>
                           <p>Email: {record.contact_email || "—"}</p>
                           <p>Phone: {record.contact_phone || "—"}</p>
-                          <p>Onboarding: {record.onboarding_status || "—"}</p>
-                          <p>Restaurant active: {record.is_active ? "yes" : "no"}</p>
+                          <p>
+                            Product access: {record.is_active ? "active" : "inactive"}
+                          </p>
+                          <p>Owner activation: {record.onboarding_status || "—"}</p>
+                          <p>
+                            Platform review:{" "}
+                            {record.platform_review_status || "unreviewed"}
+                          </p>
                           <p>Created: {formatDateTime(record.created_at)}</p>
                         </div>
                       </div>
@@ -295,7 +329,7 @@ export default function PlatformRestaurantControlsPage() {
                             disabled={isUpdating}
                             className="w-full rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm font-semibold text-amber-700 disabled:opacity-60"
                           >
-                            Suspend restaurant
+                            Suspend account
                           </button>
                         ) : null}
 
@@ -306,7 +340,7 @@ export default function PlatformRestaurantControlsPage() {
                             disabled={isUpdating}
                             className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
                           >
-                            Reactivate restaurant
+                            Reactivate account
                           </button>
                         ) : null}
 
@@ -316,7 +350,7 @@ export default function PlatformRestaurantControlsPage() {
                           disabled={isUpdating}
                           className="w-full rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-semibold text-red-700 disabled:opacity-60"
                         >
-                          Close restaurant
+                          Close account
                         </button>
                       </div>
                     </div>

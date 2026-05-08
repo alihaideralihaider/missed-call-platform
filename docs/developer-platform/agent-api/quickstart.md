@@ -1,8 +1,8 @@
 # Quickstart
 
-This quickstart shows the intended future developer flow for the AuthToolkit / RecoveryStack v1 Agent API.
+This quickstart shows the developer flow for the AuthToolkit / RecoveryStack v1 Agent API.
 
-These endpoints are documentation-first and are not implemented yet.
+The first internal SaanaOS wrapper persists events and agent runs. Full authentication, webhooks, and public developer portal features are still future phases.
 
 ## 1. Get a Test API Key
 
@@ -50,6 +50,7 @@ curl -X POST https://api.authtoolkit.com/v1/agent/events \
     },
     "source_system": "saanaos",
     "source_slug": "demo-restaurant",
+    "attempt_job_id": "550e8400-e29b-41d4-a716-446655440000",
     "metadata": {
       "call_sid": "CA_demo_123"
     }
@@ -67,7 +68,45 @@ Example response:
 }
 ```
 
-## 4. Get an Agent Run
+The event intake layer now stores an internal `agent_events` record and an `agent_runs` record.
+`attempt_job_id` is optional and links the run to a Universal Attempts Engine job when a source system has one. It is used for traceability only and does not change attempts execution behavior.
+
+## 4. Call an Agent Action
+
+Pass the returned `agent_run_id` into action calls when you want the action to appear in the run trace.
+The `agent_run_id` field is optional; omitting it preserves the action response but skips run-level action logging.
+
+```bash
+curl -X POST https://api.authtoolkit.com/v1/agent/actions/suggest-modifier \
+  -H "Authorization: Bearer atk_test_123456789" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_run_id": "run_123",
+    "source_system": "saanaos",
+    "source_slug": "demo-restaurant",
+    "item": {
+      "id": "item_123"
+    },
+    "cart": {
+      "id": "cart_123",
+      "subtotal": 24.5
+    },
+    "customer": {
+      "phone": "+15555550123"
+    }
+  }'
+```
+
+Example response:
+
+```json
+{
+  "suggestion": null,
+  "request_id": "req_124"
+}
+```
+
+## 5. Get an Agent Run
 
 ```bash
 curl https://api.authtoolkit.com/v1/agent/runs/run_123 \
@@ -79,24 +118,67 @@ Example response:
 ```json
 {
   "agent_run_id": "run_123",
-  "status": "completed",
+  "attempt_job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "accepted",
   "event_type": "missed_call",
+  "source_system": "saanaos",
+  "source_slug": "demo-restaurant",
+  "run": {
+    "id": "run_123",
+    "event_id": "evt_123",
+    "attempt_job_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "accepted",
+    "event_type": "missed_call",
+    "source_system": "saanaos",
+    "source_slug": "demo-restaurant",
+    "created_at": "2026-05-03T12:00:00Z",
+    "completed_at": null,
+    "metadata": {}
+  },
+  "event": {
+    "id": "evt_123",
+    "event_type": "missed_call",
+    "metadata": {
+      "call_sid": "CA_demo_123"
+    },
+    "customer": {
+      "phone": "+15555550123"
+    }
+  },
   "actions": [
     {
-      "type": "create_order_link",
-      "status": "succeeded"
-    },
-    {
-      "type": "send_message",
-      "status": "suppressed",
-      "reason": "missing_explicit_consent"
+      "id": "act_123",
+      "type": "suggest_modifier",
+      "action_version": "v1",
+      "status": "completed",
+      "payload": {
+        "source_system": "saanaos",
+        "source_slug": "demo-restaurant",
+        "item": {
+          "id": "item_123"
+        },
+        "cart": {
+          "id": "cart_123",
+          "subtotal": 24.5
+        },
+        "customer": {
+          "phone": "+15555550123"
+        }
+      },
+      "result": {
+        "suggestion": null
+      },
+      "created_at": "2026-05-03T12:00:00Z",
+      "completed_at": "2026-05-03T12:00:01Z"
     }
   ],
-  "request_id": "req_124"
+  "request_id": "req_125"
 }
 ```
 
-## 5. Receive a Webhook
+Action records are idempotent by `request_id`. Timestamps are returned as UTC ISO-8601 strings.
+
+## 6. Receive a Webhook
 
 Configure a webhook endpoint in the future developer portal:
 
@@ -121,4 +203,3 @@ Example webhook:
   }
 }
 ```
-

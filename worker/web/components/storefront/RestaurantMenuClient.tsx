@@ -425,6 +425,7 @@ export default function RestaurantMenuClient({
       name: item.name,
       price: item.price,
       is_sold_out: item.is_sold_out,
+      category_name: item.category_name,
     });
   }
 
@@ -574,6 +575,7 @@ export default function RestaurantMenuClient({
       name: activeItem.name,
       price: currentItemTotal,
       is_sold_out: activeItem.is_sold_out,
+      category_name: activeItem.category_name,
       modifiers: currentModifiers,
     });
 

@@ -12,6 +12,7 @@ Request:
 
 ```json
 {
+  "agent_run_id": "run_123",
   "business": {
     "id": "biz_123"
   },
@@ -65,6 +66,9 @@ Notes and guardrails:
 - Validate that the option is attached to the item.
 - Do not suggest required modifier choices as optional upsells.
 - Respect source system modifier rules.
+- `agent_run_id` is optional. When provided, the action is logged and appears in `GET /v1/agent/runs/{id}`.
+- Logged actions include `action_version` and use UTC ISO-8601 timestamps.
+- Action logging is idempotent by `request_id`; duplicate logs for the same request are treated as already recorded.
 
 ## POST /v1/agent/actions/apply-modifier
 
@@ -74,6 +78,7 @@ Request:
 
 ```json
 {
+  "agent_run_id": "run_123",
   "suggestion_id": "sug_123",
   "cart": {
     "id": "cart_123"
@@ -103,6 +108,9 @@ Notes and guardrails:
 - Validate the suggestion still matches an attached active option.
 - Do not bypass source system min/max/required rules.
 - Do not recalculate pricing from untrusted client payloads.
+- `agent_run_id` is optional. When provided, accepted and skipped actions are logged and visible in the run lookup response.
+- Logged actions include `action_version` and use UTC ISO-8601 timestamps.
+- Action logging is idempotent by `request_id`; duplicate logs for the same request are treated as already recorded.
 
 ## POST /v1/agent/actions/send-message
 
@@ -262,4 +270,3 @@ Notes and guardrails:
 - Validate current availability and pricing.
 - Do not silently substitute unavailable items.
 - Ask for confirmation before charging or placing an order.
-

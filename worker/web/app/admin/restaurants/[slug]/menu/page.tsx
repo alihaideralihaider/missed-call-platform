@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -64,6 +65,13 @@ type ModifierDraft = {
   attachGroupId: string;
 };
 
+type ModifierGroupEditDraft = {
+  name: string;
+  required: boolean;
+  minSelect: string;
+  maxSelect: string;
+};
+
 type ImportPreviewRow = {
   id: string;
   rowNumber: number;
@@ -120,6 +128,151 @@ Sides,French Fries,Crispy golden fries,4.99,1,true,false,
 Drinks,Coke,,1.99,1,true,false,
 `;
 
+const CREATE_CATEGORY_VALUE = "__create_category__";
+
+type OrderingQrCardProps = {
+  title: string;
+  description: string;
+  url: string;
+  fallbackUrl: string;
+  fileName: string;
+  suggestedPrintCopy: string;
+  copied: boolean;
+  onCopy: () => void;
+  helperText?: string;
+};
+
+function OrderingQrCard({
+  title,
+  description,
+  url,
+  fallbackUrl,
+  fileName,
+  suggestedPrintCopy,
+  copied,
+  onCopy,
+  helperText,
+}: OrderingQrCardProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [qrError, setQrError] = useState("");
+
+  useEffect(() => {
+    if (!url || !canvasRef.current) return;
+
+    let cancelled = false;
+
+    QRCode.toCanvas(canvasRef.current, url, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 168,
+      color: {
+        dark: "#111827",
+        light: "#ffffff",
+      },
+    })
+      .then(() => {
+        if (!cancelled) {
+          setQrError("");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setQrError("QR preview could not be generated.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  async function downloadQrCode() {
+    if (!url) return;
+
+    try {
+      const dataUrl = await QRCode.toDataURL(url, {
+        errorCorrectionLevel: "M",
+        margin: 4,
+        width: 1024,
+        color: {
+          dark: "#111827",
+          light: "#ffffff",
+        },
+      });
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setQrError("");
+    } catch {
+      setQrError("QR download could not be generated.");
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-neutral-900">{title}</p>
+          <p className="mt-1 text-xs leading-5 text-neutral-500">
+            {description}
+          </p>
+          <p className="mt-1 break-all font-mono text-xs text-neutral-600">
+            {url || fallbackUrl}
+          </p>
+          <p className="mt-3 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs font-semibold text-neutral-800">
+            Suggested print copy: {suggestedPrintCopy}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-neutral-500">
+            {helperText ||
+              "Use this QR code on menus, window decals, postcards, business cards, and catering flyers."}
+          </p>
+          {qrError ? (
+            <p className="mt-2 text-xs text-red-600">{qrError}</p>
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 flex-col items-start gap-3 md:items-end">
+          <div className="rounded-xl border border-neutral-200 bg-white p-2 shadow-sm">
+            {url ? (
+              <canvas
+                ref={canvasRef}
+                aria-label={`${title} preview`}
+                className="h-[168px] w-[168px]"
+              />
+            ) : (
+              <div className="flex h-[168px] w-[168px] items-center justify-center rounded-lg bg-neutral-100 px-4 text-center text-xs text-neutral-500">
+                QR preview will appear after the restaurant slug loads.
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCopy}
+              disabled={!url}
+              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 disabled:opacity-50"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+            <button
+              type="button"
+              onClick={downloadQrCode}
+              disabled={!url}
+              className="rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              Download QR
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RestaurantMenuAdminPage({ params }: PageProps) {
   const [slug, setSlug] = useState("");
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
@@ -129,6 +282,8 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
   const [loadingError, setLoadingError] = useState("");
 
   const [categoryId, setCategoryId] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
   const [itemName, setItemName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
@@ -159,7 +314,11 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
   const [modifierDrafts, setModifierDrafts] = useState<Record<string, ModifierDraft>>(
     {}
   );
+  const [modifierGroupEditDrafts, setModifierGroupEditDrafts] = useState<
+    Record<string, ModifierGroupEditDraft>
+  >({});
   const [savingModifierItemId, setSavingModifierItemId] = useState("");
+  const [editingModifierGroupId, setEditingModifierGroupId] = useState("");
 
   function emptyModifierDraft(): ModifierDraft {
     return {
@@ -184,6 +343,49 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
       ...current,
       [itemId]: updater(current[itemId] || emptyModifierDraft()),
     }));
+  }
+
+  function startEditingModifierGroup(group: ModifierGroup) {
+    setEditingModifierGroupId(group.id);
+    setSubmitError("");
+    setModifierGroupEditDrafts((current) => ({
+      ...current,
+      [group.id]: {
+        name: group.name,
+        required: group.required,
+        minSelect: String(group.min_select ?? 0),
+        maxSelect: String(group.max_select ?? (group.options.length || 1)),
+      },
+    }));
+  }
+
+  function cancelEditingModifierGroup(groupId: string) {
+    setEditingModifierGroupId((current) => (current === groupId ? "" : current));
+    setModifierGroupEditDrafts((current) => {
+      const next = { ...current };
+      delete next[groupId];
+      return next;
+    });
+  }
+
+  function updateModifierGroupEditDraft(
+    groupId: string,
+    updater: (draft: ModifierGroupEditDraft) => ModifierGroupEditDraft
+  ) {
+    setModifierGroupEditDrafts((current) => {
+      const existing =
+        current[groupId] || {
+          name: "",
+          required: false,
+          minSelect: "0",
+          maxSelect: "1",
+        };
+
+      return {
+        ...current,
+        [groupId]: updater(existing),
+      };
+    });
   }
 
   async function loadAssets(targetSlug: string) {
@@ -293,10 +495,15 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
 
   const orderingLinks = useMemo(() => {
     const safeSlug = cleanSlug(restaurant?.slug || slug);
+    const publicBaseUrl = (
+      process.env.NEXT_PUBLIC_APP_URL || "https://www.saanaos.com"
+    ).replace(/\/$/, "");
 
     return {
-      main: safeSlug ? `/r/${safeSlug}` : "",
-      catering: safeSlug ? `/r/${safeSlug}/catering` : "",
+      slug: safeSlug,
+      main: safeSlug ? `${publicBaseUrl}/r/${safeSlug}` : "",
+      catering: safeSlug ? `${publicBaseUrl}/r/${safeSlug}/catering` : "",
+      mystery: safeSlug ? `${publicBaseUrl}/r/${safeSlug}/mystery` : "",
     };
   }, [restaurant?.slug, slug]);
 
@@ -352,6 +559,66 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
     }
   }
 
+  async function handleCreateCategory() {
+    if (!slug || creatingCategory) return;
+
+    const name = newCategoryName.trim();
+
+    if (!name) {
+      setSubmitError("Please enter a category name.");
+      return;
+    }
+
+    setCreatingCategory(true);
+    setSubmitError("");
+    setSuccessMessage("");
+
+    try {
+      const res = await fetch(`/api/admin/restaurants/${slug}/menu-categories`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.category?.id) {
+        setSubmitError(data?.error || "Failed to create category.");
+        setCreatingCategory(false);
+        return;
+      }
+
+      const nextCategory = {
+        id: data.category.id,
+        name: data.category.name,
+        sort_order: Number(data.category.sort_order || 0),
+      };
+
+      setCategories((current) => {
+        const withoutDuplicate = current.filter(
+          (category) => category.id !== nextCategory.id
+        );
+
+        return [...withoutDuplicate, nextCategory].sort(
+          (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)
+        );
+      });
+      setCategoryId(nextCategory.id);
+      setNewCategoryName("");
+      setSuccessMessage(
+        data.existing
+          ? `${nextCategory.name} already exists and is now selected.`
+          : `${nextCategory.name} category created.`
+      );
+      setCreatingCategory(false);
+    } catch {
+      setSubmitError("Something went wrong while creating the category.");
+      setCreatingCategory(false);
+    }
+  }
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
@@ -360,7 +627,7 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
     setSubmitError("");
     setSuccessMessage("");
 
-    if (!categoryId) {
+    if (!categoryId || categoryId === CREATE_CATEGORY_VALUE) {
       setSubmitError("Please choose a category.");
       return;
     }
@@ -834,6 +1101,107 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
     }
   }
 
+  async function handleSaveModifierGroup(itemId: string, groupId: string) {
+    if (!slug || savingModifierItemId) return;
+
+    const draft = modifierGroupEditDrafts[groupId];
+    if (!draft) return;
+
+    const name = draft.name.trim();
+
+    if (!name) {
+      setSubmitError("Modifier group name is required.");
+      return;
+    }
+
+    setSubmitError("");
+    setSuccessMessage("");
+    setSavingModifierItemId(itemId);
+
+    try {
+      const res = await fetch(
+        `/api/admin/restaurants/${slug}/menu-items/${itemId}/modifiers`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "update_group",
+            groupId,
+            name,
+            required: draft.required,
+            minSelect: Number(draft.minSelect || 0),
+            maxSelect:
+              draft.maxSelect.trim() === "" ? null : Number(draft.maxSelect || 0),
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSubmitError(data?.error || "Failed to update modifier group.");
+        setSavingModifierItemId("");
+        return;
+      }
+
+      setSuccessMessage("Modifier group updated.");
+      cancelEditingModifierGroup(groupId);
+      await loadPage(slug);
+      setSavingModifierItemId("");
+    } catch {
+      setSubmitError("Something went wrong while updating the modifier group.");
+      setSavingModifierItemId("");
+    }
+  }
+
+  async function handleDetachModifierGroup(itemId: string, groupId: string) {
+    if (!slug || savingModifierItemId) return;
+
+    const confirmed = window.confirm(
+      "Detach this modifier group from this item? The group and its options will not be deleted."
+    );
+
+    if (!confirmed) return;
+
+    setSubmitError("");
+    setSuccessMessage("");
+    setSavingModifierItemId(itemId);
+
+    try {
+      const res = await fetch(
+        `/api/admin/restaurants/${slug}/menu-items/${itemId}/modifiers`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "detach_group",
+            groupId,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSubmitError(data?.error || "Failed to detach modifier group.");
+        setSavingModifierItemId("");
+        return;
+      }
+
+      setSuccessMessage("Modifier group detached.");
+      cancelEditingModifierGroup(groupId);
+      await loadPage(slug);
+      setSavingModifierItemId("");
+    } catch {
+      setSubmitError("Something went wrong while detaching the modifier group.");
+      setSavingModifierItemId("");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-neutral-100">
       <div className="mx-auto max-w-6xl p-6">
@@ -879,7 +1247,10 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
                       </label>
                       <select
                         value={categoryId}
-                        onChange={(e) => setCategoryId(e.target.value)}
+                        onChange={(e) => {
+                          setCategoryId(e.target.value);
+                          setSubmitError("");
+                        }}
                         className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm outline-none focus:border-neutral-400"
                       >
                         <option value="">Select category</option>
@@ -888,8 +1259,38 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
                             {category.name}
                           </option>
                         ))}
+                        <option value={CREATE_CATEGORY_VALUE}>
+                          + Create new category
+                        </option>
                       </select>
                     </div>
+
+                    {categoryId === CREATE_CATEGORY_VALUE ? (
+                      <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
+                        <label className="mb-2 block text-sm font-medium text-neutral-700">
+                          New category
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            placeholder="New category name"
+                            className="min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCreateCategory}
+                            disabled={creatingCategory}
+                            className="shrink-0 rounded-xl border border-neutral-300 bg-white px-3 py-2.5 text-sm font-semibold text-neutral-700 disabled:opacity-60"
+                          >
+                            {creatingCategory
+                              ? "Creating..."
+                              : "Create category"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div>
                       <label className="mb-2 block text-sm font-medium text-neutral-700">
@@ -957,68 +1358,73 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
 
             <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-neutral-900">
-                Public ordering links
+                QR codes
               </h2>
               <p className="mt-1 text-sm text-neutral-500">
-                Copy these direct ordering paths for QR codes, window signs, and
-                restaurant materials.
+                Use these QR codes on menus, window decals, counter cards,
+                receipt stickers, takeout bags, business cards, and catering
+                flyers.
               </p>
 
               <div className="mt-4 space-y-3">
-                <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-neutral-900">
-                        Main ordering link
-                      </p>
-                      <p className="mt-1 break-all font-mono text-xs text-neutral-600">
-                        {orderingLinks.main || "/r/[slug]"}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        copyOrderingLink("Main ordering link", orderingLinks.main)
-                      }
-                      disabled={!orderingLinks.main}
-                      className="shrink-0 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 disabled:opacity-50"
-                    >
-                      {copiedOrderingLink === "Main ordering link" ? "Copied" : "Copy"}
-                    </button>
-                  </div>
-                </div>
+                <OrderingQrCard
+                  title="Main Ordering QR"
+                  description="Send customers straight to your regular pickup menu. No offer or phone opt-in required."
+                  url={orderingLinks.main}
+                  fallbackUrl="https://www.saanaos.com/r/[slug]"
+                  fileName={`saanaos-${
+                    orderingLinks.slug || "restaurant"
+                  }-main-ordering-qr.png`}
+                  suggestedPrintCopy="Scan to order pickup"
+                  copied={copiedOrderingLink === "Main ordering link"}
+                  onCopy={() =>
+                    copyOrderingLink("Main ordering link", orderingLinks.main)
+                  }
+                />
 
-                <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-neutral-900">
-                        Catering ordering link
-                      </p>
-                      <p className="mt-1 break-all font-mono text-xs text-neutral-600">
-                        {orderingLinks.catering || "/r/[slug]/catering"}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        copyOrderingLink(
-                          "Catering ordering link",
-                          orderingLinks.catering
-                        )
-                      }
-                      disabled={!orderingLinks.catering}
-                      className="shrink-0 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 disabled:opacity-50"
-                    >
-                      {copiedOrderingLink === "Catering ordering link"
-                        ? "Copied"
-                        : "Copy"}
-                    </button>
-                  </div>
-                  <p className="mt-3 text-xs leading-5 text-neutral-500">
-                    Create a category named Catering to show items on the
-                    catering link.
-                  </p>
-                </div>
+                <OrderingQrCard
+                  title="Catering QR"
+                  description="Send customers directly to your catering menu and tray options."
+                  url={orderingLinks.catering}
+                  fallbackUrl="https://www.saanaos.com/r/[slug]/catering"
+                  fileName={`saanaos-${
+                    orderingLinks.slug || "restaurant"
+                  }-catering-ordering-qr.png`}
+                  suggestedPrintCopy="Scan for catering trays"
+                  copied={copiedOrderingLink === "Catering ordering link"}
+                  onCopy={() =>
+                    copyOrderingLink(
+                      "Catering ordering link",
+                      orderingLinks.catering
+                    )
+                  }
+                />
+
+                <OrderingQrCard
+                  title="Mystery Offer QR"
+                  description="One QR code can reveal restaurant-approved offers over time. Customers enter their phone number to reveal the offer."
+                  url={orderingLinks.mystery}
+                  fallbackUrl="https://www.saanaos.com/r/[slug]/mystery"
+                  fileName={`saanaos-${
+                    orderingLinks.slug || "restaurant"
+                  }-mystery-offer-qr.png`}
+                  suggestedPrintCopy="Scan to reveal a mystery pickup offer"
+                  copied={copiedOrderingLink === "Mystery offer link"}
+                  onCopy={() =>
+                    copyOrderingLink("Mystery offer link", orderingLinks.mystery)
+                  }
+                  helperText="You approve the offers. SaanaOS decides when to show them. Restaurants can rotate counter cards with new QR campaigns over time. This Phase 1 QR uses a 30-day offer window from first reveal."
+                />
+
+                <p className="text-xs leading-5 text-neutral-500">
+                  Use Main Ordering QR when you want people to order now. Use
+                  Catering QR for catering orders. Use Mystery Offer QR when you
+                  want to capture opt-in and bring customers back.
+                </p>
+                <p className="text-xs leading-5 text-neutral-500">
+                  Create a category named Catering to show items on the catering
+                  link.
+                </p>
               </div>
             </div>
 
@@ -1502,47 +1908,212 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
 
                                     {(item.modifier_groups || []).length > 0 ? (
                                       <div className="mt-3 space-y-3">
-                                        {(item.modifier_groups || []).map((group) => (
-                                          <div
-                                            key={group.id}
-                                            className="rounded-xl border border-neutral-200 bg-white p-3"
-                                          >
-                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                              <div className="flex flex-wrap items-center gap-2">
-                                                <p className="text-sm font-semibold text-neutral-900">
-                                                  {group.name}
-                                                </p>
-                                                {group.required ? (
-                                                  <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-                                                    Required
-                                                  </span>
-                                                ) : (
-                                                  <span className="rounded bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-700">
-                                                    Optional
-                                                  </span>
-                                                )}
-                                              </div>
-                                              <p className="text-xs text-neutral-500">
-                                                Min {group.min_select} · Max{" "}
-                                                {group.max_select ?? group.options.length}
-                                              </p>
-                                            </div>
+                                        {(item.modifier_groups || []).map((group) => {
+                                          const isEditing =
+                                            editingModifierGroupId === group.id;
+                                          const editDraft =
+                                            modifierGroupEditDrafts[group.id] || {
+                                              name: group.name,
+                                              required: group.required,
+                                              minSelect: String(group.min_select ?? 0),
+                                              maxSelect: String(
+                                                group.max_select ??
+                                                  (group.options.length || 1)
+                                              ),
+                                            };
 
-                                            <div className="mt-2 flex flex-wrap gap-2">
-                                              {group.options.map((option) => (
-                                                <span
-                                                  key={option.id}
-                                                  className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] text-neutral-700"
-                                                >
-                                                  {option.name}{" "}
-                                                  {option.price > 0
-                                                    ? `(+${toCurrency(option.price)})`
-                                                    : "(+$0.00)"}
-                                                </span>
-                                              ))}
+                                          return (
+                                            <div
+                                              key={group.id}
+                                              className="rounded-xl border border-neutral-200 bg-white p-3"
+                                            >
+                                              {isEditing ? (
+                                                <div className="space-y-3">
+                                                  <div>
+                                                    <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-neutral-500">
+                                                      Group name
+                                                    </label>
+                                                    <input
+                                                      type="text"
+                                                      value={editDraft.name}
+                                                      onChange={(e) =>
+                                                        updateModifierGroupEditDraft(
+                                                          group.id,
+                                                          (current) => ({
+                                                            ...current,
+                                                            name: e.target.value,
+                                                          })
+                                                        )
+                                                      }
+                                                      className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+                                                    />
+                                                  </div>
+
+                                                  <div className="grid gap-3 md:grid-cols-2">
+                                                    <div>
+                                                      <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-neutral-500">
+                                                        Min select
+                                                      </label>
+                                                      <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="1"
+                                                        value={editDraft.minSelect}
+                                                        onChange={(e) =>
+                                                          updateModifierGroupEditDraft(
+                                                            group.id,
+                                                            (current) => ({
+                                                              ...current,
+                                                              minSelect: e.target.value,
+                                                            })
+                                                          )
+                                                        }
+                                                        className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+                                                      />
+                                                    </div>
+
+                                                    <div>
+                                                      <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-neutral-500">
+                                                        Max select
+                                                      </label>
+                                                      <input
+                                                        type="number"
+                                                        min="1"
+                                                        step="1"
+                                                        value={editDraft.maxSelect}
+                                                        onChange={(e) =>
+                                                          updateModifierGroupEditDraft(
+                                                            group.id,
+                                                            (current) => ({
+                                                              ...current,
+                                                              maxSelect: e.target.value,
+                                                            })
+                                                          )
+                                                        }
+                                                        className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+                                                      />
+                                                    </div>
+                                                  </div>
+
+                                                  <label className="flex items-center gap-2 text-sm text-neutral-700">
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={editDraft.required}
+                                                      onChange={(e) =>
+                                                        updateModifierGroupEditDraft(
+                                                          group.id,
+                                                          (current) => ({
+                                                            ...current,
+                                                            required: e.target.checked,
+                                                            minSelect: e.target.checked
+                                                              ? current.minSelect === "0"
+                                                                ? "1"
+                                                                : current.minSelect
+                                                              : current.minSelect,
+                                                          })
+                                                        )
+                                                      }
+                                                    />
+                                                    Required
+                                                  </label>
+
+                                                  <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                      type="button"
+                                                      disabled={savingModifierItemId === item.id}
+                                                      onClick={() =>
+                                                        handleSaveModifierGroup(
+                                                          item.id,
+                                                          group.id
+                                                        )
+                                                      }
+                                                      className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                                                    >
+                                                      {savingModifierItemId === item.id
+                                                        ? "Saving..."
+                                                        : "Save"}
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      disabled={savingModifierItemId === item.id}
+                                                      onClick={() =>
+                                                        cancelEditingModifierGroup(group.id)
+                                                      }
+                                                      className="rounded-xl border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:opacity-60"
+                                                    >
+                                                      Cancel
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <>
+                                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                      <p className="text-sm font-semibold text-neutral-900">
+                                                        {group.name}
+                                                      </p>
+                                                      {group.required ? (
+                                                        <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                                                          Required
+                                                        </span>
+                                                      ) : (
+                                                        <span className="rounded bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-700">
+                                                          Optional
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-3">
+                                                      <p className="text-xs text-neutral-500">
+                                                        Min {group.min_select} · Max{" "}
+                                                        {group.max_select ??
+                                                          group.options.length}
+                                                      </p>
+                                                      <button
+                                                        type="button"
+                                                        disabled={savingModifierItemId === item.id}
+                                                        onClick={() =>
+                                                          startEditingModifierGroup(group)
+                                                        }
+                                                        className="rounded-full border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 disabled:opacity-60"
+                                                      >
+                                                        Edit group
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        disabled={savingModifierItemId === item.id}
+                                                        onClick={() =>
+                                                          handleDetachModifierGroup(
+                                                            item.id,
+                                                            group.id
+                                                          )
+                                                        }
+                                                        className="rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 disabled:opacity-60"
+                                                      >
+                                                        Detach
+                                                      </button>
+                                                    </div>
+                                                  </div>
+
+                                                  <div className="mt-2 flex flex-wrap gap-2">
+                                                    {group.options.map((option) => (
+                                                      <span
+                                                        key={option.id}
+                                                        className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] text-neutral-700"
+                                                      >
+                                                        {option.name}{" "}
+                                                        {option.price > 0
+                                                          ? `(+${toCurrency(
+                                                              option.price
+                                                            )})`
+                                                          : "(+$0.00)"}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                </>
+                                              )}
                                             </div>
-                                          </div>
-                                        ))}
+                                          );
+                                        })}
                                       </div>
                                     ) : (
                                       <p className="mt-3 text-xs text-neutral-500">
@@ -1553,6 +2124,10 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
                                     <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
                                       <p className="text-sm font-semibold text-neutral-900">
                                         Attach existing group
+                                      </p>
+                                      <p className="mt-1 text-xs text-neutral-500">
+                                        Only unattached modifier groups appear here. Attached
+                                        groups can be edited or detached above.
                                       </p>
 
                                       <div className="mt-3 flex flex-col gap-3 md:flex-row">

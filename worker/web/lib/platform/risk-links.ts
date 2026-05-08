@@ -2,16 +2,24 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { normalizeUsPhone } from "@/lib/phone";
 
 export type RiskSignalType = "ip" | "email" | "phone" | "user_agent";
+export type LocationLinkScope = "city" | "region" | "country";
 
 type RestaurantSignalRow = {
   id: string;
   name: string;
   slug: string;
   onboarding_status: string | null;
+  platform_review_status: string | null;
   contact_email: string | null;
   contact_phone: string | null;
   onboarding_source_ip: string | null;
   onboarding_user_agent: string | null;
+  onboarding_ip_country: string | null;
+  onboarding_ip_region: string | null;
+  onboarding_ip_city: string | null;
+  onboarding_ip_lat: number | null;
+  onboarding_ip_lon: number | null;
+  onboarding_ip_lookup_at: string | null;
   created_at: string | null;
 };
 
@@ -20,6 +28,7 @@ type LinkedRestaurantRecord = {
   name: string;
   slug: string;
   onboarding_status: string | null;
+  platform_review_status: string | null;
   created_at: string | null;
 };
 
@@ -32,6 +41,14 @@ export type LinkedSignalRecord = {
   created_at: string | null;
 };
 
+export type LocationLinkRecord = {
+  scope: LocationLinkScope;
+  label: string;
+  linked_restaurant_count: number;
+  distinct_ip_count: number;
+  linked_restaurants: LinkedRestaurantRecord[];
+};
+
 export type RestaurantRiskSummary = {
   duplicate_ip: boolean;
   duplicate_phone: boolean;
@@ -42,8 +59,13 @@ export type RestaurantRiskSummary = {
   repeated_email_count: number;
   repeated_user_agent_count: number;
   linked_restaurants_count: number;
+  same_city_count: number;
+  same_region_count: number;
+  same_country_count: number;
+  distinct_ips_same_city_count: number;
   risk_flags: string[];
   linked_signals: LinkedSignalRecord[];
+  location_links: LocationLinkRecord[];
 };
 
 type IdentitySignalInsertInput = {
@@ -52,7 +74,6 @@ type IdentitySignalInsertInput = {
   contactPhone?: string | null;
   onboardingSourceIp?: string | null;
   onboardingUserAgent?: string | null;
-  createdAt?: string | null;
 };
 
 type RestaurantSignalValue = {
@@ -60,6 +81,12 @@ type RestaurantSignalValue = {
   signal_value: string;
   normalized_value: string;
   created_at: string | null;
+};
+
+type LocationMaps = {
+  cityMap: Map<string, LinkedRestaurantRecord[]>;
+  regionMap: Map<string, LinkedRestaurantRecord[]>;
+  countryMap: Map<string, LinkedRestaurantRecord[]>;
 };
 
 function normalizeText(value: string | null | undefined) {
@@ -79,6 +106,10 @@ function normalizePhone(value: string | null | undefined) {
 }
 
 function normalizeUserAgent(value: string | null | undefined) {
+  return normalizeText(value).toLowerCase();
+}
+
+function normalizeLocationPart(value: string | null | undefined) {
   return normalizeText(value).toLowerCase();
 }
 
@@ -110,6 +141,90 @@ function getMaskedSignalValue(signalType: RiskSignalType, value: string) {
   if (signalType === "phone") return maskPhone(value);
   if (signalType === "user_agent") return maskUserAgent(value);
   return value;
+}
+
+function formatCityLabel(row: RestaurantSignalRow) {
+  const parts = [
+    normalizeText(row.onboarding_ip_city),
+    normalizeText(row.onboarding_ip_region),
+    normalizeText(row.onboarding_ip_country),
+  ].filter(Boolean);
+
+  return parts.join(", ");
+}
+
+function formatRegionLabel(row: RestaurantSignalRow) {
+  const parts = [
+    normalizeText(row.onboarding_ip_region),
+    normalizeText(row.onboarding_ip_country),
+  ].filter(Boolean);
+
+  return parts.join(", ");
+}
+
+function formatCountryLabel(row: RestaurantSignalRow) {
+  return normalizeText(row.onboarding_ip_country);
+}
+
+function getCityKey(row: RestaurantSignalRow) {
+  const city = normalizeLocationPart(row.onboarding_ip_city);
+  const region = normalizeLocationPart(row.onboarding_ip_region);
+  const country = normalizeLocationPart(row.onboarding_ip_country);
+
+  if (!city || !region || !country) {
+    return "";
+  }
+
+  return `${city}|${region}|${country}`;
+}
+
+function getRegionKey(row: RestaurantSignalRow) {
+  const region = normalizeLocationPart(row.onboarding_ip_region);
+  const country = normalizeLocationPart(row.onboarding_ip_country);
+
+  if (!region || !country) {
+    return "";
+  }
+
+  return `${region}|${country}`;
+}
+
+function getCountryKey(row: RestaurantSignalRow) {
+  return normalizeLocationPart(row.onboarding_ip_country);
+}
+
+function getLinkedRestaurantRecord(row: RestaurantSignalRow): LinkedRestaurantRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    onboarding_status: row.onboarding_status,
+    platform_review_status: row.platform_review_status,
+    created_at: row.created_at,
+  };
+}
+
+function dedupeLinkedRestaurants(rows: LinkedRestaurantRecord[]) {
+  return rows.filter(
+    (row, index, array) => array.findIndex((entry) => entry.id === row.id) === index
+  );
+}
+
+function countDistinctIps(rows: RestaurantSignalRow[], currentRestaurantId: string) {
+  const distinctIps = new Set<string>();
+
+  for (const row of rows) {
+    if (row.id === currentRestaurantId) {
+      continue;
+    }
+
+    const ip = normalizeText(row.onboarding_source_ip);
+    if (ip) {
+      distinctIps.add(ip);
+    }
+  }
+
+  return distinctIps.size;
 }
 
 function getSignalValues(row: RestaurantSignalRow): RestaurantSignalValue[] {
@@ -167,13 +282,7 @@ function buildRestaurantSignalMaps(rows: RestaurantSignalRow[]) {
     for (const signal of signalValues) {
       const key = `${signal.signal_type}:${signal.normalized_value}`;
       const existing = map.get(key) || [];
-      existing.push({
-        id: row.id,
-        name: row.name,
-        slug: row.slug,
-        onboarding_status: row.onboarding_status,
-        created_at: row.created_at,
-      });
+      existing.push(getLinkedRestaurantRecord(row));
       map.set(key, existing);
     }
   }
@@ -181,9 +290,136 @@ function buildRestaurantSignalMaps(rows: RestaurantSignalRow[]) {
   return map;
 }
 
+function buildLocationMaps(rows: RestaurantSignalRow[]): LocationMaps {
+  const cityMap = new Map<string, LinkedRestaurantRecord[]>();
+  const regionMap = new Map<string, LinkedRestaurantRecord[]>();
+  const countryMap = new Map<string, LinkedRestaurantRecord[]>();
+
+  for (const row of rows) {
+    const linkedRestaurant = getLinkedRestaurantRecord(row);
+    const cityKey = getCityKey(row);
+    const regionKey = getRegionKey(row);
+    const countryKey = getCountryKey(row);
+
+    if (cityKey) {
+      const existing = cityMap.get(cityKey) || [];
+      existing.push(linkedRestaurant);
+      cityMap.set(cityKey, existing);
+    }
+
+    if (regionKey) {
+      const existing = regionMap.get(regionKey) || [];
+      existing.push(linkedRestaurant);
+      regionMap.set(regionKey, existing);
+    }
+
+    if (countryKey) {
+      const existing = countryMap.get(countryKey) || [];
+      existing.push(linkedRestaurant);
+      countryMap.set(countryKey, existing);
+    }
+  }
+
+  return {
+    cityMap,
+    regionMap,
+    countryMap,
+  };
+}
+
+function buildLocationLinks(
+  row: RestaurantSignalRow,
+  allRows: RestaurantSignalRow[],
+  locationMaps: LocationMaps
+) {
+  const cityKey = getCityKey(row);
+  const regionKey = getRegionKey(row);
+  const countryKey = getCountryKey(row);
+
+  const sameCityRows = cityKey
+    ? allRows.filter(
+        (entry) => entry.id !== row.id && getCityKey(entry) === cityKey
+      )
+    : [];
+  const sameRegionRows = regionKey
+    ? allRows.filter(
+        (entry) => entry.id !== row.id && getRegionKey(entry) === regionKey
+      )
+    : [];
+  const sameCountryRows = countryKey
+    ? allRows.filter(
+        (entry) => entry.id !== row.id && getCountryKey(entry) === countryKey
+      )
+    : [];
+
+  const sameCityLinked = cityKey
+    ? dedupeLinkedRestaurants(
+        (locationMaps.cityMap.get(cityKey) || []).filter(
+          (entry) => entry.id !== row.id
+        )
+      )
+    : [];
+  const sameRegionLinked = regionKey
+    ? dedupeLinkedRestaurants(
+        (locationMaps.regionMap.get(regionKey) || []).filter(
+          (entry) => entry.id !== row.id
+        )
+      )
+    : [];
+  const sameCountryLinked = countryKey
+    ? dedupeLinkedRestaurants(
+        (locationMaps.countryMap.get(countryKey) || []).filter(
+          (entry) => entry.id !== row.id
+        )
+      )
+    : [];
+
+  const locationLinks: LocationLinkRecord[] = [];
+
+  if (cityKey) {
+    locationLinks.push({
+      scope: "city",
+      label: formatCityLabel(row),
+      linked_restaurant_count: sameCityLinked.length,
+      distinct_ip_count: countDistinctIps(sameCityRows, row.id),
+      linked_restaurants: sameCityLinked,
+    });
+  }
+
+  if (regionKey) {
+    locationLinks.push({
+      scope: "region",
+      label: formatRegionLabel(row),
+      linked_restaurant_count: sameRegionLinked.length,
+      distinct_ip_count: countDistinctIps(sameRegionRows, row.id),
+      linked_restaurants: sameRegionLinked,
+    });
+  }
+
+  if (countryKey) {
+    locationLinks.push({
+      scope: "country",
+      label: formatCountryLabel(row),
+      linked_restaurant_count: sameCountryLinked.length,
+      distinct_ip_count: countDistinctIps(sameCountryRows, row.id),
+      linked_restaurants: sameCountryLinked,
+    });
+  }
+
+  return {
+    sameCityCount: sameCityLinked.length,
+    sameRegionCount: sameRegionLinked.length,
+    sameCountryCount: sameCountryLinked.length,
+    distinctIpsSameCityCount: countDistinctIps(sameCityRows, row.id),
+    locationLinks,
+  };
+}
+
 function buildRiskSummary(
   row: RestaurantSignalRow,
-  signalMap: Map<string, LinkedRestaurantRecord[]>
+  allRows: RestaurantSignalRow[],
+  signalMap: Map<string, LinkedRestaurantRecord[]>,
+  locationMaps: LocationMaps
 ): RestaurantRiskSummary {
   const signals = getSignalValues(row);
   const linkedSignals: LinkedSignalRecord[] = [];
@@ -197,17 +433,12 @@ function buildRiskSummary(
 
   for (const signal of signals) {
     const key = `${signal.signal_type}:${signal.normalized_value}`;
-    const matches = (signalMap.get(key) || []).filter(
-      (restaurant) => restaurant.id !== row.id
+    const matches = dedupeLinkedRestaurants(
+      (signalMap.get(key) || []).filter((restaurant) => restaurant.id !== row.id)
     );
 
-    const uniqueMatches = matches.filter(
-      (restaurant, index, array) =>
-        array.findIndex((entry) => entry.id === restaurant.id) === index
-    );
-
-    uniqueMatches.forEach((restaurant) => linkedRestaurantIds.add(restaurant.id));
-    countsByType[signal.signal_type] += uniqueMatches.length;
+    matches.forEach((restaurant) => linkedRestaurantIds.add(restaurant.id));
+    countsByType[signal.signal_type] += matches.length;
 
     linkedSignals.push({
       signal_type: signal.signal_type,
@@ -216,17 +447,27 @@ function buildRiskSummary(
         signal.signal_type,
         signal.signal_value
       ),
-      linked_restaurant_count: uniqueMatches.length,
-      linked_restaurants: uniqueMatches,
+      linked_restaurant_count: matches.length,
+      linked_restaurants: matches,
       created_at: signal.created_at,
     });
   }
+
+  const locationLinks = buildLocationLinks(row, allRows, locationMaps);
+  locationLinks.locationLinks.forEach((link) => {
+    link.linked_restaurants.forEach((restaurant) => linkedRestaurantIds.add(restaurant.id));
+  });
 
   const flags: string[] = [];
   if (countsByType.ip > 0) flags.push("duplicate_ip");
   if (countsByType.phone > 0) flags.push("duplicate_phone");
   if (countsByType.email > 0) flags.push("duplicate_email");
   if (countsByType.user_agent > 0) flags.push("duplicate_user_agent");
+  if (locationLinks.sameCityCount >= 2) flags.push("location_city_cluster");
+  if (locationLinks.sameRegionCount >= 5) flags.push("location_region_cluster");
+  if (locationLinks.distinctIpsSameCityCount >= 2) {
+    flags.push("moving_ip_same_location");
+  }
 
   return {
     duplicate_ip: countsByType.ip > 0,
@@ -238,8 +479,13 @@ function buildRiskSummary(
     repeated_email_count: countsByType.email,
     repeated_user_agent_count: countsByType.user_agent,
     linked_restaurants_count: linkedRestaurantIds.size,
+    same_city_count: locationLinks.sameCityCount,
+    same_region_count: locationLinks.sameRegionCount,
+    same_country_count: locationLinks.sameCountryCount,
+    distinct_ips_same_city_count: locationLinks.distinctIpsSameCityCount,
     risk_flags: flags,
     linked_signals: linkedSignals,
+    location_links: locationLinks.locationLinks,
   };
 }
 
@@ -333,7 +579,7 @@ export async function getRestaurantRiskSummaries(
     .schema("food_ordering")
     .from("restaurants")
     .select(
-      "id, name, slug, onboarding_status, contact_email, contact_phone, onboarding_source_ip, onboarding_user_agent, created_at"
+      "id, name, slug, onboarding_status, platform_review_status, contact_email, contact_phone, onboarding_source_ip, onboarding_user_agent, onboarding_ip_country, onboarding_ip_region, onboarding_ip_city, onboarding_ip_lat, onboarding_ip_lon, onboarding_ip_lookup_at, created_at"
     );
 
   if (error) {
@@ -342,6 +588,7 @@ export async function getRestaurantRiskSummaries(
 
   const restaurants = (data || []) as RestaurantSignalRow[];
   const signalMap = buildRestaurantSignalMaps(restaurants);
+  const locationMaps = buildLocationMaps(restaurants);
   const targets = targetRestaurantIds?.length
     ? restaurants.filter((restaurant) => targetRestaurantIds.includes(restaurant.id))
     : restaurants;
@@ -349,7 +596,10 @@ export async function getRestaurantRiskSummaries(
   const summaries = new Map<string, RestaurantRiskSummary>();
 
   for (const restaurant of targets) {
-    summaries.set(restaurant.id, buildRiskSummary(restaurant, signalMap));
+    summaries.set(
+      restaurant.id,
+      buildRiskSummary(restaurant, restaurants, signalMap, locationMaps)
+    );
   }
 
   return summaries;
@@ -371,6 +621,10 @@ export async function maybeLogRiskLinksDetected(args: {
     repeated_email_count: args.summary.repeated_email_count,
     repeated_user_agent_count: args.summary.repeated_user_agent_count,
     linked_restaurants_count: args.summary.linked_restaurants_count,
+    same_city_count: args.summary.same_city_count,
+    same_region_count: args.summary.same_region_count,
+    same_country_count: args.summary.same_country_count,
+    distinct_ips_same_city_count: args.summary.distinct_ips_same_city_count,
   };
 
   const { data: existingEvent, error: existingEventError } = await admin

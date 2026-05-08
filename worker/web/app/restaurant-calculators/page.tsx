@@ -29,6 +29,13 @@ const liveCalculators = [
     href: "/aggregator-fee-savings-calculator",
     cta: "Calculate fee savings",
   },
+  {
+    title: "Mystery QR Revenue Estimate Calculator",
+    description:
+      "Estimate how much direct pickup revenue receipt stickers, counter cards, takeout bags, and catering flyers could influence.",
+    href: "/mystery-qr-revenue-calculator",
+    cta: "Estimate Mystery QR revenue",
+  },
 ];
 
 const futureCalculators = [

@@ -23,6 +23,20 @@ type AttachGroupBody = {
   groupId?: string;
 };
 
+type DetachGroupBody = {
+  action: "detach_group";
+  groupId?: string;
+};
+
+type UpdateGroupBody = {
+  action: "update_group";
+  groupId?: string;
+  name?: string;
+  required?: boolean;
+  minSelect?: number | string | null;
+  maxSelect?: number | string | null;
+};
+
 function toNumber(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
@@ -77,6 +91,43 @@ async function loadRestaurantAndItem(
     restaurant,
     item,
   };
+}
+
+async function loadAttachedModifierGroup(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  restaurantId: string,
+  itemId: string,
+  groupId: string
+) {
+  const { data: link, error: linkError } = await admin
+    .schema("food_ordering")
+    .from("menu_item_modifier_groups")
+    .select("menu_item_id")
+    .eq("menu_item_id", itemId)
+    .eq("modifier_group_id", groupId)
+    .maybeSingle();
+
+  if (linkError) {
+    throw new Error(`Failed to verify modifier group attachment: ${linkError.message}`);
+  }
+
+  if (!link) {
+    return null;
+  }
+
+  const { data: group, error: groupError } = await admin
+    .schema("food_ordering")
+    .from("modifier_groups")
+    .select("id, restaurant_id")
+    .eq("id", groupId)
+    .eq("restaurant_id", restaurantId)
+    .maybeSingle();
+
+  if (groupError) {
+    throw new Error(`Failed to load modifier group: ${groupError.message}`);
+  }
+
+  return group || null;
 }
 
 async function getNextLinkSortOrder(
@@ -201,7 +252,11 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     const { slug, itemId } = await context.params;
-    const body = (await request.json()) as CreateGroupBody | AttachGroupBody;
+    const body = (await request.json()) as
+      | CreateGroupBody
+      | AttachGroupBody
+      | DetachGroupBody
+      | UpdateGroupBody;
     const { restaurant } = await loadRestaurantAndItem(admin, slug, itemId);
 
     if (body.action === "create_group") {
@@ -294,6 +349,113 @@ export async function POST(request: Request, context: RouteContext) {
       }
 
       await attachGroupToItem(admin, itemId, groupId);
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === "detach_group") {
+      const groupId = String(body.groupId || "").trim();
+
+      if (!groupId) {
+        return NextResponse.json(
+          { error: "Modifier group is required." },
+          { status: 400 }
+        );
+      }
+
+      const group = await loadAttachedModifierGroup(
+        admin,
+        restaurant.id,
+        itemId,
+        groupId
+      );
+
+      if (!group) {
+        return NextResponse.json(
+          { error: "Attached modifier group not found." },
+          { status: 404 }
+        );
+      }
+
+      const { error: deleteError } = await admin
+        .schema("food_ordering")
+        .from("menu_item_modifier_groups")
+        .delete()
+        .eq("menu_item_id", itemId)
+        .eq("modifier_group_id", groupId);
+
+      if (deleteError) {
+        throw new Error(`Failed to detach modifier group: ${deleteError.message}`);
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === "update_group") {
+      const groupId = String(body.groupId || "").trim();
+      const name = String(body.name || "").trim();
+      const required = body.required === true;
+      const minSelect = Math.max(
+        required ? 1 : 0,
+        Math.floor(toNumber(body.minSelect))
+      );
+      const maxSelectRaw =
+        body.maxSelect === null || body.maxSelect === undefined || body.maxSelect === ""
+          ? null
+          : Math.floor(toNumber(body.maxSelect));
+      const maxSelect = Math.max(1, maxSelectRaw ?? 1);
+
+      if (!groupId) {
+        return NextResponse.json(
+          { error: "Modifier group is required." },
+          { status: 400 }
+        );
+      }
+
+      if (!name) {
+        return NextResponse.json(
+          { error: "Modifier group name is required." },
+          { status: 400 }
+        );
+      }
+
+      if (maxSelect < Math.max(1, minSelect)) {
+        return NextResponse.json(
+          { error: "Max select must be greater than or equal to min select." },
+          { status: 400 }
+        );
+      }
+
+      const group = await loadAttachedModifierGroup(
+        admin,
+        restaurant.id,
+        itemId,
+        groupId
+      );
+
+      if (!group) {
+        return NextResponse.json(
+          { error: "Attached modifier group not found." },
+          { status: 404 }
+        );
+      }
+
+      const { error: updateError } = await admin
+        .schema("food_ordering")
+        .from("modifier_groups")
+        .update({
+          name,
+          is_required: required,
+          selection_mode: maxSelect > 1 ? "multi" : "single",
+          min_selections: minSelect,
+          max_selections: maxSelect,
+        })
+        .eq("id", groupId)
+        .eq("restaurant_id", restaurant.id);
+
+      if (updateError) {
+        throw new Error(`Failed to update modifier group: ${updateError.message}`);
+      }
 
       return NextResponse.json({ success: true });
     }

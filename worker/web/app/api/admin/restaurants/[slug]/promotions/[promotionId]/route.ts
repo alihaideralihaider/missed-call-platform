@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 type RouteContext = {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string; promotionId?: string }>;
 };
 
 type PromotionPayload = {
@@ -62,6 +62,12 @@ function buildMetadata(body: PromotionPayload) {
   if (body.aiImageUrl) metadata.ai_image_url = body.aiImageUrl;
 
   return metadata;
+}
+
+function hasOwn(object: unknown, key: string) {
+  return Boolean(
+    object && typeof object === "object" && Object.prototype.hasOwnProperty.call(object, key)
+  );
 }
 
 function mapPromotionRow(
@@ -273,10 +279,11 @@ export async function GET(_req: NextRequest, context: RouteContext) {
   }
 }
 
-export async function POST(req: NextRequest, context: RouteContext) {
+export async function PATCH(req: NextRequest, context: RouteContext) {
   try {
-    const { slug: rawSlug } = await context.params;
+    const { slug: rawSlug, promotionId: rawPromotionId } = await context.params;
     const slug = cleanSlug(rawSlug);
+    const promotionId = toNullableString(rawPromotionId);
     const body = (await req.json()) as PromotionPayload;
 
     if (!slug) {
@@ -286,9 +293,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       );
     }
 
-    if (!String(body?.name || "").trim()) {
+    if (!promotionId) {
       return NextResponse.json(
-        { error: "Promotion name is required." },
+        { error: "Missing promotion id." },
         { status: 400 }
       );
     }
@@ -312,39 +319,105 @@ export async function POST(req: NextRequest, context: RouteContext) {
       );
     }
 
-    const { data: promotion, error: promotionError } = await supabase
-      .schema("growth")
-      .from("promotions")
-      .insert({
-        restaurant_id: restaurant.id,
-        name: String(body.name).trim(),
-        description: toNullableString(body.description),
-        promotion_type: toNullableString(body.promotionType) || "percent_off",
-        status: toNullableString(body.status) || "draft",
-        priority: toNullableNumber(body.priority) ?? 100,
-        starts_at: toNullableDateString(body.startsAt),
-        ends_at: toNullableDateString(body.endsAt),
-        channels: ["storefront"],
-      })
-      .select(
-        "id, restaurant_id, name, description, promotion_type, status, priority, starts_at, ends_at, channels"
-      )
-      .single();
+    const { data: existingPromotion, error: existingPromotionError } =
+      await supabase
+        .schema("growth")
+        .from("promotions")
+        .select(
+          "id, restaurant_id, name, description, promotion_type, status, priority, starts_at, ends_at, channels"
+        )
+        .eq("id", promotionId)
+        .eq("restaurant_id", restaurant.id)
+        .single();
 
-    if (promotionError || !promotion) {
+    if (existingPromotionError || !existingPromotion) {
       return NextResponse.json(
-        { error: promotionError?.message || "Failed to create promotion." },
-        { status: 500 }
+        { error: "Promotion not found." },
+        { status: 404 }
       );
     }
 
-    const ruleMetadata = buildMetadata(body);
+    const promotionUpdates: Record<string, unknown> = {};
 
-    const { data: rule, error: ruleError } = await supabase
+    if (hasOwn(body, "name")) {
+      const nextName = String(body.name || "").trim();
+
+      if (!nextName) {
+        return NextResponse.json(
+          { error: "Promotion name is required." },
+          { status: 400 }
+        );
+      }
+
+      promotionUpdates.name = nextName;
+    }
+
+    if (hasOwn(body, "description")) {
+      promotionUpdates.description = toNullableString(body.description);
+    }
+
+    if (hasOwn(body, "promotionType")) {
+      promotionUpdates.promotion_type =
+        toNullableString(body.promotionType) || "percent_off";
+    }
+
+    if (hasOwn(body, "status")) {
+      promotionUpdates.status = toNullableString(body.status) || "draft";
+    }
+
+    if (hasOwn(body, "priority")) {
+      promotionUpdates.priority = toNullableNumber(body.priority) ?? 100;
+    }
+
+    if (hasOwn(body, "startsAt")) {
+      promotionUpdates.starts_at = toNullableDateString(body.startsAt);
+    }
+
+    if (hasOwn(body, "endsAt")) {
+      promotionUpdates.ends_at = toNullableDateString(body.endsAt);
+    }
+
+    let promotion = existingPromotion;
+
+    if (Object.keys(promotionUpdates).length > 0) {
+      const { data: updatedPromotion, error: promotionError } = await supabase
+        .schema("growth")
+        .from("promotions")
+        .update(promotionUpdates)
+        .eq("id", promotionId)
+        .eq("restaurant_id", restaurant.id)
+        .select(
+          "id, restaurant_id, name, description, promotion_type, status, priority, starts_at, ends_at, channels"
+        )
+        .single();
+
+      if (promotionError || !updatedPromotion) {
+        return NextResponse.json(
+          { error: promotionError?.message || "Failed to update promotion." },
+          { status: 500 }
+        );
+      }
+
+      promotion = updatedPromotion;
+    }
+
+    let rule = null;
+
+    const shouldUpdateRule =
+      hasOwn(body, "rule") || hasOwn(body, "imageUrl") || hasOwn(body, "aiImageUrl");
+
+    const { data: existingRule } = await supabase
       .schema("growth")
       .from("promotion_rules")
-      .insert({
-        promotion_id: promotion.id,
+      .select(
+        "id, promotion_id, buy_quantity, get_quantity, discount_percent, discount_amount, min_order_subtotal, max_discount_amount, first_order_only, next_order_only, pickup_only, metadata"
+      )
+      .eq("promotion_id", promotionId)
+      .maybeSingle();
+
+    if (shouldUpdateRule) {
+      const ruleMetadata = buildMetadata(body);
+      const ruleUpdates = {
         buy_quantity: toNullableNumber(body.rule?.buyQuantity),
         get_quantity: toNullableNumber(body.rule?.getQuantity),
         discount_percent: toNullableNumber(body.rule?.discountPercent),
@@ -355,40 +428,119 @@ export async function POST(req: NextRequest, context: RouteContext) {
         next_order_only: toBool(body.rule?.nextOrderOnly),
         pickup_only: toBool(body.rule?.pickupOnly),
         metadata: ruleMetadata,
-      })
-      .select(
-        "id, promotion_id, buy_quantity, get_quantity, discount_percent, discount_amount, min_order_subtotal, max_discount_amount, first_order_only, next_order_only, pickup_only, metadata"
-      )
-      .single();
+      };
 
-    if (ruleError) {
-      return NextResponse.json(
-        { error: ruleError.message || "Failed to create promotion rule." },
-        { status: 500 }
-      );
+      if (existingRule?.id) {
+        const { data: updatedRule, error: ruleError } = await supabase
+          .schema("growth")
+          .from("promotion_rules")
+          .update(ruleUpdates)
+          .eq("id", existingRule.id)
+          .select(
+            "id, promotion_id, buy_quantity, get_quantity, discount_percent, discount_amount, min_order_subtotal, max_discount_amount, first_order_only, next_order_only, pickup_only, metadata"
+          )
+          .single();
+
+        if (ruleError) {
+          return NextResponse.json(
+            { error: ruleError.message || "Failed to update promotion rule." },
+            { status: 500 }
+          );
+        }
+
+        rule = updatedRule;
+      } else {
+        const { data: insertedRule, error: ruleError } = await supabase
+          .schema("growth")
+          .from("promotion_rules")
+          .insert({
+            promotion_id: promotionId,
+            ...ruleUpdates,
+          })
+          .select(
+            "id, promotion_id, buy_quantity, get_quantity, discount_percent, discount_amount, min_order_subtotal, max_discount_amount, first_order_only, next_order_only, pickup_only, metadata"
+          )
+          .single();
+
+        if (ruleError) {
+          return NextResponse.json(
+            { error: ruleError.message || "Failed to create promotion rule." },
+            { status: 500 }
+          );
+        }
+
+        rule = insertedRule;
+      }
+    } else {
+      rule = existingRule || null;
     }
 
-    const targetType =
-      body.targetType === "category" || body.targetType === "menu_item"
-        ? body.targetType
-        : "restaurant";
+    let target = null;
 
-    const { data: target, error: targetError } = await supabase
-      .schema("growth")
-      .from("promotion_targets")
-      .insert({
-        promotion_id: promotion.id,
-        target_type: targetType,
-        target_id: targetType === "restaurant" ? null : toNullableString(body.targetId),
-      })
-      .select("id, promotion_id, target_type, target_id")
-      .single();
+    if (hasOwn(body, "targetType")) {
+      const targetType =
+        body.targetType === "category" || body.targetType === "menu_item"
+          ? body.targetType
+          : "restaurant";
 
-    if (targetError) {
-      return NextResponse.json(
-        { error: targetError.message || "Failed to create promotion target." },
-        { status: 500 }
-      );
+      const { error: deleteTargetError } = await supabase
+        .schema("growth")
+        .from("promotion_targets")
+        .delete()
+        .eq("promotion_id", promotionId);
+
+      if (deleteTargetError) {
+        return NextResponse.json(
+          {
+            error:
+              deleteTargetError.message || "Failed to update promotion target.",
+          },
+          { status: 500 }
+        );
+      }
+
+      if (targetType !== "restaurant") {
+        const targetId = toNullableString(body.targetId);
+
+        if (!targetId) {
+          return NextResponse.json(
+            { error: "Promotion target is required." },
+            { status: 400 }
+          );
+        }
+
+        const { data: targetData, error: targetError } = await supabase
+          .schema("growth")
+          .from("promotion_targets")
+          .insert({
+            promotion_id: promotionId,
+            target_type: targetType,
+            target_id: targetId,
+          })
+          .select("id, promotion_id, target_type, target_id")
+          .single();
+
+        if (targetError) {
+          return NextResponse.json(
+            {
+              error:
+                targetError.message || "Failed to update promotion target.",
+            },
+            { status: 500 }
+          );
+        }
+
+        target = targetData;
+      }
+    } else {
+      const { data: existingTarget } = await supabase
+        .schema("growth")
+        .from("promotion_targets")
+        .select("id, promotion_id, target_type, target_id")
+        .eq("promotion_id", promotionId)
+        .maybeSingle();
+
+      target = existingTarget || null;
     }
 
     return NextResponse.json({
