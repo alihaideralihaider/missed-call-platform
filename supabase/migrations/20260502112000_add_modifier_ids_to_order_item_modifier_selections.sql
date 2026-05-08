@@ -39,3 +39,5 @@ begin
       references food_ordering.modifier_group_options(id);
   end if;
 end $$;
+
+notify pgrst, 'reload schema';
