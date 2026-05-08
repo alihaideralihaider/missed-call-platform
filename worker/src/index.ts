@@ -656,6 +656,28 @@ function normalizeModifierOptionPrice(option: any): number {
   return Number.isFinite(value) ? value : 0;
 }
 
+function getModifierGroupRequirement(group: any): {
+  required: boolean;
+  minSelect: number;
+} {
+  const configuredMinSelect = Number(
+    group?.min_required ??
+      group?.min_selections ??
+      group?.min_select ??
+      group?.minimum_required ??
+      0
+  );
+  const minSelect = Number.isFinite(configuredMinSelect)
+    ? Math.max(0, configuredMinSelect)
+    : 0;
+  const required = group?.is_required === true || group?.required === true || minSelect > 0;
+
+  return {
+    required,
+    minSelect: required ? Math.max(1, minSelect || 1) : 0,
+  };
+}
+
 async function loadModifierConfig(
   supabase: ReturnType<typeof createClient>,
   menuItemIds: string[]
@@ -764,11 +786,7 @@ function validateAndPriceModifiers(args: {
     for (const groupId of allowedGroupIds) {
       const group = modifierConfig.groupsById.get(groupId);
       if (!group) continue;
-      const required = Boolean(group?.is_required ?? group?.required ?? false);
-      const minSelect = Math.max(
-        Number(group?.min_selections ?? group?.min_select ?? (required ? 1 : 0)),
-        required ? 1 : 0
-      );
+      const { minSelect } = getModifierGroupRequirement(group);
       if (minSelect > 0) {
         throw new Error(`Missing required modifiers for ${group?.name || "this item"}`);
       }
@@ -824,11 +842,7 @@ function validateAndPriceModifiers(args: {
     if (!group) continue;
 
     const selected = selectedByGroup.get(groupId) || [];
-    const required = Boolean(group?.is_required ?? group?.required ?? false);
-    const minSelect = Math.max(
-      Number(group?.min_selections ?? group?.min_select ?? (required ? 1 : 0)),
-      required ? 1 : 0
-    );
+    const { minSelect } = getModifierGroupRequirement(group);
     const groupOptions = modifierConfig.optionsByGroupId.get(groupId) || [];
     const maxSelectRaw =
       group?.max_selections === null || group?.max_selections === undefined
@@ -1459,6 +1473,31 @@ export default {
         );
 
         if (modifierSelectionsPayload.length > 0) {
+          const modifierSelectionsLogPayload = insertedOrderItems.flatMap(
+            (orderItem, index) =>
+              (cleanedItems[index]?.modifiers || []).map((modifier) => {
+                const group = modifierConfig.groupsById.get(modifier.groupId);
+                const requirement = group
+                  ? getModifierGroupRequirement(group)
+                  : { required: false, minSelect: 0 };
+
+                return {
+                  order_item_id: orderItem.id,
+                  modifier_payload: modifier,
+                  modifier_group_id: modifier.groupId,
+                  modifier_option_id: modifier.optionId,
+                  group_required: requirement.required,
+                  group_min_select: requirement.minSelect,
+                };
+              })
+          );
+
+          console.log("ORDER_ITEM_MODIFIER_SELECTIONS_INSERT_PAYLOAD", {
+            orderId: insertedOrder.id,
+            selectionCount: modifierSelectionsPayload.length,
+            selections: modifierSelectionsLogPayload,
+          });
+
           const { error: modifierSelectionsError } = await supabase
             .schema("food_ordering")
             .from("order_item_modifier_selections")

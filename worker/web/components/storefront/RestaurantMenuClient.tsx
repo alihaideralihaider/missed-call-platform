@@ -142,17 +142,23 @@ function makeCategoryId(categoryName: string) {
 }
 
 function normalizeModifierGroup(group: ModifierGroup): ModifierGroup {
-  const minSelect = Math.max(
-    Number(group.min_selections ?? group.min_select ?? (group.required ? 1 : 0)),
-    group.required ? 1 : 0
+  const configuredMinSelect = Number(
+    group.min_selections ?? group.min_select ?? 0
   );
+  const minRequired = Number.isFinite(configuredMinSelect)
+    ? Math.max(0, configuredMinSelect)
+    : 0;
+  const required = group.required === true || minRequired > 0;
+  const minSelect = required
+    ? Math.max(1, minRequired || 1)
+    : 0;
   const maxSelectSource =
     group.max_selections ?? group.max_select ?? (group.selection_mode === "single" ? 1 : group.options.length);
   const maxSelect = Math.max(1, Math.min(Number(maxSelectSource), group.options.length));
 
   return {
     ...group,
-    required: Boolean(group.required),
+    required,
     min_select: minSelect,
     max_select: maxSelect,
     min_selections: minSelect,
