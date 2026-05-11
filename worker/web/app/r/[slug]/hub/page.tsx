@@ -126,6 +126,22 @@ export default async function RestaurantHubPage({ params }: Props) {
             </Link>
           </div>
 
+          <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Large orders
+            </p>
+            <h2 className="mt-1 text-lg font-bold">Catering Menu</h2>
+            <p className="mt-1 text-sm text-neutral-600">
+              Platters, group orders, events, and large orders.
+            </p>
+            <Link
+              href={`/r/${slug}/catering`}
+              className="mt-4 block rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-center text-sm font-semibold text-neutral-900"
+            >
+              View Catering Menu
+            </Link>
+          </div>
+
           <p className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
             You scanned or tapped the official restaurant hub.
           </p>
