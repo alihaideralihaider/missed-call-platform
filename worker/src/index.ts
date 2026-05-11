@@ -8,6 +8,7 @@ import { incrementRestaurantUsage } from "./usage";
 
 type Env = {
   SUPABASE_URL: string;
+  NEXT_PUBLIC_SUPABASE_URL?: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   TWILIO_ACCOUNT_SID?: string;
   TWILIO_AUTH_TOKEN?: string;
@@ -1088,7 +1089,9 @@ export default {
       url.pathname.startsWith("/twilio/voice/")
     ) {
       try {
-        const supabaseUrl = readEnv(env.SUPABASE_URL);
+        const supabaseUrl = readEnv(
+          env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL
+        );
         const supabaseServiceRoleKey = readEnv(env.SUPABASE_SERVICE_ROLE_KEY);
 
         if (!supabaseUrl || !supabaseServiceRoleKey) {
@@ -1183,20 +1186,21 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/orders") {
-      console.log("POST /api/orders hit");
-      const supabaseUrl = readEnv(env.SUPABASE_URL);
+      const supabaseUrl = readEnv(
+        env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL
+      );
       const supabaseServiceRoleKey = readEnv(env.SUPABASE_SERVICE_ROLE_KEY);
 
-      console.log("SUPABASE_URL exists:", Boolean(supabaseUrl));
-      console.log(
-        "SUPABASE_SERVICE_ROLE_KEY exists:",
-        Boolean(supabaseServiceRoleKey)
-      );
-
-
       try {
-        if (!supabaseUrl || !supabaseServiceRoleKey) {
-          return jsonError("Missing Supabase environment variables.", 500);
+        if (!supabaseUrl) {
+          return jsonError("Missing Supabase env: SUPABASE_URL", 500);
+        }
+
+        if (!supabaseServiceRoleKey) {
+          return jsonError(
+            "Missing Supabase env: SUPABASE_SERVICE_ROLE_KEY",
+            500
+          );
         }
 
         const supabase = createClient(

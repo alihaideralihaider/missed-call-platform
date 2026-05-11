@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   CartItem,
   clearCart,
@@ -32,6 +33,7 @@ function formatRestaurantName(slug: string): string {
 }
 
 export default function CartPage({ params }: PageProps) {
+  const pathname = usePathname();
   const [slug, setSlug] = useState("");
   const [items, setItems] = useState<CartItem[]>([]);
   const [cartRestaurantSlug, setCartRestaurantSlug] = useState<string | null>(null);
@@ -74,10 +76,16 @@ export default function CartPage({ params }: PageProps) {
     [items]
   );
 
-  const restaurantName = formatRestaurantName(slug);
+  const pathSlug = useMemo(() => {
+    const [, basePath, routeSlug] = pathname.split("/");
+    return basePath === "r" ? cleanSlug(routeSlug) : "";
+  }, [pathname]);
+
+  const restaurantSlug = slug || pathSlug;
+  const restaurantName = formatRestaurantName(restaurantSlug);
 
   const cartBelongsToThisRestaurant =
-    !cartRestaurantSlug || !slug || cartRestaurantSlug === slug;
+    !cartRestaurantSlug || !restaurantSlug || cartRestaurantSlug === restaurantSlug;
 
   const handleDecrease = (item: CartItem) => {
     const nextQuantity = item.quantity - 1;
@@ -105,7 +113,7 @@ export default function CartPage({ params }: PageProps) {
         <div className="mx-auto min-h-screen max-w-md bg-white px-4 py-6 shadow-sm">
           <div className="mb-6">
             <Link
-              href={`/r/${slug}`}
+              href={`/r/${restaurantSlug}`}
               className="rounded text-sm font-medium text-neutral-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
             >
               ← Back to menu
@@ -130,7 +138,7 @@ export default function CartPage({ params }: PageProps) {
               </button>
 
               <Link
-                href={`/r/${slug}`}
+                href={`/r/${restaurantSlug}`}
                 className="block w-full rounded-2xl border border-neutral-200 px-4 py-3 text-center text-sm font-semibold text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
               >
                 Go to menu
@@ -147,7 +155,7 @@ export default function CartPage({ params }: PageProps) {
       <div className="mx-auto min-h-screen max-w-md bg-white shadow-sm">
         <div className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 px-4 pb-4 pt-4 backdrop-blur">
           <Link
-            href={`/r/${slug}`}
+            href={`/r/${restaurantSlug}`}
             className="rounded text-sm font-medium text-neutral-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
           >
             ← Back to menu
@@ -188,7 +196,7 @@ export default function CartPage({ params }: PageProps) {
               </p>
 
               <Link
-                href={`/r/${slug}`}
+                href={`/r/${restaurantSlug}`}
                 className="mt-5 inline-block rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
               >
                 Browse menu
@@ -329,7 +337,7 @@ export default function CartPage({ params }: PageProps) {
                 </div>
               ) : (
                 <Link
-                  href={`/r/${slug}/checkout`}
+                  href={`/r/${restaurantSlug}/checkout`}
                   aria-label={`Continue to checkout. ${itemCount} item${itemCount > 1 ? "s" : ""}, total ${subtotal.toFixed(2)} dollars`}
                   className="flex w-full items-center justify-between rounded-2xl bg-neutral-900 px-4 py-4 text-white shadow-lg transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 active:scale-[0.98]"
                 >

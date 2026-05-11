@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -104,6 +104,7 @@ function getCancelledByLabel(value: string | null | undefined): string {
 }
 
 export default function SuccessPage({ params }: PageProps) {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
   const orderNumber = searchParams.get("orderNumber");
@@ -123,6 +124,13 @@ export default function SuccessPage({ params }: PageProps) {
       setSlug(cleanSlug(resolved?.slug));
     });
   }, [params]);
+
+  const pathSlug = useMemo(() => {
+    const [, basePath, routeSlug] = pathname.split("/");
+    return basePath === "r" ? cleanSlug(routeSlug) : "";
+  }, [pathname]);
+
+  const restaurantSlug = slug || pathSlug;
 
   useEffect(() => {
     if (!orderId) {
@@ -188,7 +196,7 @@ export default function SuccessPage({ params }: PageProps) {
     };
   }, [orderId]);
 
-  const restaurantName = formatRestaurantName(slug);
+  const restaurantName = formatRestaurantName(restaurantSlug);
 
   const displayOrderRef = useMemo(() => {
     const liveOrderNumber = String(order?.order_number ?? "").trim();
@@ -201,8 +209,8 @@ export default function SuccessPage({ params }: PageProps) {
       return cleanOrderNumber;
     }
 
-    return formatFallbackOrderRef(orderId, slug);
-  }, [order?.order_number, orderNumber, orderId, slug]);
+    return formatFallbackOrderRef(orderId, restaurantSlug);
+  }, [order?.order_number, orderNumber, orderId, restaurantSlug]);
 
   const formattedPickupAt = useMemo(
     () => formatPickupDateTime(order?.pickup_at || pickupAt),
@@ -278,7 +286,7 @@ export default function SuccessPage({ params }: PageProps) {
   }, [normalizedStatus, pickupLabel, formattedPickupAt]);
 
   async function handleCancelOrder() {
-    if (!orderId || !slug || cancelSubmitting || !canCancelOrder) {
+    if (!orderId || !restaurantSlug || cancelSubmitting || !canCancelOrder) {
       return;
     }
 
@@ -302,7 +310,7 @@ export default function SuccessPage({ params }: PageProps) {
         },
         body: JSON.stringify({
           action: "cancel",
-          restaurantSlug: slug,
+          restaurantSlug,
         }),
       });
 
@@ -442,14 +450,14 @@ export default function SuccessPage({ params }: PageProps) {
 
           <div className="mt-6 space-y-3">
             <Link
-              href={`/r/${slug}`}
+              href={`/r/${restaurantSlug}`}
               className="block w-full rounded-2xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
             >
               Back to menu
             </Link>
 
             <Link
-              href={`/r/${slug}`}
+              href={`/r/${restaurantSlug}`}
               className="block w-full rounded-2xl border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
             >
               Start another order

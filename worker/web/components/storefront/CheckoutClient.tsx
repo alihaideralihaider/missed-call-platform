@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createOrder } from "@/lib/api";
 import { getCart, clearCart } from "@/lib/cart";
 
@@ -17,6 +17,7 @@ function cleanSlug(value: unknown): string {
 
 export default function CheckoutClient({ slug }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -84,7 +85,12 @@ export default function CheckoutClient({ slug }: Props) {
     }
   }
 
-  const backSlug = cleanSlug(slug) || cleanSlug(getCart().restaurantSlug);
+  const pathSlug = (() => {
+    const [, basePath, routeSlug] = pathname.split("/");
+    return basePath === "r" ? cleanSlug(routeSlug) : "";
+  })();
+  const backSlug =
+    cleanSlug(slug) || cleanSlug(getCart().restaurantSlug) || pathSlug;
 
   return (
     <main className="min-h-screen bg-gray-50">

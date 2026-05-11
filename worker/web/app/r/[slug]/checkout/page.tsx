@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import {
   CartItem,
@@ -188,6 +189,7 @@ function evaluateStaticPromoCode(
 }
 
 export default function CheckoutPage({ params }: PageProps) {
+  const pathname = usePathname();
   const [slug, setSlug] = useState("");
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [items, setItems] = useState<CartItem[]>([]);
@@ -307,6 +309,13 @@ export default function CheckoutPage({ params }: PageProps) {
     };
   }, [slug]);
 
+  const pathSlug = useMemo(() => {
+    const [, basePath, routeSlug] = pathname.split("/");
+    return basePath === "r" ? cleanSlug(routeSlug) : "";
+  }, [pathname]);
+
+  const restaurantSlug = slug || pathSlug;
+
   useEffect(() => {
     const interval = window.setInterval(() => {
       setNow(new Date());
@@ -388,10 +397,10 @@ export default function CheckoutPage({ params }: PageProps) {
     [items]
   );
 
-  const restaurantName = formatRestaurantName(slug);
+  const restaurantName = formatRestaurantName(restaurantSlug);
 
   const cartBelongsToThisRestaurant =
-    !cartRestaurantSlug || !slug || cartRestaurantSlug === slug;
+    !cartRestaurantSlug || !restaurantSlug || cartRestaurantSlug === restaurantSlug;
 
   useEffect(() => {
     if (!cartBelongsToThisRestaurant && cartRestaurantSlug) {
@@ -518,7 +527,7 @@ export default function CheckoutPage({ params }: PageProps) {
       return;
     }
 
-    if (!slug) {
+    if (!restaurantSlug) {
       setError("Missing restaurant slug.");
       return;
     }
@@ -558,7 +567,7 @@ export default function CheckoutPage({ params }: PageProps) {
         selectedPickupLabel || (pickupMode === "asap" ? "ASAP" : "Scheduled");
 
       const payload = {
-        restaurantSlug: slug,
+        restaurantSlug,
         customerName: customerName.trim(),
         customerPhone: normalizedPhone,
         pickupTime:
@@ -641,8 +650,8 @@ export default function CheckoutPage({ params }: PageProps) {
       params.set("smsOptIn", smsOptIn ? "1" : "0");
 
       window.location.href = params.toString()
-        ? `/r/${slug}/success?${params.toString()}`
-        : `/r/${slug}/success`;
+        ? `/r/${restaurantSlug}/success?${params.toString()}`
+        : `/r/${restaurantSlug}/success`;
     } catch {
       setError("Something went wrong while placing your order.");
       setSubmitting(false);
@@ -655,7 +664,7 @@ export default function CheckoutPage({ params }: PageProps) {
         <div className="mx-auto min-h-screen max-w-md bg-white px-4 py-6 shadow-sm">
           <div className="mb-6">
             <Link
-              href={`/r/${slug}`}
+              href={`/r/${restaurantSlug}`}
               className="text-sm font-medium text-neutral-500"
             >
               ← Back to menu
@@ -671,7 +680,7 @@ export default function CheckoutPage({ params }: PageProps) {
             </p>
 
             <Link
-              href={`/r/${slug}`}
+              href={`/r/${restaurantSlug}`}
               className="mt-5 inline-block rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
             >
               Go to menu
@@ -687,7 +696,7 @@ export default function CheckoutPage({ params }: PageProps) {
       <div className="mx-auto min-h-screen max-w-md bg-white shadow-sm">
         <div className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 px-4 pb-4 pt-4 backdrop-blur">
           <Link
-            href={`/r/${slug}/cart`}
+            href={`/r/${restaurantSlug}/cart`}
             className="rounded text-sm font-medium text-neutral-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
           >
             ← Back to cart
