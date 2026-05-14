@@ -1,7 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
+import {
+  createBrandedQrDataUrl,
+  drawBrandedQrToCanvas,
+  getTrustedQrUrlText,
+} from "@/lib/qr/brandedQr";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -161,14 +165,11 @@ function OrderingQrCard({
 
     let cancelled = false;
 
-    QRCode.toCanvas(canvasRef.current, url, {
-      errorCorrectionLevel: "M",
-      margin: 2,
-      width: 168,
-      color: {
-        dark: "#111827",
-        light: "#ffffff",
-      },
+    drawBrandedQrToCanvas(canvasRef.current, {
+      input: url,
+      size: 168,
+      branded: true,
+      brandLogo: "saanaos",
     })
       .then(() => {
         if (!cancelled) {
@@ -190,14 +191,13 @@ function OrderingQrCard({
     if (!url) return;
 
     try {
-      const dataUrl = await QRCode.toDataURL(url, {
-        errorCorrectionLevel: "M",
+      const dataUrl = await createBrandedQrDataUrl({
+        input: url,
+        size: 1024,
         margin: 4,
-        width: 1024,
-        color: {
-          dark: "#111827",
-          light: "#ffffff",
-        },
+        branded: true,
+        brandLogo: "saanaos",
+        includeTrustedUrlText: true,
       });
       const link = document.createElement("a");
       link.href = dataUrl;
@@ -210,6 +210,8 @@ function OrderingQrCard({
       setQrError("QR download could not be generated.");
     }
   }
+
+  const trustedUrlText = url ? getTrustedQrUrlText(url) : "";
 
   return (
     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
@@ -237,11 +239,16 @@ function OrderingQrCard({
         <div className="flex shrink-0 flex-col items-start gap-3 md:items-end">
           <div className="rounded-xl border border-neutral-200 bg-white p-2 shadow-sm">
             {url ? (
-              <canvas
-                ref={canvasRef}
-                aria-label={`${title} preview`}
-                className="h-[168px] w-[168px]"
-              />
+              <div className="flex flex-col items-center gap-2">
+                <canvas
+                  ref={canvasRef}
+                  aria-label={`${title} preview`}
+                  className="h-[168px] w-[168px]"
+                />
+                <p className="max-w-[168px] text-center text-[11px] font-semibold leading-4 text-neutral-700">
+                  {trustedUrlText}
+                </p>
+              </div>
             ) : (
               <div className="flex h-[168px] w-[168px] items-center justify-center rounded-lg bg-neutral-100 px-4 text-center text-xs text-neutral-500">
                 QR preview will appear after the restaurant slug loads.
@@ -501,6 +508,7 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
 
     return {
       slug: safeSlug,
+      hub: safeSlug ? `${publicBaseUrl}/r/${safeSlug}/hub` : "",
       main: safeSlug ? `${publicBaseUrl}/r/${safeSlug}` : "",
       catering: safeSlug ? `${publicBaseUrl}/r/${safeSlug}/catering` : "",
       mystery: safeSlug ? `${publicBaseUrl}/r/${safeSlug}/mystery` : "",
@@ -1367,6 +1375,21 @@ export default function RestaurantMenuAdminPage({ params }: PageProps) {
               </p>
 
               <div className="mt-4 space-y-3">
+                <OrderingQrCard
+                  title="Restaurant Hub QR"
+                  description="Send customers to the restaurant hub so they can choose ordering, catering, and current campaigns."
+                  url={orderingLinks.hub}
+                  fallbackUrl="https://www.saanaos.com/r/[slug]/hub"
+                  fileName={`saanaos-${
+                    orderingLinks.slug || "restaurant"
+                  }-restaurant-hub-qr.png`}
+                  suggestedPrintCopy="Scan for our SaanaOS ordering hub"
+                  copied={copiedOrderingLink === "Restaurant hub link"}
+                  onCopy={() =>
+                    copyOrderingLink("Restaurant hub link", orderingLinks.hub)
+                  }
+                />
+
                 <OrderingQrCard
                   title="Main Ordering QR"
                   description="Send customers straight to your regular pickup menu. No offer or phone opt-in required."
