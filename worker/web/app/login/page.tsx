@@ -23,6 +23,20 @@ function getErrorMessage(error?: string | null) {
 
 type LoginMethod = "email" | "sms";
 
+async function readApiResponse(res: Response) {
+  const contentType = res.headers.get("content-type") || "";
+
+  if (contentType.toLowerCase().includes("application/json")) {
+    return res.json();
+  }
+
+  return {
+    error: res.ok
+      ? ""
+      : `Request failed with status ${res.status}. Please try again.`,
+  };
+}
+
 function LoginPageContent() {
   //const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const searchParams = useSearchParams();
@@ -65,7 +79,7 @@ function LoginPageContent() {
         }),
       });
 
-      const data = await res.json();
+      const data = await readApiResponse(res);
 
       if (!res.ok) {
         setSubmitError(data.error || "Failed to send login link.");
@@ -109,7 +123,7 @@ function LoginPageContent() {
           }),
         });
 
-        const data = await res.json();
+        const data = await readApiResponse(res);
 
         if (!res.ok) {
           setSubmitError(data.error || "Failed to send code.");
@@ -140,7 +154,7 @@ function LoginPageContent() {
         }),
       });
 
-      const data = await res.json();
+      const data = await readApiResponse(res);
 
       if (!res.ok) {
         setSubmitError(data.error || "Invalid code.");

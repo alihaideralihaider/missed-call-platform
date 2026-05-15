@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { getPlatformAccessForUserId } from "@/lib/platform/access";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -40,12 +41,8 @@ async function findAuthUserByEmail(supabase: SupabaseClient, email: string) {
 }
 
 export async function POST(req: Request) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
   try {
+    const supabase = createSupabaseAdminClient();
     const body = await req.json();
     const email = (body.email || "").trim().toLowerCase();
 
@@ -169,12 +166,7 @@ export async function POST(req: Request) {
     console.error("POST /api/auth/send-login-link failed:", error);
 
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to send login link.",
-      },
+      { error: "Failed to send login link." },
       { status: 500 }
     );
   }
