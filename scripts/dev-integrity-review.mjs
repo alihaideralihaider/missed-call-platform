@@ -17,6 +17,74 @@ const args = new Set(process.argv.slice(2));
 const shouldWriteEvidence = args.has("--write-evidence") && !args.has("--no-evidence");
 const shouldPrintJson = args.has("--json");
 const useStaged = args.has("--staged");
+const defaultEvidenceDir = "docs/reviews";
+const defaultBlockOn = ["Critical", "High"];
+const defaultReviewsToSkills = {
+  plan: "saana-plan",
+  guard: "saana-guard",
+};
+
+function loadIntegrityConfig() {
+  const configPath = path.join(repoRoot, "authtoolkit.integrity.json");
+  const stat = statSync(configPath, { throwIfNoEntry: false });
+
+  if (!stat?.isFile()) {
+    console.warn(
+      "Warning: authtoolkit.integrity.json not found; using built-in Dev Integrity defaults."
+    );
+    return {
+      config: null,
+      configFileUsed: false,
+      configPath: null,
+    };
+  }
+
+  try {
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    return {
+      config,
+      configFileUsed: true,
+      configPath: path.relative(repoRoot, configPath),
+    };
+  } catch (error) {
+    console.warn(
+      `Warning: failed to read authtoolkit.integrity.json; using built-in Dev Integrity defaults. ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return {
+      config: null,
+      configFileUsed: false,
+      configPath: null,
+    };
+  }
+}
+
+const {
+  config: integrityConfig,
+  configFileUsed,
+  configPath: integrityConfigPath,
+} = loadIntegrityConfig();
+const project = typeof integrityConfig?.project === "string" ? integrityConfig.project : null;
+const stack = typeof integrityConfig?.stack === "string" ? integrityConfig.stack : null;
+const evidenceDir =
+  typeof integrityConfig?.evidence?.path === "string" &&
+  integrityConfig.evidence.path.trim()
+    ? integrityConfig.evidence.path.trim()
+    : defaultEvidenceDir;
+const blockOn =
+  Array.isArray(integrityConfig?.blockOn) && integrityConfig.blockOn.length
+    ? integrityConfig.blockOn.map((value) => String(value))
+    : defaultBlockOn;
+const configuredDefaultReviewSkills =
+  Array.isArray(integrityConfig?.defaultReviews) && integrityConfig.defaultReviews.length
+    ? integrityConfig.defaultReviews
+        .map((review) => defaultReviewsToSkills[String(review)])
+        .filter(Boolean)
+    : [];
+const defaultReviewSkills = configuredDefaultReviewSkills.length
+  ? configuredDefaultReviewSkills
+  : ["saana-plan", "saana-guard"];
 
 function runGit(args) {
   return execFileSync("git", args, {
@@ -97,17 +165,18 @@ function matchesAny(file, patterns) {
   return patterns.some((pattern) => pattern.test(file));
 }
 
+const defaultSkillReasons = {
+  "saana-plan": "All changes require planning and closure checks.",
+  "saana-guard": "All changes require guardrail review before commit/deploy.",
+};
+
 const skillRules = [
-  {
-    skill: "saana-plan",
-    reason: "All changes require planning and closure checks.",
+  ...defaultReviewSkills.map((skill) => ({
+    skill,
+    reason: defaultSkillReasons[skill] || "Default review from integrity config.",
     matches: () => true,
-  },
-  {
-    skill: "saana-guard",
-    reason: "All changes require guardrail review before commit/deploy.",
-    matches: () => true,
-  },
+  })),
+  // TODO: Move these hardcoded SaanaOS routing rules into authtoolkit.integrity.json.
   {
     skill: "saana-security-review",
     reason: "Auth, login, admin, API, Supabase, or webhook paths changed.",
@@ -196,18 +265,59 @@ const confidenceRules = [
   },
 ];
 
+function matchTerm(file, term) {
+  const normalizedFile = file.toLowerCase();
+  const normalizedTerm = String(term || "").toLowerCase();
+  return normalizedTerm && normalizedFile.includes(normalizedTerm);
+}
+
+function getConfiguredConfidenceRules() {
+  const configuredDeductions = integrityConfig?.confidence?.deductions;
+
+  if (!Array.isArray(configuredDeductions) || configuredDeductions.length === 0) {
+    return null;
+  }
+
+  return configuredDeductions
+    .map((deduction) => {
+      const amount = Number(deduction?.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return null;
+
+      const matchTerms = Array.isArray(deduction?.match)
+        ? deduction.match.map((term) => String(term)).filter(Boolean)
+        : [];
+      const condition =
+        typeof deduction?.condition === "string" ? deduction.condition : "";
+      const label = String(deduction?.reason || "configured confidence deduction");
+
+      return {
+        label,
+        amount,
+        matches: (file) => matchTerms.some((term) => matchTerm(file, term)),
+        condition,
+      };
+    })
+    .filter(Boolean);
+}
+
 function getConfidence(changedFiles) {
   let score = 0.9;
   const adjustments = [];
+  const configuredConfidenceRules = getConfiguredConfidenceRules();
+  const activeConfidenceRules = configuredConfidenceRules || confidenceRules;
 
-  for (const rule of confidenceRules) {
-    if (changedFiles.some(rule.matches)) {
+  for (const rule of activeConfidenceRules) {
+    const matchTriggered = changedFiles.some(rule.matches);
+    const conditionTriggered =
+      rule.condition === "changedFiles.length > 10" && changedFiles.length > 10;
+
+    if (matchTriggered || conditionTriggered) {
       score -= rule.amount;
       adjustments.push(`-${rule.amount.toFixed(2)} ${rule.label}`);
     }
   }
 
-  if (changedFiles.length > 10) {
+  if (!configuredConfidenceRules && changedFiles.length > 10) {
     score -= 0.1;
     adjustments.push("-0.10 more than 10 files changed");
   }
@@ -740,7 +850,7 @@ const deterministicFindings = runDeterministicRunners(
   diffAddedLines
 );
 const blockingFindings = deterministicFindings.filter((finding) =>
-  ["Critical", "High"].includes(finding.severity)
+  blockOn.includes(finding.severity)
 );
 const { score, adjustments } = getConfidence(changedFiles);
 const confidence = Number(score.toFixed(2));
@@ -750,8 +860,7 @@ const timestamp = new Date().toISOString();
 const date = timestamp.slice(0, 10);
 const evidencePath = path.join(
   repoRoot,
-  "docs",
-  "reviews",
+  evidenceDir,
   `${date}-dev-integrity-review.md`
 );
 let writtenEvidencePath = null;
@@ -763,6 +872,13 @@ const routingReasons = selected.map((entry) => {
 const evidence = `# Dev Integrity Review
 
 Timestamp: ${timestamp}
+
+## Config
+
+- Project: ${project || "unknown"}
+- Stack: ${stack || "unknown"}
+- Config file used: ${configFileUsed ? "true" : "false"}
+- Config path: ${integrityConfigPath || "none"}
 
 ## Changed Files
 
@@ -820,6 +936,10 @@ if (shouldWriteEvidence) {
 }
 
 const jsonSummary = {
+  project,
+  stack,
+  configFileUsed,
+  ...(integrityConfigPath ? { configPath: integrityConfigPath } : {}),
   changedFiles,
   selectedSkills: selected.map((entry) => entry.skill),
   routingReasons: selected.map((entry) => ({
@@ -851,6 +971,10 @@ console.log("====================");
 console.log("");
 console.log(`Mode: ${useStaged ? "staged" : "working tree"}`);
 console.log(`Evidence: ${shouldWriteEvidence ? "write" : "not written"}`);
+console.log(`Config: ${configFileUsed ? integrityConfigPath : "built-in defaults"}`);
+if (project || stack) {
+  console.log(`Project: ${project || "unknown"}${stack ? ` (${stack})` : ""}`);
+}
 console.log("");
 console.log(useStaged ? "Git staged name-status:" : "Git status --short:");
 console.log(statusOutput || "(clean)");
