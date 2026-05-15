@@ -17,6 +17,39 @@ Use this for public routes, APIs, auth, webhooks, admin areas, customer/order da
 - Rate limiting: identify endpoints that need throttling, replay protection, or abuse controls.
 - Sensitive logging: avoid logging secrets, phone numbers, full payloads, payment details, or customer data unless redacted.
 
+## Tenant and Session Boundary Rules
+
+For auth, admin, restaurant, slug, and session changes, verify:
+
+- Login session identifies the user.
+- User-to-restaurant/account mapping is checked server-side.
+- Admin routes do not trust slug from URL alone.
+- API routes verify the authenticated user has access to the requested restaurant/account.
+- Supabase queries filter by authorized restaurant/account, not only by client-provided slug.
+- Service-role queries are never exposed to client-side code.
+- Public restaurant pages remain public only where intended.
+- Admin/customer/staff routes require the correct role.
+- Bots cannot trigger unlimited OTP/login-link attempts.
+- Rate limiting or abuse controls exist for login and OTP endpoints.
+- Magic links/OTP tokens expire and cannot be reused.
+- Redirects after login cannot be abused to access another tenant.
+
+## Tenant Boundary Failure Rules
+
+If review finds cross-tenant access risk:
+
+- Classify as Critical.
+- Stop deploy/commit.
+- Apply smallest safe fix.
+- Rerun Security Review.
+- Test with at least two restaurants/accounts:
+  - user A cannot access restaurant B admin route
+  - user A cannot call restaurant B API
+  - unauthenticated user cannot access protected admin data
+  - public slug pages expose only intended public data
+- Review logs for possible prior exposure if production was affected.
+- Create incident note only if real operational learning exists.
+
 ## Security Failure Rules
 
 If the security review detects a vulnerability, unsafe pattern, missing protection, or elevated-risk behavior:
