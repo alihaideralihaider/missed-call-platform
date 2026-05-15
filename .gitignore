@@ -17,3 +17,5 @@ build
 
 # supabase / secrets
 .supabase
+
+docs/reviews/*.md
