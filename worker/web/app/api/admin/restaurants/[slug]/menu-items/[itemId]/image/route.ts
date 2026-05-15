@@ -1,23 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 
 type RouteContext = {
   params: Promise<{ slug: string; itemId: string }>;
 };
 
 export async function PATCH(req: Request, context: RouteContext) {
-  const supabase = createClient<any>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
   try {
     const { slug, itemId } = await context.params;
-    const body = await req.json();
-
-    const imageUrl =
-      typeof body.image_url === "string" ? body.image_url.trim() : "";
-    const clearImage = body.clear === true;
 
     if (!slug) {
       return NextResponse.json(
@@ -25,6 +16,25 @@ export async function PATCH(req: Request, context: RouteContext) {
         { status: 400 }
       );
     }
+
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
+    const supabase = createClient<any>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const body = await req.json();
+
+    const imageUrl =
+      typeof body.image_url === "string" ? body.image_url.trim() : "";
+    const clearImage = body.clear === true;
 
     if (!itemId) {
       return NextResponse.json(
@@ -44,7 +54,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       .schema("food_ordering")
       .from("restaurants")
       .select("id, slug")
-      .eq("slug", slug)
+      .eq("id", access.restaurant.id)
       .single();
 
     if (restaurantError || !restaurant) {

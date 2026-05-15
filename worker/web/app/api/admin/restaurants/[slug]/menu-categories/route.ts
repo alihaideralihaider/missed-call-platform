@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -10,15 +11,8 @@ function normalizeName(value: unknown) {
 }
 
 export async function POST(req: Request, context: RouteContext) {
-  const supabase = createClient<any>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
   try {
     const { slug } = await context.params;
-    const body = await req.json();
-    const name = normalizeName(body.name);
 
     if (!slug) {
       return NextResponse.json(
@@ -26,6 +20,22 @@ export async function POST(req: Request, context: RouteContext) {
         { status: 400 }
       );
     }
+
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
+    const supabase = createClient<any>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const body = await req.json();
+    const name = normalizeName(body.name);
 
     if (!name) {
       return NextResponse.json(
@@ -38,7 +48,7 @@ export async function POST(req: Request, context: RouteContext) {
       .schema("food_ordering")
       .from("restaurants")
       .select("id, slug")
-      .eq("slug", slug)
+      .eq("id", access.restaurant.id)
       .single();
 
     if (restaurantError || !restaurant) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -18,20 +19,28 @@ function getFileExtension(name: string): string {
   return parts.length > 1 ? parts.pop()!.toLowerCase() : "";
 }
 
-export async function GET(_: NextRequest, context: RouteContext) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
+export async function GET(req: NextRequest, context: RouteContext) {
   try {
     const { slug } = await context.params;
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
     const { data: restaurant, error: restaurantError } = await supabase
       .schema("food_ordering")
       .from("restaurants")
       .select("id, name, slug, has_vibe_upgrade, has_menu_upgrade, vibe_image_url")
-      .eq("slug", slug)
+      .eq("id", access.restaurant.id)
       .single();
 
     if (restaurantError || !restaurant) {
@@ -93,19 +102,27 @@ export async function GET(_: NextRequest, context: RouteContext) {
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
   try {
     const { slug } = await context.params;
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
     const { data: restaurant, error: restaurantError } = await supabase
       .schema("food_ordering")
       .from("restaurants")
       .select("id, name, slug")
-      .eq("slug", slug)
+      .eq("id", access.restaurant.id)
       .single();
 
     if (restaurantError || !restaurant) {

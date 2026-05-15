@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type RouteContext = {
@@ -48,14 +49,14 @@ function roundMoney(value: number): number {
 
 async function loadRestaurantAndItem(
   admin: ReturnType<typeof createSupabaseAdminClient>,
-  slug: string,
+  restaurantId: string,
   itemId: string
 ) {
   const { data: restaurant, error: restaurantError } = await admin
     .schema("food_ordering")
     .from("restaurants")
     .select("id, slug")
-    .eq("slug", slug)
+    .eq("id", restaurantId)
     .single();
 
   if (restaurantError || !restaurant) {
@@ -248,16 +249,31 @@ async function attachGroupToItem(
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const admin = createSupabaseAdminClient();
-
   try {
     const { slug, itemId } = await context.params;
+    const access = await getRestaurantAdminAccessBySlugFromRequest(
+      request,
+      slug
+    );
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
+    const admin = createSupabaseAdminClient();
     const body = (await request.json()) as
       | CreateGroupBody
       | AttachGroupBody
       | DetachGroupBody
       | UpdateGroupBody;
-    const { restaurant } = await loadRestaurantAndItem(admin, slug, itemId);
+    const { restaurant } = await loadRestaurantAndItem(
+      admin,
+      access.restaurant.id,
+      itemId
+    );
 
     if (body.action === "create_group") {
       const name = String(body.name || "").trim();
@@ -339,6 +355,7 @@ export async function POST(request: Request, context: RouteContext) {
         .from("modifier_groups")
         .select("id")
         .eq("id", groupId)
+        .eq("restaurant_id", restaurant.id)
         .maybeSingle();
 
       if (groupError || !group) {

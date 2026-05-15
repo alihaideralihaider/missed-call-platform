@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -53,20 +54,28 @@ function toMoney(value: number | string | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export async function GET(_: Request, context: RouteContext) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
+export async function GET(req: Request, context: RouteContext) {
   try {
     const { slug } = await context.params;
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
     const { data: restaurant, error: restaurantError } = await supabase
       .schema("food_ordering")
       .from("restaurants")
       .select("id, name, slug, profile_completed")
-      .eq("slug", slug)
+      .eq("id", access.restaurant.id)
       .single();
 
     if (restaurantError || !restaurant) {

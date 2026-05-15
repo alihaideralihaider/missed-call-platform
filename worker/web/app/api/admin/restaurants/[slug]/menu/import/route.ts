@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MENU_MODEL = process.env.OPENAI_MENU_MODEL || "gpt-5.4-nano";
@@ -379,7 +380,7 @@ function parseStructuredCsv(text: string): ParsedSourceRow[] {
 
 async function loadRestaurantAndMenu(
   supabase: any,
-  slug: string
+  restaurantId: string
 ): Promise<{
   restaurant: RestaurantRecord;
   menu: MenuRecord;
@@ -388,7 +389,7 @@ async function loadRestaurantAndMenu(
     .schema("food_ordering")
     .from("restaurants")
     .select("id, name, slug")
-    .eq("slug", slug)
+    .eq("id", restaurantId)
     .single();
 
   if (restaurantError || !restaurant) {
@@ -457,19 +458,6 @@ async function loadDescriptionLibraries(
     );
   }
 
-  const { data: globalItems, error: globalItemsError } = await supabase
-    .schema("food_ordering")
-    .from("menu_items")
-    .select("id, category_id, name, description")
-    .not("description", "is", null)
-    .limit(5000);
-
-  if (globalItemsError) {
-    throw new Error(
-      `Failed to load description library: ${globalItemsError.message}`
-    );
-  }
-
   const restaurantLibrary = new Map<string, DescriptionLibraryEntry>();
   const globalLibrary = new Map<string, DescriptionLibraryEntry>();
 
@@ -488,24 +476,6 @@ async function loadDescriptionLibraries(
     const key = normalizeItemName(itemName);
     if (!restaurantLibrary.has(key)) {
       restaurantLibrary.set(key, { itemName, description });
-    }
-  }
-
-  for (const item of (globalItems || []) as MenuItemRecord[]) {
-    const description = normalizeText(item.description || "");
-    const itemName = normalizeText(item.name || "");
-
-    if (
-      !description ||
-      !itemName ||
-      description.toLowerCase() === itemName.toLowerCase()
-    ) {
-      continue;
-    }
-
-    const key = normalizeItemName(itemName);
-    if (!globalLibrary.has(key)) {
-      globalLibrary.set(key, { itemName, description });
     }
   }
 
@@ -597,10 +567,13 @@ async function generateAiDescriptions(
 
 async function buildPreviewRows(
   supabase: any,
-  slug: string,
+  restaurantId: string,
   parsedRows: ParsedSourceRow[]
 ): Promise<PreviewRow[]> {
-  const { restaurant, menu } = await loadRestaurantAndMenu(supabase, slug);
+  const { restaurant, menu } = await loadRestaurantAndMenu(
+    supabase,
+    restaurantId
+  );
   const assetMap = await loadRestaurantAssetMap(supabase, restaurant.id);
   const categoryMap = await loadRestaurantCategoryMap(supabase, menu.id);
   const { restaurantLibrary, globalLibrary } =
@@ -751,10 +724,13 @@ function sanitizeCommitRows(input: unknown): CommitRow[] {
 
 async function commitRows(
   supabase: any,
-  slug: string,
+  restaurantId: string,
   rows: CommitRow[]
 ) {
-  const { restaurant, menu } = await loadRestaurantAndMenu(supabase, slug);
+  const { restaurant, menu } = await loadRestaurantAndMenu(
+    supabase,
+    restaurantId
+  );
 
   const { data: existingCategories, error: categoriesError } = await supabase
     .schema("food_ordering")
@@ -884,13 +860,21 @@ async function commitRows(
 }
 
 export async function POST(req: NextRequest, { params }: RouteContext) {
-  const supabase = createClient<any>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
   try {
     const { slug } = await params;
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
+    const supabase = createClient<any>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
     const contentType = req.headers.get("content-type") || "";
 
     if (contentType.includes("multipart/form-data")) {
@@ -906,9 +890,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
       const text = await file.text();
       const parsedRows = parseStructuredCsv(text);
-      const previewRows = await buildPreviewRows(supabase, slug, parsedRows);
+      const previewRows = await buildPreviewRows(
+        supabase,
+        access.restaurant.id,
+        parsedRows
+      );
 
-      const { restaurant } = await loadRestaurantAndMenu(supabase, slug);
+      const { restaurant } = await loadRestaurantAndMenu(
+        supabase,
+        access.restaurant.id
+      );
 
       const ip =
         req.headers.get("x-forwarded-for") ||
@@ -954,7 +945,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
 
     const rows = sanitizeCommitRows(body.rows);
-    const result = await commitRows(supabase, slug, rows);
+    const result = await commitRows(supabase, access.restaurant.id, rows);
 
     return NextResponse.json(result);
   } catch (error) {

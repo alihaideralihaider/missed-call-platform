@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -85,13 +86,13 @@ function b64ToUint8Array(b64: string) {
 
 async function loadRestaurantBySlug(
   supabase: SupabaseClient,
-  slug: string
+  restaurantId: string
 ): Promise<RestaurantRecord> {
   const { data, error } = await supabase
     .schema("food_ordering")
     .from("restaurants")
     .select("id, name, slug")
-    .eq("slug", slug)
+    .eq("id", restaurantId)
     .single();
 
   if (error || !data) {
@@ -103,6 +104,7 @@ async function loadRestaurantBySlug(
 
 async function loadMenuItemName(
   supabase: SupabaseClient,
+  restaurantId: string,
   menuItemId?: string | null
 ): Promise<string | null> {
   if (!menuItemId) return null;
@@ -110,8 +112,23 @@ async function loadMenuItemName(
   const { data, error } = await supabase
     .schema("food_ordering")
     .from("menu_items")
-    .select("id, name")
+    .select(
+      `
+      id,
+      name,
+      category_id,
+      menu_categories!inner (
+        id,
+        menu_id,
+        menus!inner (
+          id,
+          restaurant_id
+        )
+      )
+    `
+    )
     .eq("id", menuItemId)
+    .eq("menu_categories.menus.restaurant_id", restaurantId)
     .single();
 
   if (error || !data) return null;
@@ -184,12 +201,17 @@ async function buildEnhancedFileName(
 }
 
 export async function POST(req: NextRequest, { params }: RouteContext) {
-  const supabase = createClient<any>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
   try {
+    const { slug } = await params;
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
     if (!OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "OPENAI_API_KEY is missing." },
@@ -197,8 +219,14 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       );
     }
 
-    const { slug } = await params;
-    const restaurant = await loadRestaurantBySlug(supabase, slug);
+    const supabase = createClient<any>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const restaurant = await loadRestaurantBySlug(
+      supabase,
+      access.restaurant.id
+    );
 
     const body = (await req.json()) as RequestBody;
     const imageUrl = String(body.imageUrl || "").trim();
@@ -267,7 +295,11 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     }
 
     const enhancedBytes = b64ToUint8Array(b64);
-    const menuItemName = await loadMenuItemName(supabase, menuItemId);
+    const menuItemName = await loadMenuItemName(
+      supabase,
+      restaurant.id,
+      menuItemId
+    );
 
     const displayFileName = await buildEnhancedFileName(supabase, {
       restaurantId: restaurant.id,

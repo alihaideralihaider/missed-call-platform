@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 import { incrementRestaurantUsage } from "@/lib/restaurant-usage";
 import { sendSms } from "@/lib/messaging/sendSms";
 import type { SmsProviderName } from "@/lib/messaging/types";
@@ -339,13 +340,21 @@ async function updateOrderStatusWithCancelledByFallback(args: {
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  ) as AdminSupabaseClient;
-
   try {
     const { slug, orderId } = await params;
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    ) as AdminSupabaseClient;
     const body = await req.json();
     const nextStatus = String(body?.status || "").trim().toLowerCase();
 
@@ -360,7 +369,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       .schema("food_ordering")
       .from("restaurants")
       .select("id, slug, name")
-      .eq("slug", slug)
+      .eq("id", access.restaurant.id)
       .single();
 
     if (restaurantError || !restaurant) {

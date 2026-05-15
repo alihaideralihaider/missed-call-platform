@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 
 type RouteContext = {
   params: Promise<{ slug: string; promotionId?: string }>;
@@ -122,7 +123,7 @@ function mapPromotionRow(
   };
 }
 
-export async function GET(_req: NextRequest, context: RouteContext) {
+export async function GET(req: NextRequest, context: RouteContext) {
   try {
     const { slug: rawSlug } = await context.params;
     const slug = cleanSlug(rawSlug);
@@ -131,6 +132,15 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       return NextResponse.json(
         { error: "Missing restaurant slug." },
         { status: 400 }
+      );
+    }
+
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
       );
     }
 
@@ -143,7 +153,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       .schema("food_ordering")
       .from("restaurants")
       .select("id, name, slug, has_vibe_upgrade, has_menu_upgrade")
-      .eq("slug", slug)
+      .eq("id", access.restaurant.id)
       .single();
 
     if (restaurantError || !restaurant) {
@@ -300,6 +310,15 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       );
     }
 
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
     const supabase = createClient<any>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -309,7 +328,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .schema("food_ordering")
       .from("restaurants")
       .select("id, name, slug")
-      .eq("slug", slug)
+      .eq("id", access.restaurant.id)
       .single();
 
     if (restaurantError || !restaurant) {

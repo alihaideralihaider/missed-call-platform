@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -19,6 +20,15 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return NextResponse.json(
         { error: "Missing restaurant slug." },
         { status: 400 }
+      );
+    }
+
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
       );
     }
 
@@ -56,7 +66,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       .schema("food_ordering")
       .from("restaurants")
       .select("id, slug")
-      .eq("slug", slug)
+      .eq("id", access.restaurant.id)
       .single();
 
     if (restaurantError || !restaurant) {

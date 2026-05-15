@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 
 type RouteContext = {
   params: Promise<{ slug: string }>;
@@ -36,13 +37,13 @@ function b64ToUint8Array(b64: string) {
 
 async function loadRestaurantBySlug(
   supabase: SupabaseClient,
-  slug: string
+  restaurantId: string
 ): Promise<RestaurantRecord> {
   const { data, error } = await supabase
     .schema("food_ordering")
     .from("restaurants")
     .select("id, name, slug")
-    .eq("slug", slug)
+    .eq("id", restaurantId)
     .single();
 
   if (error || !data) {
@@ -69,12 +70,17 @@ function buildSafePrompt(body: RequestBody, restaurant: RestaurantRecord) {
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
-  const supabase = createClient<any>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
   try {
+    const { slug } = await context.params;
+    const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+    if (!access) {
+      return NextResponse.json(
+        { error: "Not authorized." },
+        { status: 403 }
+      );
+    }
+
     if (!OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "OPENAI_API_KEY is missing." },
@@ -82,8 +88,14 @@ export async function POST(req: NextRequest, context: RouteContext) {
       );
     }
 
-    const { slug } = await context.params;
-    const restaurant = await loadRestaurantBySlug(supabase, slug);
+    const supabase = createClient<any>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const restaurant = await loadRestaurantBySlug(
+      supabase,
+      access.restaurant.id
+    );
     const body = (await req.json()) as RequestBody;
     const prompt = buildSafePrompt(body, restaurant);
 

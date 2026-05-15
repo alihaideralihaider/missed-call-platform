@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getRestaurantAdminAccessBySlugFromRequest } from "@/lib/admin/restaurant-access-edge";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type RestaurantHourInput = {
@@ -57,8 +58,14 @@ function validateHours(hours: RestaurantHourInput[]) {
   return null;
 }
 
-export async function GET(_: Request, { params }: any) {
+export async function GET(req: Request, { params }: any) {
   const { slug } = await params;
+  const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+  if (!access) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+  }
+
   const admin = createSupabaseAdminClient();
 
   const { data: restaurant, error: restaurantError } = await admin
@@ -67,7 +74,7 @@ export async function GET(_: Request, { params }: any) {
     .select(
       "id, name, slug, address, address_line_1, address_line_2, city, state, postal_code, pickup_instructions, timezone"
     )
-    .eq("slug", slug)
+    .eq("id", access.restaurant.id)
     .single();
 
   if (restaurantError || !restaurant) {
@@ -101,6 +108,12 @@ export async function GET(_: Request, { params }: any) {
 
 export async function POST(req: Request, { params }: any) {
   const { slug } = await params;
+  const access = await getRestaurantAdminAccessBySlugFromRequest(req, slug);
+
+  if (!access) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+  }
+
   const body = await req.json();
   const admin = createSupabaseAdminClient();
 
@@ -108,7 +121,7 @@ export async function POST(req: Request, { params }: any) {
     .schema("food_ordering")
     .from("restaurants")
     .select("id")
-    .eq("slug", slug)
+    .eq("id", access.restaurant.id)
     .single();
 
   if (restaurantError || !restaurant) {
