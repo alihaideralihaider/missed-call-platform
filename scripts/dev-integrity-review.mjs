@@ -13,6 +13,10 @@ import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
+const args = new Set(process.argv.slice(2));
+const shouldWriteEvidence = args.has("--write-evidence") && !args.has("--no-evidence");
+const shouldPrintJson = args.has("--json");
+const useStaged = args.has("--staged");
 
 function runGit(args) {
   return execFileSync("git", args, {
@@ -33,6 +37,19 @@ function parseStatusPaths(statusOutput) {
       const rawPath = line.slice(2).trim();
       const renameParts = rawPath.split(" -> ");
       return renameParts[renameParts.length - 1];
+    });
+}
+
+function parseNameStatusPaths(nameStatusOutput) {
+  if (!nameStatusOutput) return [];
+
+  return nameStatusOutput
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split(/\t+/);
+      return parts[parts.length - 1];
     });
 }
 
@@ -676,12 +693,21 @@ function runnerScanFiles(files) {
   );
 }
 
-const statusOutput = runGit(["status", "--short"]);
-const diffNameOutput = runGit(["diff", "--name-only"]);
-const diffUnifiedOutput = runGit(["diff", "--unified=0"]);
+const statusOutput = useStaged
+  ? runGit(["diff", "--cached", "--name-status"])
+  : runGit(["status", "--short"]);
+const diffNameOutput = useStaged
+  ? runGit(["diff", "--cached", "--name-only"])
+  : runGit(["diff", "--name-only"]);
+const diffUnifiedOutput = useStaged
+  ? runGit(["diff", "--cached", "--unified=0"])
+  : runGit(["diff", "--unified=0"]);
 const diffAddedLines = parseDiffAddedLines(diffUnifiedOutput);
+const statusPaths = useStaged
+  ? parseNameStatusPaths(statusOutput)
+  : parseStatusPaths(statusOutput);
 const changedFiles = unique([
-  ...expandChangedPaths(parseStatusPaths(statusOutput)),
+  ...expandChangedPaths(statusPaths),
   ...diffNameOutput.split("\n").filter(Boolean),
 ]);
 
@@ -728,6 +754,7 @@ const evidencePath = path.join(
   "reviews",
   `${date}-dev-integrity-review.md`
 );
+let writtenEvidencePath = null;
 
 const routingReasons = selected.map((entry) => {
   return `- ${entry.skill}: ${entry.reason}\n  Files: ${entry.files.join(", ")}`;
@@ -776,13 +803,56 @@ Notes:
 - Manual/agent review is required for any blocked or high-risk result.
 `;
 
-mkdirSync(path.dirname(evidencePath), { recursive: true });
-writeFileSync(evidencePath, evidence);
+const exitReasons = [];
+
+if (blockingFindings.length) {
+  exitReasons.push("Critical/High deterministic findings exist");
+}
+
+if (riskyDetected && confidence < 0.7) {
+  exitReasons.push("confidence is below 0.70");
+}
+
+if (shouldWriteEvidence) {
+  mkdirSync(path.dirname(evidencePath), { recursive: true });
+  writeFileSync(evidencePath, evidence);
+  writtenEvidencePath = path.relative(repoRoot, evidencePath);
+}
+
+const jsonSummary = {
+  changedFiles,
+  selectedSkills: selected.map((entry) => entry.skill),
+  routingReasons: selected.map((entry) => ({
+    skill: entry.skill,
+    reason: entry.reason,
+    files: entry.files,
+  })),
+  confidenceScore: confidence,
+  confidenceInterpretation: interpretation,
+  confidenceAdjustments: adjustments,
+  deterministicFindings,
+  suggestedReviewOrder,
+  exitReason: exitReasons.length ? exitReasons.join("; ") : "passed",
+  ...(writtenEvidencePath ? { evidencePath: writtenEvidencePath } : {}),
+};
+
+if (shouldPrintJson) {
+  console.log(JSON.stringify(jsonSummary, null, 2));
+
+  if (exitReasons.length) {
+    process.exit(1);
+  }
+
+  process.exit(0);
+}
 
 console.log("Dev Integrity Review");
 console.log("====================");
 console.log("");
-console.log("Git status --short:");
+console.log(`Mode: ${useStaged ? "staged" : "working tree"}`);
+console.log(`Evidence: ${shouldWriteEvidence ? "write" : "not written"}`);
+console.log("");
+console.log(useStaged ? "Git staged name-status:" : "Git status --short:");
 console.log(statusOutput || "(clean)");
 console.log("");
 console.log("Changed files:");
@@ -811,9 +881,13 @@ if (deterministicFindings.length) {
   console.log("- None");
 }
 console.log("");
-console.log(`Evidence written: ${path.relative(repoRoot, evidencePath)}`);
+if (writtenEvidencePath) {
+  console.log(`Evidence written: ${writtenEvidencePath}`);
+} else {
+  console.log("Evidence not written. Use --write-evidence to create docs/reviews output.");
+}
 
-if (blockingFindings.length || (riskyDetected && confidence < 0.7)) {
+if (exitReasons.length) {
   if (blockingFindings.length) {
     console.error(
       "Manual/agent review is required before commit because Critical/High deterministic findings exist."
