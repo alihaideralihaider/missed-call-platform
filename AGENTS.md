@@ -2,6 +2,8 @@
 
 Future AI coding agents must read `worker/AGENTS.md` first and follow its Cloudflare-specific instructions for any work under `worker/`.
 
+Role-based planning and review skills live in `docs/agents/skills/`. Use the relevant skill files when the change matches their scope.
+
 ## Minimum Change Workflow
 
 1. Plan: define the scope, files likely affected, risks, and validation approach before editing.
@@ -19,3 +21,5 @@ Future AI coding agents must read `worker/AGENTS.md` first and follow its Cloudf
 - SMS or compliance changes: review consent, opt-out handling, message content, rate limits, provider failure modes, and auditability.
 - Billing or payment changes: review pricing, idempotency, reconciliation, webhook handling, failure states, and PCI-sensitive boundaries.
 - Database or schema changes: review migrations, rollback strategy, data backfill needs, indexes, constraints, and access policies.
+- UI or route behavior changes: run the Browser QA checklist.
+- Production deploys: run the Post Deploy Canary checklist after deployment.
