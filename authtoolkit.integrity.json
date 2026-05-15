@@ -1,0 +1,105 @@
+{
+  "project": "saanaos",
+  "stack": "nextjs-cloudflare-supabase",
+  "evidence": {
+    "path": "docs/reviews"
+  },
+  "blockOn": ["Critical", "High"],
+  "defaultReviews": ["plan", "guard"],
+  "reviewPacks": [
+    "security",
+    "tenant-boundary",
+    "payments",
+    "sms-compliance",
+    "restaurant-ux",
+    "browser-qa",
+    "deploy-canary"
+  ],
+  "routing": [
+    {
+      "match": ["auth", "login", "admin", "api", "supabase", "webhooks"],
+      "review": "security"
+    },
+    {
+      "match": ["admin/restaurants/[slug]"],
+      "review": "tenant-boundary"
+    },
+    {
+      "match": ["stripe", "billing", "checkout", "payment", "pricing"],
+      "review": "payments"
+    },
+    {
+      "match": ["twilio", "sms", "consent", "ivr", "messaging"],
+      "review": "sms-compliance"
+    },
+    {
+      "match": ["app/r", "hub", "cart", "menu", "orders", "kitchen", "admin"],
+      "review": "restaurant-ux"
+    },
+    {
+      "match": ["app", "pages", "routes", "forms", "tsx", "jsx"],
+      "review": "browser-qa"
+    },
+    {
+      "match": ["wrangler", "cloudflare", "env", "deploy"],
+      "review": "deploy-canary"
+    }
+  ],
+  "confidence": {
+    "deductions": [
+      {
+        "reason": "auth/session/tenant/security",
+        "match": ["auth", "login", "session", "tenant", "security", "admin", "webhooks"],
+        "amount": 0.2
+      },
+      {
+        "reason": "payment/pricing",
+        "match": ["stripe", "billing", "checkout", "payment", "payments", "pricing"],
+        "amount": 0.2
+      },
+      {
+        "reason": "sms/compliance",
+        "match": ["twilio", "sms", "consent", "ivr", "messaging", "compliance"],
+        "amount": 0.2
+      },
+      {
+        "reason": "supabase/service-role/RLS",
+        "match": ["supabase", "service-role", "service_role", "rls"],
+        "amount": 0.15
+      },
+      {
+        "reason": "deployment/env",
+        "match": ["wrangler", "cloudflare", "deploy", "deployment", "env", ".env"],
+        "amount": 0.15
+      },
+      {
+        "reason": "more than 10 files changed",
+        "match": [],
+        "condition": "changedFiles.length > 10",
+        "amount": 0.1
+      }
+    ]
+  },
+  "autofixPolicy": {
+    "allowed": [
+      "lint",
+      "type",
+      "copy",
+      "simple validation",
+      "generic error message",
+      "docs correction"
+    ],
+    "blocked": [
+      "auth redesign",
+      "tenant-boundary redesign",
+      "destructive DB",
+      "payment state rewrite",
+      "live Stripe config",
+      "Twilio/A2P changes",
+      "secrets rotation",
+      "production deploy",
+      "broad refactor",
+      "pricing/billing policy changes"
+    ]
+  }
+}
