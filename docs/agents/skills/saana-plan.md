@@ -21,3 +21,15 @@ Use this before implementation for any feature, route, schema, provider, workflo
 ## Output
 
 Write a short plan with assumptions, affected paths, review skills needed, and the exact checks that will be run.
+
+## Plan Closure Rules
+
+Before implementation is considered ready for commit:
+
+- Confirm the final diff stayed within the planned scope.
+- If files changed outside the plan, explain why.
+- Confirm required review skills were run.
+- Confirm planned tests/checks were run or explain why not.
+- Confirm rollout and rollback notes are still valid.
+- If implementation changed the original plan, update the plan summary before final review.
+- If new risk was discovered, trigger the relevant review skill before continuing.

@@ -52,6 +52,16 @@ Use this for operational incidents, failures, regressions, outages, security iss
 - Record rollback steps if rollback occurred.
 - Capture provider involvement if Twilio, Stripe, Supabase, Cloudflare, or other vendors were involved.
 
+## Closure Rules
+
+Before an incident note is considered complete:
+
+- Confirm the issue is resolved or clearly marked as remaining risk.
+- Confirm rollback or mitigation status is recorded.
+- Confirm prevention was added, rejected, or explicitly deferred.
+- Link to the guardrail, review skill, code change, doc update, or runbook change that reduces recurrence.
+- If no prevention was added, state why.
+
 ## Output
 
 Summarize:
