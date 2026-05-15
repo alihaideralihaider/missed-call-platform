@@ -16,6 +16,7 @@ Plan -> Git History Review -> Implement -> Test -> Code Review -> Security Revie
 - `saana-payment-review`: use for Stripe, billing, checkout, payment links, invoices, reconciliation, pricing, and payment webhooks.
 - `saana-browser-qa`: use when UI, routing, forms, auth paths, QR/hub pages, checkout, or admin browser behavior changes.
 - `saana-post-deploy-canary`: use after a production deploy to verify public health, Worker status, logs, routes, webhooks, and rollback notes.
+- `saana-incident-capture`: use after Critical or High severity operational incidents only when there is real operational learning to capture.
 
 ## Conditional Reviews
 
@@ -24,3 +25,4 @@ Plan -> Git History Review -> Implement -> Test -> Code Review -> Security Revie
 - Stripe, billing, checkout, pricing, or payment changes require `saana-payment-review`.
 - UI or route behavior changes require `saana-browser-qa`.
 - Production deploys require `saana-post-deploy-canary` after deployment.
+- Critical or High severity incidents should use `saana-incident-capture` only when there is real operational learning.
