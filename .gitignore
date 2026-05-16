@@ -19,3 +19,4 @@ build
 .supabase
 
 docs/reviews/*.md
+docs/architecture/project-map.json

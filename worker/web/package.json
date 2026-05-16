@@ -5,6 +5,7 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
+    "integrity:map": "node ../../scripts/dev-integrity-project-map.mjs",
     "integrity:review": "node ../../scripts/dev-integrity-review.mjs",
     "integrity:review:evidence": "node ../../scripts/dev-integrity-review.mjs --write-evidence",
     "integrity:review:staged": "node ../../scripts/dev-integrity-review.mjs --staged",
