@@ -20,3 +20,7 @@ build
 
 docs/reviews/*.md
 docs/architecture/project-map.json
+
+# Dev Integrity generated architecture outputs
+docs/architecture/project-map.json
+docs/architecture/project-map-summary.md

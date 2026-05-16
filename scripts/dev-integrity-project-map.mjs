@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
 const outputPath = path.join(repoRoot, "docs", "architecture", "project-map.json");
+const summaryOutputPath = path.join(repoRoot, "docs", "architecture", "project-map-summary.md");
 const schemaVersion = "0.1";
 
 const ignoredPathParts = new Set([
@@ -28,7 +29,7 @@ const ignoredPathParts = new Set([
   "output",
 ]);
 
-const ignoredExactFiles = new Set(["package-lock.json", "project-map.json"]);
+const ignoredExactFiles = new Set(["package-lock.json", "project-map.json", "project-map-summary.md"]);
 const ignoredPrefixes = ["docs/reviews/"];
 const binaryExtensions = new Set([
   ".avif",
@@ -1045,6 +1046,242 @@ function calculateArchitectureConfidence(riskContext) {
   return Math.max(0, confidence);
 }
 
+function formatList(values) {
+  return values?.length ? values.join(", ") : "none";
+}
+
+function routeLabel(node) {
+  return node.metadata?.route || "n/a";
+}
+
+function methodLabel(node) {
+  return node.metadata?.methods?.length ? node.metadata.methods.join(", ") : "n/a";
+}
+
+function nodeByPath(projectMap, nodePath) {
+  return projectMap.nodes.find((node) => node.path === nodePath);
+}
+
+function appendLimitedSection(lines, title, rows, limit, formatter) {
+  lines.push(`### ${title}`, "");
+
+  if (!rows.length) {
+    lines.push("- none", "");
+    return;
+  }
+
+  for (const row of rows.slice(0, limit)) {
+    lines.push(formatter(row));
+  }
+
+  if (rows.length > limit) {
+    lines.push(`- ${rows.length - limit} more not shown.`);
+  }
+
+  lines.push("");
+}
+
+function groupBy(values, keyFn) {
+  const grouped = new Map();
+
+  for (const value of values) {
+    const key = keyFn(value);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(value);
+  }
+
+  return grouped;
+}
+
+function buildSuggestedChecks(projectMap) {
+  const checks = [];
+  const riskTags = projectMap.risk_summary.risk_tags || {};
+  const unknownTypes = new Set(projectMap.unknowns.map((unknown) => unknown.type));
+  const clientPublicSecretWarnings = projectMap.env_vars.some(
+    (envVar) => envVar.exposure === "client_public" && envVar.secret_like
+  );
+
+  if (riskTags["tenant-boundary"]) {
+    checks.push("Run two-tenant runtime proof.");
+  }
+  if (unknownTypes.has("unknown_webhook_trust")) {
+    checks.push("Verify provider signature validation.");
+  }
+  if (unknownTypes.has("unknown_payment_state")) {
+    checks.push("Run payment/webhook review.");
+  }
+  if (clientPublicSecretWarnings) {
+    checks.push("Fix env exposure for secret-like NEXT_PUBLIC variables.");
+  }
+  if (projectMap.summary.service_role_paths_count > 0) {
+    checks.push("Verify service-role usage is server-only and guarded by tenant authorization where needed.");
+  }
+  if (projectMap.summary.architecture_confidence < 70) {
+    checks.push("Review unknowns before production deploy.");
+  }
+
+  return checks;
+}
+
+function buildMarkdownSummary(projectMap) {
+  const lines = [];
+  const routeNodes = projectMap.nodes.filter((node) =>
+    ["page_route", "api_route", "webhook_route"].includes(node.type)
+  );
+  const publicRoutes = routeNodes.filter((node) => node.trust_boundary === "public");
+  const protectedRoutes = routeNodes.filter((node) =>
+    ["authenticated", "admin", "tenant_admin"].includes(node.trust_boundary)
+  );
+  const apiRoutes = routeNodes.filter((node) => node.type === "api_route");
+  const webhookRoutes = routeNodes.filter((node) => node.type === "webhook_route");
+  const topRiskTags = Object.entries(projectMap.risk_summary.risk_tags || {})
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 12);
+  const highRiskNodes = projectMap.risk_summary.high_risk_nodes
+    .map((nodePath) => nodeByPath(projectMap, nodePath))
+    .filter(Boolean)
+    .slice(0, 25);
+  const envGroups = groupBy(projectMap.env_vars, (envVar) => envVar.exposure || "unknown");
+  const unknownGroups = groupBy(projectMap.unknowns, (unknown) => unknown.type);
+  const unknownOrder = [
+    "runtime_proof_missing",
+    "unknown_auth_boundary",
+    "unknown_webhook_trust",
+    "unknown_payment_state",
+    "unknown_env_exposure",
+    "unknown_file_upload_access",
+    "unclassified_route",
+  ];
+  const suggestedChecks = buildSuggestedChecks(projectMap);
+
+  lines.push("# Architecture Project Map Summary", "");
+  lines.push("## Project", "");
+  lines.push(`- Project: ${projectMap.project}`);
+  lines.push(`- Stack: ${projectMap.stack}`);
+  lines.push(`- Commit SHA: ${projectMap.commit_sha}`);
+  lines.push(`- Created at: ${projectMap.created_at}`);
+  lines.push(`- Architecture confidence: ${projectMap.summary.architecture_confidence}`);
+  lines.push(`- Total files scanned: ${projectMap.summary.total_files}`);
+  lines.push(`- Routes count: ${projectMap.summary.routes_count}`);
+  lines.push(`- API routes count: ${projectMap.summary.api_routes_count}`);
+  lines.push(`- Webhook routes count: ${projectMap.summary.webhook_routes_count}`);
+  lines.push(`- External services count: ${projectMap.summary.external_services_count}`);
+  lines.push(`- Env vars count: ${projectMap.summary.env_vars_count}`);
+  lines.push(`- High-risk nodes count: ${projectMap.summary.high_risk_nodes_count}`);
+  lines.push(`- Unknowns count: ${projectMap.unknowns.length}`, "");
+
+  lines.push("## Top Risk Summary", "");
+  lines.push(`- Critical count: ${projectMap.risk_summary.critical}`);
+  lines.push(`- High count: ${projectMap.risk_summary.high}`);
+  lines.push(`- Medium count: ${projectMap.risk_summary.medium}`);
+  lines.push(`- Low count: ${projectMap.risk_summary.low}`);
+  lines.push("- Top risk tags by count:");
+  if (topRiskTags.length) {
+    for (const [tag, count] of topRiskTags) {
+      lines.push(`  - ${tag}: ${count}`);
+    }
+  } else {
+    lines.push("  - none");
+  }
+  lines.push("");
+
+  lines.push("## High-Risk Nodes", "");
+  if (highRiskNodes.length) {
+    for (const node of highRiskNodes) {
+      lines.push(`- ${node.path}`);
+      lines.push(`  - classification: ${node.classification}`);
+      lines.push(`  - trust boundary: ${node.trust_boundary}`);
+      lines.push(`  - risk tags: ${formatList(node.risk_tags)}`);
+      lines.push(`  - confidence: ${node.confidence}`);
+      lines.push(`  - status: ${node.status}`);
+    }
+  } else {
+    lines.push("- none");
+  }
+  lines.push("");
+
+  lines.push("## Routes", "");
+  appendLimitedSection(lines, "Public Routes", publicRoutes, 50, (node) => (
+    `- ${node.path} | route: ${routeLabel(node)} | classification: ${node.classification} | risk tags: ${formatList(node.risk_tags)}`
+  ));
+  appendLimitedSection(lines, "Protected/Admin Routes", protectedRoutes, 50, (node) => (
+    `- ${node.path} | route: ${routeLabel(node)} | classification: ${node.classification} | trust boundary: ${node.trust_boundary} | risk tags: ${formatList(node.risk_tags)}`
+  ));
+  appendLimitedSection(lines, "API Routes", apiRoutes, 50, (node) => (
+    `- ${node.path} | route: ${routeLabel(node)} | methods: ${methodLabel(node)} | classification: ${node.classification} | trust boundary: ${node.trust_boundary} | risk tags: ${formatList(node.risk_tags)}`
+  ));
+  appendLimitedSection(lines, "Webhook Routes", webhookRoutes, 50, (node) => (
+    `- ${node.path} | route: ${routeLabel(node)} | methods: ${methodLabel(node)} | external services: ${formatList(node.external_services)} | risk tags: ${formatList(node.risk_tags)} | status: ${node.status}`
+  ));
+
+  lines.push("## External Services", "");
+  if (projectMap.external_services.length) {
+    for (const service of projectMap.external_services) {
+      lines.push(`- ${service.provider}`);
+      lines.push(`  - purpose: ${service.purpose}`);
+      lines.push(`  - files count: ${service.files.length}`);
+      lines.push(`  - routes count: ${service.routes.length}`);
+      lines.push(`  - webhooks count: ${service.webhooks.length}`);
+      lines.push(`  - env vars: ${formatList(service.env_vars)}`);
+      lines.push(`  - risk tags: ${formatList(service.risk_tags)}`);
+      lines.push(`  - failure impact: ${service.failure_impact}`);
+    }
+  } else {
+    lines.push("- none");
+  }
+  lines.push("");
+
+  lines.push("## Env Vars", "");
+  for (const exposure of ["client_public", "server_only", "unknown"]) {
+    lines.push(`### ${exposure}`, "");
+    const envVars = envGroups.get(exposure) || [];
+    if (!envVars.length) {
+      lines.push("- none", "");
+      continue;
+    }
+    for (const envVar of envVars) {
+      lines.push(`- ${envVar.name}`);
+      lines.push(`  - exposure: ${envVar.exposure}`);
+      lines.push(`  - secret_like: ${envVar.secret_like}`);
+      lines.push(`  - services: ${formatList(envVar.services)}`);
+      lines.push(`  - warnings: ${formatList(envVar.warnings)}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("## Unknowns / Needs Review", "");
+  for (const type of unknownOrder) {
+    const unknowns = unknownGroups.get(type) || [];
+    if (!unknowns.length) continue;
+
+    lines.push(`### ${type}`, "");
+    for (const unknown of unknowns) {
+      lines.push(`- ${unknown.message}`);
+      lines.push(`  - related node count: ${unknown.related_nodes.length}`);
+      lines.push(`  - suggested action: ${unknown.suggested_action}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("## Suggested Next Checks", "");
+  if (suggestedChecks.length) {
+    for (const check of suggestedChecks) {
+      lines.push(`- ${check}`);
+    }
+  } else {
+    lines.push("- No additional checks suggested by current map heuristics.");
+  }
+  lines.push("");
+
+  lines.push("## Output", "");
+  lines.push("Full JSON map:");
+  lines.push("docs/architecture/project-map.json", "");
+  lines.push("Generated by:");
+  lines.push("npm run integrity:map", "");
+
+  return `${lines.join("\n")}\n`;
+}
+
 function main() {
   const { config, found: configFound } = loadIntegrityConfig();
   const project = typeof config?.project === "string" && config.project.trim() ? config.project : "unknown";
@@ -1131,8 +1368,10 @@ function main() {
 
   mkdirSync(path.dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(projectMap, null, 2)}\n`);
+  writeFileSync(summaryOutputPath, buildMarkdownSummary(projectMap));
 
   const relativeOutputPath = path.relative(repoRoot, outputPath);
+  const relativeSummaryOutputPath = path.relative(repoRoot, summaryOutputPath);
   console.log("AuthToolkit Dev Integrity Project Map");
   console.log(`Project: ${project}`);
   console.log(`Stack: ${stack}`);
@@ -1146,7 +1385,8 @@ function main() {
   console.log(`High-risk nodes: ${summary.high_risk_nodes_count}`);
   console.log(`Unknowns: ${projectMap.unknowns.length}`);
   console.log(`Architecture confidence: ${summary.architecture_confidence}`);
-  console.log(`Output: ${relativeOutputPath}`);
+  console.log(`JSON output: ${relativeOutputPath}`);
+  console.log(`Summary output: ${relativeSummaryOutputPath}`);
 }
 
 main();
