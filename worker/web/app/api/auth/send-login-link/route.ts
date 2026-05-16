@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Resend } from "resend";
 import { getPlatformAccessForUserId } from "@/lib/platform/access";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { getResendClient } from "@/lib/resend";
 
 async function findAuthUserByEmail(supabase: SupabaseClient, email: string) {
   let page = 1;
@@ -128,6 +126,7 @@ export async function POST(req: Request) {
 
     const fromEmail =
       process.env.RESEND_FROM_EMAIL || "SaanaOS <alerts@mail.authtoolkit.com>";
+    const resend = getResendClient();
 
     const { error: emailError } = await resend.emails.send({
       from: fromEmail,

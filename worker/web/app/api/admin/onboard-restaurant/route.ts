@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { Resend } from "resend";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { lookupIpLocation } from "@/lib/platform/ip-geo";
 import { upsertIdentitySignalsForRestaurant } from "@/lib/platform/risk-links";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { getResendClient } from "@/lib/resend";
 
 function slugify(input: string): string {
   return input
@@ -606,6 +604,7 @@ export async function POST(req: Request) {
     // 11) Send branded activation email
     const fromEmail =
       process.env.RESEND_FROM_EMAIL || "SaanaOS <alerts@mail.authtoolkit.com>";
+    const resend = getResendClient();
 
     const { error: emailError } = await resend.emails.send({
       from: fromEmail,

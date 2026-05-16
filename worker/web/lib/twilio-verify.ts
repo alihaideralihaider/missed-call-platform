@@ -1,12 +1,16 @@
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const verifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
+function getTwilioVerifyConfig() {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+  const verifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
 
-if (!accountSid || !authToken || !verifyServiceSid) {
-  console.warn("Twilio Verify env vars are missing.");
+  if (!accountSid || !authToken || !verifyServiceSid) {
+    throw new Error("Twilio Verify is not configured.");
+  }
+
+  return { accountSid, authToken, verifyServiceSid };
 }
 
-function getTwilioAuthHeader() {
+function getTwilioAuthHeader(accountSid: string, authToken: string) {
   if (!accountSid || !authToken) {
     throw new Error("Twilio Verify is not configured.");
   }
@@ -15,9 +19,7 @@ function getTwilioAuthHeader() {
 }
 
 export async function sendPhoneVerification(to: string) {
-  if (!verifyServiceSid) {
-    throw new Error("Twilio Verify is not configured.");
-  }
+  const { accountSid, authToken, verifyServiceSid } = getTwilioVerifyConfig();
 
   const body = new URLSearchParams({
     To: to,
@@ -29,7 +31,7 @@ export async function sendPhoneVerification(to: string) {
     {
       method: "POST",
       headers: {
-        Authorization: getTwilioAuthHeader(),
+        Authorization: getTwilioAuthHeader(accountSid, authToken),
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: body.toString(),
@@ -45,9 +47,7 @@ export async function sendPhoneVerification(to: string) {
 }
 
 export async function checkPhoneVerification(to: string, code: string) {
-  if (!verifyServiceSid) {
-    throw new Error("Twilio Verify is not configured.");
-  }
+  const { accountSid, authToken, verifyServiceSid } = getTwilioVerifyConfig();
 
   const body = new URLSearchParams({
     To: to,
@@ -59,7 +59,7 @@ export async function checkPhoneVerification(to: string, code: string) {
     {
       method: "POST",
       headers: {
-        Authorization: getTwilioAuthHeader(),
+        Authorization: getTwilioAuthHeader(accountSid, authToken),
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: body.toString(),
