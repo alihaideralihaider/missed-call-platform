@@ -975,6 +975,27 @@ function runPaymentRunner(files, diffAddedLines) {
   return findings;
 }
 
+function isTwilioVerifyOtpTransportOnly(file, content) {
+  const hasVerifyPath = /twilio-verify/i.test(file);
+  const usesTwilioVerifyApi = /verify\.twilio\.com/i.test(content);
+  const usesVerifyEndpoint = /VerificationCheck|Verifications/i.test(content);
+  const sendsSmsChannel =
+    /Channel\s*:\s*["']sms["']/i.test(content) ||
+    /Channel\s*=\s*["']sms["']/i.test(content);
+  const definesCustomerMessageCopy =
+    /\bBody\s*:/.test(content) ||
+    /\b(messageBody|smsBody|bodyText|template)\b/i.test(content) ||
+    /(marketing copy|missed-call copy|missed_call copy)/i.test(content);
+
+  return (
+    hasVerifyPath &&
+    usesTwilioVerifyApi &&
+    usesVerifyEndpoint &&
+    sendsSmsChannel &&
+    !definesCustomerMessageCopy
+  );
+}
+
 function runSmsComplianceRunner(files, diffAddedLines) {
   const findings = [];
 
@@ -985,7 +1006,31 @@ function runSmsComplianceRunner(files, diffAddedLines) {
     const isMessagingFile = /(twilio|sms|consent|ivr|messaging|messages?)/i.test(file);
     if (!isMessagingFile) continue;
 
-    if (/(send|message|sms|twilio)/i.test(content) && !/(STOP|HELP)/.test(content)) {
+    const isOtpTransportOnly = isTwilioVerifyOtpTransportOnly(file, content);
+
+    // Twilio Verify OTP transport helpers do not necessarily contain
+    // app-authored STOP/HELP copy, so transport-only helper changes should not
+    // be treated as customer-facing SMS copy changes.
+    if (isOtpTransportOnly) {
+      findings.push(
+        createFinding({
+          runner: "sms-compliance",
+          severity: "Low",
+          file,
+          scope: "file-level",
+          message:
+            "Twilio Verify OTP helper changed. Confirm OTP/transactional messaging expectations and provider configuration.",
+          suggestedAction:
+            "Verify Twilio Verify service configuration and confirm this helper does not define app-authored customer SMS copy.",
+        })
+      );
+    }
+
+    if (
+      !isOtpTransportOnly &&
+      /(send|message|sms|twilio)/i.test(content) &&
+      !/(STOP|HELP)/.test(content)
+    ) {
       findings.push(
         createFinding({
           runner: "sms-compliance",
