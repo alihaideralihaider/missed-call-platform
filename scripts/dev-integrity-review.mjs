@@ -421,8 +421,126 @@ function getConfidence(changedFiles) {
     adjustments.push("-0.10 more than 10 files changed");
   }
 
-  score = Math.max(0.1, Math.min(1, score));
+  score = Math.min(1, score);
   return { score, adjustments };
+}
+
+// Future: make architecture confidence deductions configurable in authtoolkit.integrity.json.
+const architectureConfidenceRules = [
+  {
+    key: "risk:tenant-boundary",
+    label: "architecture risk tag tenant-boundary",
+    amount: 0.15,
+    matches: (context) => context.risk_tags.includes("tenant-boundary"),
+  },
+  {
+    key: "risk:service-role",
+    label: "architecture risk tag service-role",
+    amount: 0.15,
+    matches: (context) => context.risk_tags.includes("service-role"),
+  },
+  {
+    key: "risk:customer-data",
+    label: "architecture risk tag customer-data",
+    amount: 0.1,
+    matches: (context) => context.risk_tags.includes("customer-data"),
+  },
+  {
+    key: "risk:payment",
+    label: "architecture risk tag payment",
+    amount: 0.15,
+    matches: (context) => context.risk_tags.includes("payment"),
+  },
+  {
+    key: "risk:webhook",
+    label: "architecture risk tag webhook",
+    amount: 0.1,
+    matches: (context) => context.risk_tags.includes("webhook"),
+  },
+  {
+    key: "risk:sms-consent",
+    label: "architecture risk tag sms-consent",
+    amount: 0.1,
+    matches: (context) => context.risk_tags.includes("sms-consent"),
+  },
+  {
+    key: "risk:secrets",
+    label: "architecture risk tag secrets",
+    amount: 0.15,
+    matches: (context) => context.risk_tags.includes("secrets"),
+  },
+  {
+    key: "risk:session-cookie",
+    label: "architecture risk tag session-cookie",
+    amount: 0.1,
+    matches: (context) => context.risk_tags.includes("session-cookie"),
+  },
+  {
+    key: "risk:file-upload",
+    label: "architecture risk tag file-upload",
+    amount: 0.1,
+    matches: (context) => context.risk_tags.includes("file-upload"),
+  },
+  {
+    key: "trust:tenant_admin",
+    label: "architecture trust boundary tenant_admin",
+    amount: 0.1,
+    matches: (context) => context.trust_boundary === "tenant_admin",
+  },
+  {
+    key: "trust:service_role",
+    label: "architecture trust boundary service_role",
+    amount: 0.15,
+    matches: (context) => context.trust_boundary === "service_role",
+  },
+  {
+    key: "status:needs_review",
+    label: "architecture node status needs_review",
+    amount: 0.15,
+    matches: (context) => context.status === "needs_review",
+  },
+  {
+    key: "status:partial",
+    label: "architecture node status partial",
+    amount: 0.05,
+    matches: (context) => context.status === "partial",
+  },
+  {
+    key: "confidence:below_70",
+    label: "architecture node confidence below 70",
+    amount: 0.1,
+    matches: (context) => Number.isFinite(context.confidence) && context.confidence < 70,
+  },
+];
+
+function getArchitectureConfidenceAdjustments(contexts) {
+  if (!projectMapUsed || !contexts.length) return [];
+
+  // Dev Integrity tooling may contain scanner keywords that describe risks; those
+  // keywords should not be treated as app runtime exposure.
+  const runtimeContexts = contexts.filter((context) => !isDevIntegrityToolingOrDocs(context.file));
+  if (!runtimeContexts.length) return [];
+
+  const applied = new Set();
+  const adjustments = [];
+
+  for (const rule of architectureConfidenceRules) {
+    if (applied.has(rule.key)) continue;
+
+    if (runtimeContexts.some(rule.matches)) {
+      applied.add(rule.key);
+      adjustments.push(`-${rule.amount.toFixed(2)} ${rule.label}`);
+    }
+  }
+
+  return adjustments;
+}
+
+function getAdjustmentTotal(adjustments) {
+  return adjustments.reduce((total, adjustment) => {
+    const match = adjustment.match(/^-([0-9.]+)/);
+    return total + (match ? Number(match[1]) : 0);
+  }, 0);
 }
 
 function interpretConfidence(score) {
@@ -589,6 +707,18 @@ function getArchitectureSkillsForContext(context) {
 
 function architectureReasonForContext(context) {
   return `Project map marks this file as ${context.classification} with ${context.risk_tags.join(", ") || "no"} risk tags.`;
+}
+
+function isDevIntegrityToolingOrDocs(file) {
+  return (
+    /^scripts\/dev-integrity-/i.test(file) ||
+    /^docs\/products\//i.test(file) ||
+    /^docs\/agents\//i.test(file) ||
+    /^docs\/reviews\//i.test(file) ||
+    file === "docs/architecture/project-map.json" ||
+    file === "docs/architecture/project-map-summary.md" ||
+    file === "authtoolkit.integrity.json"
+  );
 }
 
 function readChangedFile(file) {
@@ -1078,9 +1208,13 @@ const blockingFindings = deterministicFindings.filter((finding) =>
   blockOn.includes(finding.severity)
 );
 const { score, adjustments } = getConfidence(changedFiles);
-const confidence = Number(score.toFixed(2));
+const architectureConfidenceAdjustments = getArchitectureConfidenceAdjustments(
+  changedFileArchitectureContext
+);
+const architectureConfidenceDeduction = getAdjustmentTotal(architectureConfidenceAdjustments);
+const confidence = Number(Math.max(0.1, Math.min(1, score - architectureConfidenceDeduction)).toFixed(2));
 const interpretation = interpretConfidence(confidence);
-const riskyDetected = adjustments.length > 0;
+const riskyDetected = adjustments.length > 0 || architectureConfidenceAdjustments.length > 0;
 const timestamp = new Date().toISOString();
 const date = timestamp.slice(0, 10);
 const evidencePath = path.join(
@@ -1140,8 +1274,10 @@ ${routingReasons.length ? routingReasons.join("\n") : "- None"}
 
 - Score: ${confidence.toFixed(2)}
 - Interpretation: ${interpretation}
-- Adjustments:
+- Path/config adjustments:
 ${adjustments.length ? adjustments.map((item) => `  - ${item}`).join("\n") : "  - None"}
+- Architecture confidence adjustments:
+${architectureConfidenceAdjustments.length ? architectureConfidenceAdjustments.map((item) => `  - ${item}`).join("\n") : "  - None"}
 
 ## Suggested Review Order
 
@@ -1155,7 +1291,6 @@ Notes:
 
 - Diff-line findings are likely introduced or touched by this change.
 - File-level findings may require review because the changed file belongs to a risky area.
-- TODO: future step: use project map risk tags to adjust confidence.
 
 ## Notes
 
@@ -1202,6 +1337,7 @@ const jsonSummary = {
   confidenceScore: confidence,
   confidenceInterpretation: interpretation,
   confidenceAdjustments: adjustments,
+  architectureConfidenceAdjustments,
   deterministicFindings,
   suggestedReviewOrder,
   exitReason: exitReasons.length ? exitReasons.join("; ") : "passed",
