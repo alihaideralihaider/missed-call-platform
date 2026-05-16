@@ -23,6 +23,8 @@ const defaultReviewsToSkills = {
   plan: "saana-plan",
   guard: "saana-guard",
 };
+const projectMapRelativePath = "docs/architecture/project-map.json";
+const projectMapAbsolutePath = path.join(repoRoot, projectMapRelativePath);
 
 function loadIntegrityConfig() {
   const configPath = path.join(repoRoot, "authtoolkit.integrity.json");
@@ -85,6 +87,44 @@ const configuredDefaultReviewSkills =
 const defaultReviewSkills = configuredDefaultReviewSkills.length
   ? configuredDefaultReviewSkills
   : ["saana-plan", "saana-guard"];
+
+function loadProjectMap() {
+  const stat = statSync(projectMapAbsolutePath, { throwIfNoEntry: false });
+
+  if (!stat?.isFile()) {
+    return {
+      projectMap: null,
+      projectMapUsed: false,
+      projectMapPath: null,
+    };
+  }
+
+  try {
+    const projectMap = JSON.parse(readFileSync(projectMapAbsolutePath, "utf8"));
+    return {
+      projectMap,
+      projectMapUsed: true,
+      projectMapPath: projectMapRelativePath,
+    };
+  } catch (error) {
+    console.warn(
+      `Warning: failed to read ${projectMapRelativePath}; continuing without architecture context. ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return {
+      projectMap: null,
+      projectMapUsed: false,
+      projectMapPath: null,
+    };
+  }
+}
+
+const {
+  projectMap,
+  projectMapUsed,
+  projectMapPath,
+} = loadProjectMap();
 
 function runGit(args) {
   return execFileSync("git", args, {
@@ -445,6 +485,110 @@ function parseDiffAddedLines(diffOutput) {
 
 function hasSkill(selectedSkills, skill) {
   return selectedSkills.some((entry) => entry.skill === skill);
+}
+
+function getProjectMapNodeByPath(file) {
+  if (!projectMapUsed || !Array.isArray(projectMap?.nodes)) return null;
+
+  return projectMap.nodes.find((node) => node?.path === file) || null;
+}
+
+function getArchitectureContext(file) {
+  const node = getProjectMapNodeByPath(file);
+  if (!node) return null;
+
+  return {
+    file,
+    classification: node.classification || "unknown",
+    trust_boundary: node.trust_boundary || "unknown",
+    access_level: node.access_level || "unknown",
+    risk_tags: Array.isArray(node.risk_tags) ? node.risk_tags : [],
+    review_packs: Array.isArray(node.review_packs) ? node.review_packs : [],
+    external_services: Array.isArray(node.external_services) ? node.external_services : [],
+    env_vars: Array.isArray(node.env_vars) ? node.env_vars : [],
+    confidence: Number.isFinite(Number(node.confidence)) ? Number(node.confidence) : null,
+    status: node.status || "unknown",
+  };
+}
+
+function mergeSelectedSkill(selectedSkills, skill, reason, files) {
+  const matchedFiles = unique(files);
+  if (!matchedFiles.length) return;
+
+  const existing = selectedSkills.find((entry) => entry.skill === skill);
+
+  if (existing) {
+    if (!existing.reason.includes(reason)) {
+      existing.reason = `${existing.reason} ${reason}`;
+    }
+    existing.files = unique([...existing.files, ...matchedFiles]);
+    return;
+  }
+
+  selectedSkills.push({
+    skill,
+    reason,
+    files: matchedFiles,
+  });
+}
+
+function isRouteOrPageArchitectureContext(context) {
+  const node = getProjectMapNodeByPath(context.file);
+  return ["page_route", "api_route", "webhook_route"].includes(node?.type);
+}
+
+function getArchitectureSkillsForContext(context) {
+  const skills = new Set();
+  const riskTags = new Set(context.risk_tags);
+  const isPaymentRelated =
+    riskTags.has("payment") ||
+    context.classification === "payment_route" ||
+    context.external_services.includes("stripe");
+
+  for (const tag of riskTags) {
+    if (
+      [
+        "auth",
+        "tenant-boundary",
+        "api-exposure",
+        "secrets",
+        "service-role",
+        "customer-data",
+        "session-cookie",
+        "file-upload",
+        "admin",
+      ].includes(tag)
+    ) {
+      skills.add("saana-security-review");
+    }
+
+    if (tag === "payment") {
+      skills.add("saana-payment-review");
+    }
+
+    if (tag === "webhook") {
+      skills.add("saana-security-review");
+      if (isPaymentRelated) skills.add("saana-payment-review");
+    }
+
+    if (tag === "sms-consent") {
+      skills.add("saana-sms-compliance-review");
+    }
+
+    if (tag === "public" && isRouteOrPageArchitectureContext(context)) {
+      skills.add("saana-browser-qa");
+    }
+
+    if (tag === "production-deploy") {
+      skills.add("saana-post-deploy-canary");
+    }
+  }
+
+  return [...skills].sort();
+}
+
+function architectureReasonForContext(context) {
+  return `Project map marks this file as ${context.classification} with ${context.risk_tags.join(", ") || "no"} risk tags.`;
 }
 
 function readChangedFile(file) {
@@ -880,6 +1024,9 @@ const changedFiles = unique([
   ...expandChangedPaths(statusPaths),
   ...diffNameOutput.split("\n").filter(Boolean),
 ]);
+const changedFileArchitectureContext = changedFiles
+  .map(getArchitectureContext)
+  .filter(Boolean);
 
 const selected = [];
 for (const rule of skillRules) {
@@ -899,6 +1046,15 @@ for (const rule of skillRules) {
         files: matchedFiles,
       });
     }
+  }
+}
+
+for (const context of changedFileArchitectureContext) {
+  const architectureSkills = getArchitectureSkillsForContext(context);
+  const reason = architectureReasonForContext(context);
+
+  for (const skill of architectureSkills) {
+    mergeSelectedSkill(selected, skill, reason, [context.file]);
   }
 }
 
@@ -948,10 +1104,29 @@ Timestamp: ${timestamp}
 - Stack: ${stack || "unknown"}
 - Config file used: ${configFileUsed ? "true" : "false"}
 - Config path: ${integrityConfigPath || "none"}
+- Project map used: ${projectMapUsed ? "true" : "false"}
+- Project map path: ${projectMapPath || "none"}
+- Architecture confidence: ${projectMap?.summary?.architecture_confidence ?? "unknown"}
+- Architecture snapshot ID: ${projectMap?.snapshot_id ?? "unknown"}
 
 ## Changed Files
 
 ${markdownList(changedFiles)}
+
+## Changed File Architecture Context
+
+${changedFileArchitectureContext.length ? changedFileArchitectureContext.map((context) => {
+  return `- ${context.file}
+  - classification: ${context.classification}
+  - trust boundary: ${context.trust_boundary}
+  - access level: ${context.access_level}
+  - risk tags: ${context.risk_tags.join(", ") || "none"}
+  - review packs: ${context.review_packs.join(", ") || "none"}
+  - external services: ${context.external_services.join(", ") || "none"}
+  - env vars: ${context.env_vars.join(", ") || "none"}
+  - confidence: ${context.confidence ?? "unknown"}
+  - status: ${context.status}`;
+}).join("\n") : "- None"}
 
 ## Selected Skills
 
@@ -980,6 +1155,7 @@ Notes:
 
 - Diff-line findings are likely introduced or touched by this change.
 - File-level findings may require review because the changed file belongs to a risky area.
+- TODO: future step: use project map risk tags to adjust confidence.
 
 ## Notes
 
@@ -1009,7 +1185,14 @@ const jsonSummary = {
   stack,
   configFileUsed,
   ...(integrityConfigPath ? { configPath: integrityConfigPath } : {}),
+  projectMapUsed,
+  ...(projectMapPath ? { projectMapPath } : {}),
+  ...(projectMap?.summary?.architecture_confidence !== undefined
+    ? { architectureConfidence: projectMap.summary.architecture_confidence }
+    : {}),
+  ...(projectMap?.snapshot_id ? { architectureSnapshotId: projectMap.snapshot_id } : {}),
   changedFiles,
+  changedFileArchitectureContext,
   selectedSkills: selected.map((entry) => entry.skill),
   routingReasons: selected.map((entry) => ({
     skill: entry.skill,
