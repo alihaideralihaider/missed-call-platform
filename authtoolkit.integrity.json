@@ -17,32 +17,46 @@
   ],
   "routing": [
     {
-      "match": ["auth", "login", "admin", "api", "supabase", "webhooks"],
-      "review": "security"
+      "review": "security",
+      "skill": "saana-security-review",
+      "reason": "Auth, login, admin, API, Supabase, or webhook paths changed.",
+      "match": ["auth", "login", "admin", "api", "supabase", "webhooks"]
     },
     {
-      "match": ["admin/restaurants/[slug]"],
-      "review": "tenant-boundary"
+      "review": "tenant-boundary",
+      "skill": "saana-security-review",
+      "reason": "Tenant-boundary sensitive admin restaurant slug route changed.",
+      "match": ["admin/restaurants/[slug]", "app/api/admin/restaurants/[slug]"]
     },
     {
-      "match": ["stripe", "billing", "checkout", "payment", "pricing"],
-      "review": "payments"
+      "review": "payments",
+      "skill": "saana-payment-review",
+      "reason": "Stripe, billing, checkout, payment, or pricing paths changed.",
+      "match": ["stripe", "billing", "checkout", "payment", "payments", "pricing"]
     },
     {
-      "match": ["twilio", "sms", "consent", "ivr", "messaging"],
-      "review": "sms-compliance"
+      "review": "sms-compliance",
+      "skill": "saana-sms-compliance-review",
+      "reason": "Twilio, SMS, consent, IVR, or messaging paths changed.",
+      "match": ["twilio", "sms", "consent", "ivr", "messaging", "messages"]
     },
     {
-      "match": ["app/r", "hub", "cart", "menu", "orders", "kitchen", "admin"],
-      "review": "restaurant-ux"
+      "review": "restaurant-ux",
+      "skill": "saana-restaurant-ux-review",
+      "reason": "Restaurant, hub, cart, menu, orders, kitchen, or admin UI paths changed.",
+      "match": ["app/r", "hub", "cart", "menu", "orders", "kitchen", "app/admin", "components/admin"]
     },
     {
-      "match": ["app", "pages", "routes", "forms", "tsx", "jsx"],
-      "review": "browser-qa"
+      "review": "browser-qa",
+      "skill": "saana-browser-qa",
+      "reason": "UI, route, form, or page files changed.",
+      "match": ["app", "pages", "routes", "forms", ".tsx", ".jsx"]
     },
     {
-      "match": ["wrangler", "cloudflare", "env", "deploy"],
-      "review": "deploy-canary"
+      "review": "deploy-canary",
+      "skill": "saana-post-deploy-canary",
+      "reason": "Wrangler, Cloudflare, environment, or deploy paths changed.",
+      "match": ["wrangler", "cloudflare", "env", "deploy", "deployment", ".env"]
     }
   ],
   "confidence": {

@@ -170,13 +170,13 @@ const defaultSkillReasons = {
   "saana-guard": "All changes require guardrail review before commit/deploy.",
 };
 
-const skillRules = [
-  ...defaultReviewSkills.map((skill) => ({
-    skill,
-    reason: defaultSkillReasons[skill] || "Default review from integrity config.",
-    matches: () => true,
-  })),
-  // TODO: Move these hardcoded SaanaOS routing rules into authtoolkit.integrity.json.
+const defaultReviewRules = defaultReviewSkills.map((skill) => ({
+  skill,
+  reason: defaultSkillReasons[skill] || "Default review from integrity config.",
+  matches: () => true,
+}));
+
+const builtInProjectSkillRules = [
   {
     skill: "saana-security-review",
     reason: "Auth, login, admin, API, Supabase, or webhook paths changed.",
@@ -233,6 +233,51 @@ const skillRules = [
   },
 ];
 
+function getConfiguredRoutingRules() {
+  if (!Array.isArray(integrityConfig?.routing) || integrityConfig.routing.length === 0) {
+    return null;
+  }
+
+  const rules = integrityConfig.routing
+    .map((route) => {
+      const skill = typeof route?.skill === "string" ? route.skill.trim() : "";
+      const reason =
+        typeof route?.reason === "string"
+          ? route.reason.trim()
+          : "Configured path routing rule matched.";
+      const matchTerms = Array.isArray(route?.match)
+        ? route.match.map((term) => String(term)).filter(Boolean)
+        : [];
+
+      if (!skill || matchTerms.length === 0) return null;
+
+      return {
+        skill,
+        reason,
+        matches: (file) => matchTerms.some((term) => matchTerm(file, term)),
+      };
+    })
+    .filter(Boolean);
+
+  if (!rules.length) return null;
+  return rules;
+}
+
+function getProjectSkillRules() {
+  const configuredRoutingRules = getConfiguredRoutingRules();
+
+  if (configuredRoutingRules) {
+    return configuredRoutingRules;
+  }
+
+  console.warn(
+    "Warning: config routing missing or invalid; using built-in SaanaOS routing defaults."
+  );
+  return builtInProjectSkillRules;
+}
+
+const skillRules = [...defaultReviewRules, ...getProjectSkillRules()];
+
 const confidenceRules = [
   {
     label: "auth/session/tenant/security files",
@@ -268,7 +313,21 @@ const confidenceRules = [
 function matchTerm(file, term) {
   const normalizedFile = file.toLowerCase();
   const normalizedTerm = String(term || "").toLowerCase();
-  return normalizedTerm && normalizedFile.includes(normalizedTerm);
+
+  if (!normalizedTerm) return false;
+
+  if (
+    normalizedTerm.includes("/") ||
+    normalizedTerm.startsWith(".") ||
+    normalizedTerm.includes("[")
+  ) {
+    return normalizedFile.includes(normalizedTerm);
+  }
+
+  const escapedTerm = normalizedTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[\\/._-])${escapedTerm}($|[\\/._-])`).test(
+    normalizedFile
+  );
 }
 
 function getConfiguredConfidenceRules() {
@@ -798,6 +857,7 @@ function formatFinding(finding) {
 function runnerScanFiles(files) {
   return files.filter(
     (file) =>
+      file !== "authtoolkit.integrity.json" &&
       file !== "scripts/dev-integrity-review.mjs" &&
       !file.startsWith("docs/reviews/")
   );
@@ -825,11 +885,20 @@ const selected = [];
 for (const rule of skillRules) {
   const matchedFiles = changedFiles.filter(rule.matches);
   if (changedFiles.length > 0 && matchedFiles.length > 0) {
-    selected.push({
-      skill: rule.skill,
-      reason: rule.reason,
-      files: matchedFiles,
-    });
+    const existing = selected.find((entry) => entry.skill === rule.skill);
+
+    if (existing) {
+      if (!existing.reason.includes(rule.reason)) {
+        existing.reason = `${existing.reason} ${rule.reason}`;
+      }
+      existing.files = unique([...existing.files, ...matchedFiles]);
+    } else {
+      selected.push({
+        skill: rule.skill,
+        reason: rule.reason,
+        files: matchedFiles,
+      });
+    }
   }
 }
 
