@@ -32,7 +32,41 @@ Map changed paths to skills:
 - `app/r`/`hub`/`cart`/`menu`/`orders`/`kitchen`/`admin` UI -> restaurant UX.
 - UI/routes/forms/pages -> browser QA.
 - `wrangler`/`cloudflare`/`env`/`deploy` -> post-deploy canary.
+- secrets/env/provider credentials -> vault integrity.
+- runtime bindings/provider targets/deploy wiring -> runtime binding review.
+- bootstrap/deploy/recovery/vault process -> vault recovery.
 - All changes -> plan + guard.
+
+## Vault Conditional Reviews
+
+Trigger `vault-integrity-review` when:
+
+- adding env vars
+- renaming env vars
+- touching auth, payment, messaging, or webhook code
+- changing CI/CD secrets
+- changing Cloudflare bindings
+- changing Supabase service-role usage
+- changing Stripe, Twilio, Resend, Meta/WhatsApp, Google, OAuth, or GitHub credentials
+
+Trigger `runtime-binding-review` when:
+
+- changing wrangler config
+- changing OpenNext or Cloudflare deployment
+- adding service bindings
+- adding queue, R2, D1, KV, bucket, or Durable Object bindings
+- changing worker names or routes
+- changing webhook URLs
+- changing provider callback targets
+
+Trigger `vault-recovery-review` when:
+
+- setting up a new machine
+- changing deployment workflow
+- changing required local envs
+- changing password manager or vault process
+- onboarding contractors or new developers
+- changing emergency access or recovery ownership
 
 ## Auto-Fix Policy
 
@@ -52,6 +86,7 @@ Agent must not auto-fix without approval:
 - Stripe live configuration.
 - Twilio/A2P campaign behavior change.
 - Secrets rotation.
+- Secret inventory, recovery process, or runtime binding changes that require owner confirmation.
 - Production deploy.
 - Broad refactor.
 - Pricing or billing policy change.

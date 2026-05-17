@@ -23,3 +23,15 @@ Role-based planning and review skills live in `docs/agents/skills/`. Use the rel
 - Database or schema changes: review migrations, rollback strategy, data backfill needs, indexes, constraints, and access policies.
 - UI or route behavior changes: run the Browser QA checklist.
 - Production deploys: run the Post Deploy Canary checklist after deployment.
+
+## Vault / Secrets Integrity
+
+Future coding agents must not introduce new secrets, env vars, bindings, OAuth credentials, webhook secrets, or deployment tokens without updating the Vault Control Room documentation.
+
+Required when changing secrets, env vars, or runtime wiring:
+
+- update the secret inventory template or project-specific inventory
+- run `vault-integrity-review`
+- run `runtime-binding-review` if Cloudflare, Supabase, service bindings, worker routes, provider callbacks, or runtime bindings changed
+- run `vault-recovery-review` if bootstrap, deploy, recovery, vault, password manager, contractor onboarding, or required local envs changed
+- never commit raw secret values
