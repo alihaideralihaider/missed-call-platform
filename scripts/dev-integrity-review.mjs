@@ -19,6 +19,8 @@ const shouldPrintJson = args.has("--json");
 const useStaged = args.has("--staged");
 const defaultEvidenceDir = "docs/reviews";
 const defaultBlockOn = ["Critical", "High"];
+const reviewHistoryRelativePath = "docs/reviews/dev-integrity-review-history.json";
+const reviewHistoryAbsolutePath = path.join(repoRoot, reviewHistoryRelativePath);
 const defaultReviewsToSkills = {
   plan: "saana-plan",
   guard: "saana-guard",
@@ -1185,6 +1187,143 @@ function formatFinding(finding) {
   return `- ${finding.runner} | ${finding.severity} | ${finding.scope} | ${location}: ${finding.message}\n  Suggested action: ${finding.suggestedAction}`;
 }
 
+function countFindingsBySeverity(findings) {
+  const counts = {
+    Critical: 0,
+    High: 0,
+    Medium: 0,
+    Low: 0,
+  };
+
+  for (const finding of findings) {
+    if (Object.prototype.hasOwnProperty.call(counts, finding.severity)) {
+      counts[finding.severity] += 1;
+    }
+  }
+
+  return counts;
+}
+
+function loadReviewHistory() {
+  const stat = statSync(reviewHistoryAbsolutePath, { throwIfNoEntry: false });
+
+  if (!stat?.isFile()) {
+    return {
+      history: [],
+      warning: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(reviewHistoryAbsolutePath, "utf8"));
+    return {
+      history: Array.isArray(parsed) ? parsed : [],
+      warning: Array.isArray(parsed)
+        ? null
+        : "Warning: Dev Integrity review history was not an array; starting a new history.",
+    };
+  } catch (error) {
+    return {
+      history: [],
+      warning: `Warning: failed to read ${reviewHistoryRelativePath}; starting a new history.`,
+    };
+  }
+}
+
+function sameReviewHistoryState(entry, nextEntry) {
+  return (
+    entry?.commit_sha === nextEntry.commit_sha &&
+    entry?.confidence_score === nextEntry.confidence_score &&
+    entry?.changed_files_count === nextEntry.changed_files_count &&
+    JSON.stringify(entry?.selected_skills || []) === JSON.stringify(nextEntry.selected_skills || []) &&
+    entry?.critical_findings_count === nextEntry.critical_findings_count &&
+    entry?.high_findings_count === nextEntry.high_findings_count &&
+    entry?.medium_findings_count === nextEntry.medium_findings_count &&
+    entry?.low_findings_count === nextEntry.low_findings_count &&
+    entry?.exit_reason === nextEntry.exit_reason
+  );
+}
+
+function confidenceTrend(confidenceDelta) {
+  if (!Number.isFinite(confidenceDelta)) return "unknown";
+  if (confidenceDelta > 0) return "improved";
+  if (confidenceDelta < 0) return "declined";
+  return "unchanged";
+}
+
+function updateReviewHistory(entry) {
+  const { history, warning } = loadReviewHistory();
+  const latestEntry = history[history.length - 1] || null;
+  const duplicate = sameReviewHistoryState(latestEntry, entry);
+  const previousEntry = duplicate
+    ? history[history.length - 2] || null
+    : latestEntry;
+  const nextHistory = duplicate ? history : [...history, entry].slice(-100);
+  const previousConfidence = Number.isFinite(previousEntry?.confidence_score)
+    ? previousEntry.confidence_score
+    : null;
+  const confidenceDelta =
+    previousConfidence === null
+      ? null
+      : Number((entry.confidence_score - previousConfidence).toFixed(2));
+
+  mkdirSync(path.dirname(reviewHistoryAbsolutePath), { recursive: true });
+  if (!duplicate) {
+    writeFileSync(reviewHistoryAbsolutePath, `${JSON.stringify(nextHistory, null, 2)}\n`);
+  }
+
+  return {
+    warning,
+    unchanged: duplicate,
+    summary: {
+      history_path: reviewHistoryRelativePath,
+      entries_count: nextHistory.length,
+      previous_confidence: previousConfidence,
+      confidence_delta: confidenceDelta,
+      trend: confidenceTrend(confidenceDelta),
+    },
+  };
+}
+
+function buildExecutiveCommentary({
+  changedFiles,
+  confidence,
+  deterministicFindings,
+  projectMapUsed,
+  changedFileArchitectureContext,
+}) {
+  const lines = [];
+  const hasCriticalOrHigh = deterministicFindings.some((finding) =>
+    ["Critical", "High"].includes(finding.severity)
+  );
+
+  if (!changedFiles.length) {
+    lines.push("Working tree is clean; no review skills were required.");
+  }
+
+  if (confidence >= 0.9 && !hasCriticalOrHigh) {
+    lines.push("Dev Integrity confidence is high and no Critical or High findings were detected.");
+  }
+
+  if (confidence < 0.7) {
+    lines.push("Confidence is below the review threshold; manual or agent review is required before commit.");
+  }
+
+  if (hasCriticalOrHigh) {
+    lines.push("Critical or High findings block commit until fixed, waived, or explicitly reviewed.");
+  }
+
+  if (projectMapUsed) {
+    lines.push("Architecture context was available for review routing and evidence.");
+  }
+
+  if (changedFileArchitectureContext.length) {
+    lines.push("Changed files were evaluated with architecture context from the project map.");
+  }
+
+  return lines.slice(0, 3);
+}
+
 function runnerScanFiles(files) {
   return files.filter(
     (file) =>
@@ -1278,6 +1417,7 @@ const confidence = Number(Math.max(0.1, Math.min(1, score - architectureConfiden
 const interpretation = interpretConfidence(confidence);
 const riskyDetected = adjustments.length > 0 || architectureConfidenceAdjustments.length > 0;
 const timestamp = new Date().toISOString();
+const commitSha = runGit(["rev-parse", "--short", "HEAD"]);
 const date = timestamp.slice(0, 10);
 const evidencePath = path.join(
   repoRoot,
@@ -1371,6 +1511,35 @@ if (riskyDetected && confidence < 0.7) {
   exitReasons.push("confidence is below 0.70");
 }
 
+const exitReason = exitReasons.length ? exitReasons.join("; ") : "passed";
+const findingCounts = countFindingsBySeverity(deterministicFindings);
+const triggerType = shouldPrintJson ? "json" : useStaged ? "staged" : "working_tree";
+const executiveCommentary = buildExecutiveCommentary({
+  changedFiles,
+  confidence,
+  deterministicFindings,
+  projectMapUsed,
+  changedFileArchitectureContext,
+});
+const reviewHistoryContext = updateReviewHistory({
+  timestamp,
+  commit_sha: commitSha,
+  project: project || "unknown",
+  trigger_type: triggerType,
+  confidence_score: confidence,
+  confidence_percent: Math.round(confidence * 100),
+  confidence_interpretation: interpretation,
+  selected_skills: selected.map((entry) => entry.skill),
+  critical_findings_count: findingCounts.Critical,
+  high_findings_count: findingCounts.High,
+  medium_findings_count: findingCounts.Medium,
+  low_findings_count: findingCounts.Low,
+  changed_files_count: changedFiles.length,
+  project_map_used: projectMapUsed,
+  architecture_confidence: projectMap?.summary?.architecture_confidence ?? null,
+  exit_reason: exitReason,
+});
+
 if (shouldWriteEvidence) {
   mkdirSync(path.dirname(evidencePath), { recursive: true });
   writeFileSync(evidencePath, evidence);
@@ -1402,7 +1571,9 @@ const jsonSummary = {
   architectureConfidenceAdjustments,
   deterministicFindings,
   suggestedReviewOrder,
-  exitReason: exitReasons.length ? exitReasons.join("; ") : "passed",
+  review_history: reviewHistoryContext.summary,
+  executive_commentary: executiveCommentary,
+  exitReason,
   ...(writtenEvidencePath ? { evidencePath: writtenEvidencePath } : {}),
 };
 
@@ -1443,6 +1614,16 @@ console.log(markdownList(suggestedReviewOrder));
 console.log("");
 console.log(`Confidence score: ${confidence.toFixed(2)}`);
 console.log(`Interpretation: ${interpretation}`);
+console.log(`Review history path: ${reviewHistoryContext.summary.history_path}`);
+if (reviewHistoryContext.warning) {
+  console.log(reviewHistoryContext.warning);
+}
+if (reviewHistoryContext.unchanged) {
+  console.log("Dev Integrity review history unchanged for this commit/state.");
+}
+console.log(`Previous confidence: ${reviewHistoryContext.summary.previous_confidence ?? "n/a"}`);
+console.log(`Confidence delta: ${reviewHistoryContext.summary.confidence_delta ?? "n/a"}`);
+console.log(`Review trend: ${reviewHistoryContext.summary.trend}`);
 if (adjustments.length) {
   console.log("Adjustments:");
   for (const item of adjustments) console.log(`- ${item}`);
