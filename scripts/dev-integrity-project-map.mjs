@@ -15,6 +15,8 @@ const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
 const outputPath = path.join(repoRoot, "docs", "architecture", "project-map.json");
 const summaryOutputPath = path.join(repoRoot, "docs", "architecture", "project-map-summary.md");
+const vaultScoreHistoryRelativePath = "docs/architecture/vault-score-history.json";
+const vaultScoreHistoryPath = path.join(repoRoot, vaultScoreHistoryRelativePath);
 const secretInventoryRelativePath = "docs/agents/inventories/saanaos-secret-inventory.md";
 const secretInventoryPath = path.join(repoRoot, secretInventoryRelativePath);
 const schemaVersion = "0.1";
@@ -31,7 +33,12 @@ const ignoredPathParts = new Set([
   "output",
 ]);
 
-const ignoredExactFiles = new Set(["package-lock.json", "project-map.json", "project-map-summary.md"]);
+const ignoredExactFiles = new Set([
+  "package-lock.json",
+  "project-map.json",
+  "project-map-summary.md",
+  "vault-score-history.json",
+]);
 const ignoredPrefixes = ["docs/reviews/"];
 const binaryExtensions = new Set([
   ".avif",
@@ -1189,6 +1196,94 @@ function buildVaultAudit(envVars) {
   };
 }
 
+function sameVaultHistoryState(entry, nextEntry) {
+  return (
+    entry?.commit_sha === nextEntry.commit_sha &&
+    entry?.vault_score === nextEntry.vault_score &&
+    entry?.used_not_in_inventory_count === nextEntry.used_not_in_inventory_count &&
+    entry?.inventoried_not_used_count === nextEntry.inventoried_not_used_count &&
+    entry?.secret_like_public_env_count === nextEntry.secret_like_public_env_count &&
+    entry?.required_unknown_status_count === nextEntry.required_unknown_status_count
+  );
+}
+
+function vaultTrend(scoreDelta) {
+  if (!Number.isFinite(scoreDelta)) return "unknown";
+  if (scoreDelta > 0) return "improved";
+  if (scoreDelta < 0) return "declined";
+  return "unchanged";
+}
+
+function loadVaultScoreHistory() {
+  const stat = statSync(vaultScoreHistoryPath, { throwIfNoEntry: false });
+
+  if (!stat?.isFile()) {
+    return {
+      history: [],
+      warning: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(vaultScoreHistoryPath, "utf8"));
+    return {
+      history: Array.isArray(parsed) ? parsed : [],
+      warning: Array.isArray(parsed)
+        ? null
+        : "Warning: vault score history was not an array; starting a new history.",
+    };
+  } catch (error) {
+    return {
+      history: [],
+      warning: `Warning: failed to read ${vaultScoreHistoryRelativePath}; starting a new history.`,
+    };
+  }
+}
+
+function updateVaultScoreHistory(vaultAudit, project, commitSha, timestamp) {
+  const { history, warning } = loadVaultScoreHistory();
+  const nextEntry = {
+    timestamp,
+    commit_sha: commitSha,
+    project,
+    vault_score: vaultAudit.vault_score,
+    inventory_found: vaultAudit.inventory_found,
+    inventoried_secret_names_count: vaultAudit.inventoried_secret_names_count,
+    detected_env_vars_count: vaultAudit.detected_env_vars_count,
+    used_not_in_inventory_count: vaultAudit.used_not_in_inventory.length,
+    inventoried_not_used_count: vaultAudit.inventoried_not_used.length,
+    secret_like_public_env_count: vaultAudit.secret_like_public_env.length,
+    required_unknown_status_count: vaultAudit.required_unknown_status.length,
+  };
+  const latestEntry = history[history.length - 1] || null;
+  const duplicate = sameVaultHistoryState(latestEntry, nextEntry);
+  const previousEntry = duplicate
+    ? history[history.length - 2] || null
+    : latestEntry;
+  const nextHistory = duplicate ? history : [...history, nextEntry].slice(-100);
+  const previousScore = Number.isFinite(previousEntry?.vault_score)
+    ? previousEntry.vault_score
+    : null;
+  const scoreDelta = previousScore === null ? null : vaultAudit.vault_score - previousScore;
+
+  mkdirSync(path.dirname(vaultScoreHistoryPath), { recursive: true });
+  if (!duplicate) {
+    writeFileSync(vaultScoreHistoryPath, `${JSON.stringify(nextHistory, null, 2)}\n`);
+  }
+
+  return {
+    warning,
+    unchanged: duplicate,
+    history: {
+      history_path: vaultScoreHistoryRelativePath,
+      entries_count: nextHistory.length,
+      previous_score: previousScore,
+      score_delta: scoreDelta,
+      trend: vaultTrend(scoreDelta),
+    },
+  };
+}
+
 function calculateArchitectureConfidence(riskContext) {
   let confidence = 100;
   confidence -= Math.min(riskContext.unclassifiedRoutesCount * 5, 20);
@@ -1333,6 +1428,13 @@ function buildMarkdownSummary(projectMap) {
     secret_like_public_env: [],
     required_unknown_status: [],
     vault_score: 0,
+    history: {
+      history_path: vaultScoreHistoryRelativePath,
+      entries_count: 0,
+      previous_score: null,
+      score_delta: null,
+      trend: "unknown",
+    },
   };
 
   lines.push("# Architecture Project Map Summary", "");
@@ -1449,6 +1551,14 @@ function buildMarkdownSummary(projectMap) {
   lines.push("### Required/Used Env Vars With Unknown Status", "");
   lines.push(markdownList(vaultAudit.required_unknown_status), "");
 
+  lines.push("## Vault Score Trend", "");
+  lines.push(`- History path: ${vaultAudit.history?.history_path || vaultScoreHistoryRelativePath}`);
+  lines.push(`- Entries count: ${vaultAudit.history?.entries_count ?? 0}`);
+  lines.push(`- Current Vault score: ${vaultAudit.vault_score}`);
+  lines.push(`- Previous Vault score: ${vaultAudit.history?.previous_score ?? "n/a"}`);
+  lines.push(`- Score delta: ${vaultAudit.history?.score_delta ?? "n/a"}`);
+  lines.push(`- Trend: ${vaultAudit.history?.trend || "unknown"}`, "");
+
   lines.push("## Unknowns / Needs Review", "");
   for (const type of unknownOrder) {
     const unknowns = unknownGroups.get(type) || [];
@@ -1510,6 +1620,13 @@ function main() {
 
   const envVars = buildEnvVars(fileRecords);
   const vaultAuditContext = buildVaultAudit(envVars);
+  const vaultHistoryContext = updateVaultScoreHistory(
+    vaultAuditContext.vaultAudit,
+    project,
+    commitSha,
+    createdAt
+  );
+  vaultAuditContext.vaultAudit.history = vaultHistoryContext.history;
   const externalServices = buildExternalServices(fileRecords, envVars);
   const envNodes = buildEnvNodes(envVars);
   const serviceNodes = buildServiceNodes(externalServices);
@@ -1584,7 +1701,17 @@ function main() {
   console.log(`Webhook routes: ${summary.webhook_routes_count}`);
   console.log(`External services: ${summary.external_services_count}`);
   console.log(`Env vars: ${summary.env_vars_count}`);
+  if (vaultHistoryContext.warning) {
+    console.log(vaultHistoryContext.warning);
+  }
+  if (vaultHistoryContext.unchanged) {
+    console.log("Vault history unchanged for this commit/state.");
+  }
   console.log(`Vault score: ${projectMap.vault_audit.vault_score}`);
+  console.log(`Previous Vault score: ${projectMap.vault_audit.history.previous_score ?? "n/a"}`);
+  console.log(`Vault score delta: ${projectMap.vault_audit.history.score_delta ?? "n/a"}`);
+  console.log(`Vault trend: ${projectMap.vault_audit.history.trend}`);
+  console.log(`Vault history path: ${projectMap.vault_audit.history.history_path}`);
   console.log(`Used env vars missing from inventory: ${projectMap.vault_audit.used_not_in_inventory.length}`);
   console.log(`Inventoried not used: ${projectMap.vault_audit.inventoried_not_used.length}`);
   console.log(`High-risk nodes: ${summary.high_risk_nodes_count}`);
