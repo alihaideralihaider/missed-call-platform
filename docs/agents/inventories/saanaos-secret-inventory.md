@@ -36,7 +36,7 @@ Expected source systems:
 | Project | Environment | Secret Name | Purpose | Secret Type | Source of Truth | Runtime Consumers | CI Consumers | Rotation Cadence | Last Rotated | Status | Recovery Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | SaanaOS | local/preview/production | NEXT_PUBLIC_SUPABASE_URL | Public Supabase project URL for client and server helpers. | public runtime config | Supabase project settings / Cloudflare vars or secrets | Next.js app, Supabase client/server helpers, admin APIs | unknown | TBD | unknown | required | Must be documented as client-public, not secret. Confirm environment-specific project target. |
-| SaanaOS | local/preview/production | NEXT_PUBLIC_SUPABASE_ANON_KEY | Public Supabase anon key for client-side Supabase access. | public runtime config | Supabase project settings / Cloudflare secrets | Supabase client/server helpers, checkout and phone verification flows | unknown | TBD | unknown | required | Must be documented as client-public. Rotate according to Supabase project policy. |
+| SaanaOS | local/preview/production | NEXT_PUBLIC_SUPABASE_ANON_KEY | Public Supabase anon key for client-side Supabase access. | public runtime config | Supabase project settings / Cloudflare secrets | Supabase client/server helpers, checkout and phone verification flows | unknown | TBD | unknown | required | Public/non-secret by Supabase design, but review naming/exposure; NEXT_PUBLIC values are client-exposed and must not contain secrets. Rotate according to Supabase project policy. |
 | SaanaOS | local/preview/production | SUPABASE_URL | Server-side Supabase project URL. | server runtime config | Supabase project settings / Cloudflare vars or secrets | Supabase admin helper, leads API, Supabase Edge Functions, legacy Worker | unknown | TBD | unknown | required | Confirm whether this duplicates NEXT_PUBLIC_SUPABASE_URL per environment. |
 | SaanaOS | local/preview/production | SUPABASE_SERVICE_ROLE_KEY | Server-only privileged Supabase service-role access. | secret | Supabase project settings / approved vault / Cloudflare secrets | Admin APIs, server helpers, Supabase Edge Functions, legacy Worker | unknown | TBD | unknown | required | Server-only. Must never be exposed to client code. Recovery requires Supabase owner access. |
 | SaanaOS | local/preview/production | RESEND_API_KEY | Resend API access for email delivery. | secret | Resend dashboard / approved vault / Cloudflare secrets | Resend helper, leads API, login link and onboarding email flows | unknown | TBD | unknown | required | Confirm production sender domain and owner. Missing value should fail only when email is used. |
@@ -52,6 +52,7 @@ Expected source systems:
 | SaanaOS | local/preview/production | TWILIO_VOICE_CONSENT_SCHEMA | Schema name used by Twilio voice consent route. | runtime config | Cloudflare secrets / Supabase schema docs | Twilio voice consent API | unknown | TBD | unknown | optional | Confirm schema exists in each environment. |
 | SaanaOS | local/preview/production | STRIPE_SECRET_KEY | Stripe API access for billing and checkout. | secret | Stripe dashboard / approved vault / Cloudflare secrets | Billing helper, checkout APIs, Stripe webhook route | unknown | TBD | unknown | required | Use environment-specific Stripe mode. Must remain server-only. |
 | SaanaOS | local/preview/production | STRIPE_WEBHOOK_SECRET | Stripe webhook signing secret. | webhook signing secret | Stripe dashboard / approved vault / Cloudflare secrets | Stripe webhook route | unknown | TBD | unknown | required | Must match active production webhook endpoint. Rotate with webhook endpoint changes. |
+| SaanaOS | unknown | NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY | Public Stripe publishable key if client-side Stripe checkout is enabled. | public runtime config | Stripe dashboard / Cloudflare Worker secrets or vars / approved vault | Detected by project map; direct runtime consumer needs confirmation | unknown | TBD | unknown | unknown | Public/non-secret by Stripe design when used as publishable key, but review naming/exposure; NEXT_PUBLIC values are client-exposed and must not contain secrets. Confirm whether this is active, generated-only, or removable. |
 | SaanaOS | local/preview/production | STRIPE_PRICE_BASE_MONTHLY | Stripe price identifier for base monthly plan. | provider config | Stripe dashboard / Cloudflare secrets | Billing helper, subscription checkout APIs | unknown | TBD | unknown | required | Confirm price belongs to intended Stripe environment. |
 | SaanaOS | local/preview/production | STRIPE_PRICE_PRO_MONTHLY | Stripe price identifier for pro monthly plan. | provider config | Stripe dashboard / Cloudflare secrets | Billing helper, subscription checkout APIs | unknown | TBD | unknown | required | Confirm price belongs to intended Stripe environment. |
 | SaanaOS | local/preview/production | STRIPE_PRICE_PRO_PLUS_MONTHLY | Stripe price identifier for pro plus monthly plan. | provider config | Stripe dashboard / Cloudflare secrets | Billing helper, subscription checkout APIs | unknown | TBD | unknown | required | Confirm price belongs to intended Stripe environment. |
@@ -65,7 +66,9 @@ Expected source systems:
 | SaanaOS | local/preview/production | OPENAI_MENU_MODEL | Model name for menu import text generation. | provider config | OpenAI dashboard / Cloudflare secrets | Admin menu import route | unknown | TBD | unknown | optional | Not a secret value, but must be environment-specific if behavior differs. |
 | SaanaOS | local/preview/production | OPENAI_TEXT_MODEL | Model name for text generation features. | provider config | OpenAI dashboard / Cloudflare secrets | Future or configured OpenAI text flows | unknown | TBD | unknown | unknown | Confirm whether still used. |
 | SaanaOS | local/preview/production | CRON_SECRET | Shared secret for protected cron/test SMS endpoints. | secret | approved vault / Cloudflare secrets | Attempts cron API, admin messaging test API, docs/runbooks | unknown | TBD | unknown | required | Confirm caller locations and rotate if exposed in logs or docs. |
-| SaanaOS | local/preview/production | ORDER_API_BASE_URL | Base URL for order API forwarding. | runtime config | Cloudflare secrets / deployment docs | Orders API | unknown | TBD | unknown | unknown | Confirm whether service binding replaces this in production. |
+| SaanaOS | local/preview/production | ORDER_API_BASE_URL | Base URL fallback for order API forwarding when service binding is unavailable. | runtime config | Cloudflare secrets / deployment docs | Orders API | unknown | TBD | unknown | optional | Service binding appears configured for production; confirm whether this fallback is required for local/preview or can be removed. |
+| SaanaOS | local/preview/production | NODE_ENV | Framework runtime mode used for production/local behavior branches. | runtime config | Next.js/Node runtime / deployment platform | Orders API, admin messaging test API, Supabase admin helper | unknown | TBD | unknown | required | Managed by runtime/build tooling; document expected production value by name only and do not store as a secret. |
+| SaanaOS | unknown | NEXT_RUNTIME | Next.js runtime marker detected in generated/debug artifacts. | framework runtime config | Next.js/OpenNext runtime | Detected by project map; direct runtime consumer needs confirmation | unknown | TBD | unknown | unknown | Confirm whether this should be inventoried as framework-managed only or excluded from future Vault Audit comparisons. |
 | SaanaOS | local/preview/production | NEXT_PUBLIC_API_BASE | Public API base for client calls. | public runtime config | Cloudflare secrets or vars / deployment docs | API helper | unknown | TBD | unknown | optional | Must be documented as client-public. Confirm active use. |
 | SaanaOS | local/preview/production | NEXT_PUBLIC_APP_URL | Public app URL for redirects and links. | public runtime config | Cloudflare vars / deployment docs | Billing helper, app URL helper, admin menu UI | unknown | TBD | unknown | required | Must match deployed environment. |
 | SaanaOS | local/preview/production | NEXT_PUBLIC_SITE_URL | Public site URL fallback. | public runtime config | Cloudflare vars / deployment docs | Billing helper, app URL helper | unknown | TBD | unknown | required | Must match deployed environment. |
@@ -137,6 +140,7 @@ The following names appear required for production deploy/runtime or core produc
 - PLATFORM_ADMIN_EMAILS
 - INTERNAL_FUNCTION_TOKEN
 - PUBLIC_BASE_URL
+- NODE_ENV
 
 ## Optional/Future Provider Secrets
 
@@ -156,6 +160,8 @@ The following names appear optional, feature-specific, legacy, or future until c
 - OPENAI_IMAGE_MODEL
 - OPENAI_MENU_MODEL
 - OPENAI_TEXT_MODEL
+- NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+- NEXT_RUNTIME
 - ORDER_API_BASE_URL
 - NEXT_PUBLIC_API_BASE
 - DEFAULT_RESTAURANT_ID
@@ -172,6 +178,33 @@ The following names appear optional, feature-specific, legacy, or future until c
 - S3_SECRET_KEY
 - APP_BASE_URL
 - SMS_COST_ESTIMATE
+
+## Inventory Items Not Detected In Code
+
+Not detected in code does not automatically mean unused. Some secrets live only in provider dashboards, webhooks, Cloudflare, Supabase function settings, CI, or future integrations.
+
+| Secret Name | Classification | Notes |
+| --- | --- | --- |
+| APP_BASE_URL | unknown | Legacy Worker runtime config; confirm whether root Worker remains active. |
+| INTERNAL_FUNCTION_TOKEN | provider-dashboard-only | Supabase function-to-function token may live only in Supabase function settings. |
+| LEAD_ALERT_FROM_EMAIL | optional | Lead alert sender config; confirm whether lead alerts are active. |
+| LEAD_ALERT_TO_EMAIL | optional | Lead alert destination config; confirm whether lead alerts are active. |
+| LEAD_ALERT_TO_PHONE | optional | Lead alert destination config; confirm whether SMS/phone lead alerts are active. |
+| OPENAI_TEXT_MODEL | future | Listed for future/configured OpenAI text flows; confirm whether still needed. |
+| PUBLIC_BASE_URL | provider-dashboard-only | Supabase function runtime config may live only in Supabase function settings. |
+| PUBLIC_ORDER_BASE_URL | optional | Cloudflare var/runtime config used by voice/order flows; confirm scanner coverage and active runtime path. |
+| S3_SECRET_KEY | unknown | Supabase storage/S3 config candidate; confirm whether S3 integration is active. |
+| SMS_COST_ESTIMATE | optional | Usage metering runtime config or code default; not a secret. |
+| STRIPE_PRICE_ASSISTED_SUPPORT_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
+| STRIPE_PRICE_BASE_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
+| STRIPE_PRICE_HOSTING_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
+| STRIPE_PRICE_PRO_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
+| STRIPE_PRICE_PRO_PLUS_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
+| STRIPE_PRICE_USAGE_PACK | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
+| STRIPE_PRICE_VIRTUAL_PHONE_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
+| STRIPE_PRICE_WEBSITE_SETUP | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
+| SUPABASE_AUTH_EXTERNAL_APPLE_SECRET | future | Supabase external Apple auth provider secret; confirm whether Apple auth is planned or active. |
+| SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN | unknown | Supabase Auth SMS Twilio token; confirm whether Supabase Auth SMS is active. |
 
 ## Recovery Checklist
 
