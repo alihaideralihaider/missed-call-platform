@@ -15,6 +15,8 @@ const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
 const outputPath = path.join(repoRoot, "docs", "architecture", "project-map.json");
 const summaryOutputPath = path.join(repoRoot, "docs", "architecture", "project-map-summary.md");
+const secretInventoryRelativePath = "docs/agents/inventories/saanaos-secret-inventory.md";
+const secretInventoryPath = path.join(repoRoot, secretInventoryRelativePath);
 const schemaVersion = "0.1";
 
 const ignoredPathParts = new Set([
@@ -1051,6 +1053,142 @@ function buildRiskSummaryAndUnknowns(fileRecords, envVars, configFound) {
   };
 }
 
+function cleanInventoryCell(value) {
+  return String(value || "")
+    .replace(/`/g, "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .trim();
+}
+
+function parseSecretInventory(content) {
+  const rows = [];
+
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) continue;
+
+    const cells = trimmed
+      .slice(1, -1)
+      .split("|")
+      .map(cleanInventoryCell);
+
+    if (cells.length < 12) continue;
+    if (cells[0].toLowerCase() === "project") continue;
+    if (cells.every((cell) => /^-+$/.test(cell))) continue;
+
+    const secretName = cells[2];
+    if (!/^[A-Z][A-Z0-9_]*$/.test(secretName)) continue;
+
+    rows.push({
+      project: cells[0],
+      environment: cells[1],
+      secret_name: secretName,
+      purpose: cells[3],
+      secret_type: cells[4],
+      source_of_truth: cells[5],
+      runtime_consumers: cells[6],
+      ci_consumers: cells[7],
+      rotation_cadence: cells[8],
+      last_rotated: cells[9],
+      status: cells[10].toLowerCase() || "unknown",
+      recovery_notes: cells[11],
+    });
+  }
+
+  return rows;
+}
+
+function calculateVaultScore({
+  inventoryFound,
+  usedNotInInventory,
+  inventoriedNotUsed,
+  secretLikePublicEnv,
+  requiredUnknownStatus,
+}) {
+  let score = 100;
+
+  if (!inventoryFound) score -= 10;
+  score -= Math.min(30, usedNotInInventory.length * 5);
+  score -= Math.min(30, secretLikePublicEnv.length * 10);
+  score -= Math.min(15, requiredUnknownStatus.length * 3);
+  score -= Math.min(10, inventoriedNotUsed.length);
+
+  return Math.max(0, score);
+}
+
+function buildVaultAudit(envVars) {
+  const inventoryStat = statSync(secretInventoryPath, { throwIfNoEntry: false });
+  const detectedEnvNames = unique(envVars.map((envVar) => envVar.name));
+
+  if (!inventoryStat?.isFile()) {
+    return {
+      vaultAudit: {
+        inventory_path: secretInventoryRelativePath,
+        inventory_found: false,
+        inventoried_secret_names_count: 0,
+        detected_env_vars_count: detectedEnvNames.length,
+        used_not_in_inventory: detectedEnvNames,
+        inventoried_not_used: [],
+        secret_like_public_env: envVars
+          .filter((envVar) => envVar.exposure === "client_public" && envVar.secret_like)
+          .map((envVar) => envVar.name),
+        required_unknown_status: [],
+        vault_score: calculateVaultScore({
+          inventoryFound: false,
+          usedNotInInventory: detectedEnvNames,
+          inventoriedNotUsed: [],
+          secretLikePublicEnv: [],
+          requiredUnknownStatus: [],
+        }),
+      },
+      unknowns: [
+        buildUnknown(
+          "secret_inventory_missing",
+          "Secret inventory document is missing.",
+          [],
+          `Create ${secretInventoryRelativePath}.`
+        ),
+      ],
+    };
+  }
+
+  const inventoryRows = parseSecretInventory(readFileSync(secretInventoryPath, "utf8"));
+  const inventoryNames = unique(inventoryRows.map((row) => row.secret_name));
+  const inventoryNameSet = new Set(inventoryNames);
+  const detectedNameSet = new Set(detectedEnvNames);
+  const usedNotInInventory = detectedEnvNames.filter((name) => !inventoryNameSet.has(name));
+  const inventoriedNotUsed = inventoryNames.filter((name) => !detectedNameSet.has(name));
+  const secretLikePublicEnv = envVars
+    .filter((envVar) => envVar.exposure === "client_public" && envVar.secret_like)
+    .map((envVar) => envVar.name);
+  const requiredUnknownStatus = unique(
+    inventoryRows
+      .filter((row) => row.status === "unknown" && detectedNameSet.has(row.secret_name))
+      .map((row) => row.secret_name)
+  );
+
+  return {
+    vaultAudit: {
+      inventory_path: secretInventoryRelativePath,
+      inventory_found: true,
+      inventoried_secret_names_count: inventoryNames.length,
+      detected_env_vars_count: detectedEnvNames.length,
+      used_not_in_inventory: usedNotInInventory,
+      inventoried_not_used: inventoriedNotUsed,
+      secret_like_public_env: secretLikePublicEnv,
+      required_unknown_status: requiredUnknownStatus,
+      vault_score: calculateVaultScore({
+        inventoryFound: true,
+        usedNotInInventory,
+        inventoriedNotUsed,
+        secretLikePublicEnv,
+        requiredUnknownStatus,
+      }),
+    },
+    unknowns: [],
+  };
+}
+
 function calculateArchitectureConfidence(riskContext) {
   let confidence = 100;
   confidence -= Math.min(riskContext.unclassifiedRoutesCount * 5, 20);
@@ -1064,6 +1202,10 @@ function calculateArchitectureConfidence(riskContext) {
 
 function formatList(values) {
   return values?.length ? values.join(", ") : "none";
+}
+
+function markdownList(values) {
+  return values?.length ? values.map((value) => `- ${value}`).join("\n") : "- none";
 }
 
 function routeLabel(node) {
@@ -1135,6 +1277,18 @@ function buildSuggestedChecks(projectMap) {
   if (projectMap.summary.architecture_confidence < 70) {
     checks.push("Review unknowns before production deploy.");
   }
+  if (projectMap.vault_audit?.used_not_in_inventory?.length) {
+    checks.push("Update SaanaOS secret inventory for env vars used in code.");
+  }
+  if (projectMap.vault_audit?.inventoried_not_used?.length) {
+    checks.push("Review whether inventoried secrets are provider-only, future, or removable.");
+  }
+  if (projectMap.vault_audit?.secret_like_public_env?.length) {
+    checks.push("Move secret-like public env vars to server-only names.");
+  }
+  if (projectMap.vault_audit?.required_unknown_status?.length) {
+    checks.push("Clarify required/optional/future status in secret inventory.");
+  }
 
   return checks;
 }
@@ -1169,6 +1323,17 @@ function buildMarkdownSummary(projectMap) {
     "unclassified_route",
   ];
   const suggestedChecks = buildSuggestedChecks(projectMap);
+  const vaultAudit = projectMap.vault_audit || {
+    inventory_path: secretInventoryRelativePath,
+    inventory_found: false,
+    inventoried_secret_names_count: 0,
+    detected_env_vars_count: 0,
+    used_not_in_inventory: [],
+    inventoried_not_used: [],
+    secret_like_public_env: [],
+    required_unknown_status: [],
+    vault_score: 0,
+  };
 
   lines.push("# Architecture Project Map Summary", "");
   lines.push("## Project", "");
@@ -1265,6 +1430,25 @@ function buildMarkdownSummary(projectMap) {
     lines.push("");
   }
 
+  lines.push("## Vault Audit", "");
+  lines.push(`- Inventory path: ${vaultAudit.inventory_path}`);
+  lines.push(`- Inventory found: ${vaultAudit.inventory_found}`);
+  lines.push(`- Inventoried secret names count: ${vaultAudit.inventoried_secret_names_count}`);
+  lines.push(`- Detected env vars count: ${vaultAudit.detected_env_vars_count}`);
+  lines.push(`- Vault score: ${vaultAudit.vault_score}`, "");
+
+  lines.push("### Used Env Vars Missing From Inventory", "");
+  lines.push(markdownList(vaultAudit.used_not_in_inventory), "");
+
+  lines.push("### Inventoried Secrets Not Detected In Code", "");
+  lines.push(markdownList(vaultAudit.inventoried_not_used), "");
+
+  lines.push("### Secret-Like Public Env Warnings", "");
+  lines.push(markdownList(vaultAudit.secret_like_public_env), "");
+
+  lines.push("### Required/Used Env Vars With Unknown Status", "");
+  lines.push(markdownList(vaultAudit.required_unknown_status), "");
+
   lines.push("## Unknowns / Needs Review", "");
   for (const type of unknownOrder) {
     const unknowns = unknownGroups.get(type) || [];
@@ -1325,6 +1509,7 @@ function main() {
   });
 
   const envVars = buildEnvVars(fileRecords);
+  const vaultAuditContext = buildVaultAudit(envVars);
   const externalServices = buildExternalServices(fileRecords, envVars);
   const envNodes = buildEnvNodes(envVars);
   const serviceNodes = buildServiceNodes(externalServices);
@@ -1378,8 +1563,9 @@ function main() {
     flows,
     external_services: externalServices,
     env_vars: envVars,
+    vault_audit: vaultAuditContext.vaultAudit,
     risk_summary: riskContext.riskSummary,
-    unknowns: riskContext.unknowns,
+    unknowns: [...riskContext.unknowns, ...vaultAuditContext.unknowns],
   };
 
   mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -1398,6 +1584,9 @@ function main() {
   console.log(`Webhook routes: ${summary.webhook_routes_count}`);
   console.log(`External services: ${summary.external_services_count}`);
   console.log(`Env vars: ${summary.env_vars_count}`);
+  console.log(`Vault score: ${projectMap.vault_audit.vault_score}`);
+  console.log(`Used env vars missing from inventory: ${projectMap.vault_audit.used_not_in_inventory.length}`);
+  console.log(`Inventoried not used: ${projectMap.vault_audit.inventoried_not_used.length}`);
   console.log(`High-risk nodes: ${summary.high_risk_nodes_count}`);
   console.log(`Unknowns: ${projectMap.unknowns.length}`);
   console.log(`Architecture confidence: ${summary.architecture_confidence}`);
