@@ -9,6 +9,9 @@
   "reviewPacks": [
     "security",
     "tenant-boundary",
+    "vault-integrity",
+    "runtime-binding",
+    "vault-recovery",
     "payments",
     "sms-compliance",
     "restaurant-ux",
@@ -27,6 +30,77 @@
       "skill": "saana-security-review",
       "reason": "Tenant-boundary sensitive admin restaurant slug route changed.",
       "match": ["admin/restaurants/[slug]", "app/api/admin/restaurants/[slug]"]
+    },
+    {
+      "review": "vault-integrity",
+      "skill": "vault-integrity-review",
+      "reason": "Secrets, env vars, provider credentials, webhook secrets, or server-only key usage changed.",
+      "match": [
+        ".env",
+        "env",
+        "secret",
+        "secrets",
+        "token",
+        "credential",
+        "credentials",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "RESEND_API_KEY",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_VERIFY_SERVICE_SID",
+        "STRIPE_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "GOOGLE_CLIENT_SECRET",
+        "META",
+        "WHATSAPP",
+        "OPENAI_API_KEY",
+        "service-role",
+        "service_role",
+        "webhook"
+      ]
+    },
+    {
+      "review": "runtime-binding",
+      "skill": "runtime-binding-review",
+      "reason": "Runtime binding, deployment target, Worker route, provider callback, or environment-specific wiring changed.",
+      "match": [
+        "wrangler",
+        "cloudflare",
+        "opennext",
+        "open-next",
+        "worker",
+        "binding",
+        "bindings",
+        "route",
+        "routes",
+        "webhook",
+        "callback",
+        "queue",
+        "r2",
+        "d1",
+        "kv",
+        "bucket",
+        "durable"
+      ]
+    },
+    {
+      "review": "vault-recovery",
+      "skill": "vault-recovery-review",
+      "reason": "Bootstrap, local env, recovery, vault, password manager, or deploy recovery process changed.",
+      "match": [
+        "bootstrap",
+        "setup",
+        "local",
+        "env",
+        "vault",
+        "password-manager",
+        "password_manager",
+        "recovery",
+        "onboarding",
+        "deploy",
+        "deployment",
+        "README",
+        "runbook"
+      ]
     },
     {
       "review": "payments",
@@ -84,6 +158,16 @@
       {
         "reason": "deployment/env",
         "match": ["wrangler", "cloudflare", "deploy", "deployment", "env", ".env"],
+        "amount": 0.15
+      },
+      {
+        "reason": "vault/secrets/runtime",
+        "match": ["secret", "secrets", "token", "credential", "env", "service-role", "service_role", "webhook"],
+        "amount": 0.15
+      },
+      {
+        "reason": "runtime/bindings/deploy wiring",
+        "match": ["wrangler", "cloudflare", "binding", "bindings", "worker", "route", "webhook", "callback", "queue", "r2", "d1", "kv", "bucket"],
         "amount": 0.15
       },
       {

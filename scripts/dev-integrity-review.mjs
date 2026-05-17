@@ -700,6 +700,18 @@ function getArchitectureSkillsForContext(context) {
     if (tag === "production-deploy") {
       skills.add("saana-post-deploy-canary");
     }
+
+    if (tag === "vault" || tag === "secrets" || tag === "service-role") {
+      skills.add("vault-integrity-review");
+    }
+
+    if (tag === "runtime-binding") {
+      skills.add("runtime-binding-review");
+    }
+
+    if (tag === "recovery") {
+      skills.add("vault-recovery-review");
+    }
   }
 
   return [...skills].sort();
@@ -1177,7 +1189,7 @@ function runnerScanFiles(files) {
   return files.filter(
     (file) =>
       file !== "authtoolkit.integrity.json" &&
-      file !== "scripts/dev-integrity-review.mjs" &&
+      !/^scripts\/dev-integrity-/i.test(file) &&
       !file.startsWith("docs/reviews/")
   );
 }
@@ -1225,6 +1237,8 @@ for (const rule of skillRules) {
 }
 
 for (const context of changedFileArchitectureContext) {
+  if (isDevIntegrityToolingOrDocs(context.file)) continue;
+
   const architectureSkills = getArchitectureSkillsForContext(context);
   const reason = architectureReasonForContext(context);
 
@@ -1237,6 +1251,9 @@ const suggestedReviewOrder = [
   "saana-plan",
   "saana-guard",
   "saana-security-review",
+  "vault-integrity-review",
+  "runtime-binding-review",
+  "vault-recovery-review",
   "saana-sms-compliance-review",
   "saana-payment-review",
   "saana-restaurant-ux-review",

@@ -391,6 +391,19 @@ function detectRiskTags(file, content, envVars, services) {
   if (isNextApiRoute(file)) tags.add("api-exposure");
   if (envVars.some(isSecretLike) || /secret|token|password|private/i.test(content)) tags.add("secrets");
   if (/service[_-]?role/i.test(`${file}\n${content}\n${envVars.join("\n")}`)) tags.add("service-role");
+  if (
+    envVars.length ||
+    /(^|\/)\.env/i.test(file) ||
+    /secret|secrets|token|credential|credentials|service[_-]?role/i.test(`${file}\n${content}`)
+  ) {
+    tags.add("vault");
+  }
+  if (/wrangler|cloudflare|opennext|open-next|binding|bindings|worker|routes?|callback|queue|r2|d1|kv|bucket|durable/i.test(`${file}\n${content}`)) {
+    tags.add("runtime-binding");
+  }
+  if (/bootstrap|setup|local|vault|password[_-]?manager|recovery|onboarding|deploy|deployment|runbook/i.test(`${file}\n${content}`)) {
+    tags.add("recovery");
+  }
   if (hasAny(`${file}\n${content}`, customerDataKeywords)) tags.add("customer-data");
   if (/stripe|checkout|billing|payment|subscription/i.test(`${file}\n${content}`)) tags.add("payment");
   if (isWebhookRoute(file) || lowerPath.includes("webhook")) tags.add("webhook");
@@ -488,6 +501,9 @@ function detectAccessLevel(trustBoundary) {
 function detectReviewPacks(riskTags, classification) {
   const packs = new Set();
   if (riskTags.includes("auth") || riskTags.includes("secrets") || riskTags.includes("webhook")) packs.add("security");
+  if (riskTags.includes("vault") || riskTags.includes("secrets") || riskTags.includes("service-role")) packs.add("vault-integrity");
+  if (riskTags.includes("runtime-binding")) packs.add("runtime-binding");
+  if (riskTags.includes("recovery")) packs.add("vault-recovery");
   if (riskTags.includes("tenant-boundary")) packs.add("tenant-boundary");
   if (riskTags.includes("api-exposure") || classification.endsWith("_api")) packs.add("api-exposure");
   if (riskTags.includes("payment")) packs.add("payments");
