@@ -182,29 +182,30 @@ The following names appear optional, feature-specific, legacy, or future until c
 ## Inventory Items Not Detected In Code
 
 Not detected in code does not automatically mean unused. Some secrets live only in provider dashboards, webhooks, Cloudflare, Supabase function settings, CI, or future integrations.
+Not detected in code does not mean unused. Do not delete secrets or provider configuration from this list without owner confirmation, provider dashboard review, runtime verification, and evidence.
 
-| Secret Name | Classification | Notes |
-| --- | --- | --- |
-| APP_BASE_URL | unknown | Legacy Worker runtime config; confirm whether root Worker remains active. |
-| INTERNAL_FUNCTION_TOKEN | provider-dashboard-only | Supabase function-to-function token may live only in Supabase function settings. |
-| LEAD_ALERT_FROM_EMAIL | optional | Lead alert sender config; confirm whether lead alerts are active. |
-| LEAD_ALERT_TO_EMAIL | optional | Lead alert destination config; confirm whether lead alerts are active. |
-| LEAD_ALERT_TO_PHONE | optional | Lead alert destination config; confirm whether SMS/phone lead alerts are active. |
-| OPENAI_TEXT_MODEL | future | Listed for future/configured OpenAI text flows; confirm whether still needed. |
-| PUBLIC_BASE_URL | provider-dashboard-only | Supabase function runtime config may live only in Supabase function settings. |
-| PUBLIC_ORDER_BASE_URL | optional | Cloudflare var/runtime config used by voice/order flows; confirm scanner coverage and active runtime path. |
-| S3_SECRET_KEY | unknown | Supabase storage/S3 config candidate; confirm whether S3 integration is active. |
-| SMS_COST_ESTIMATE | optional | Usage metering runtime config or code default; not a secret. |
-| STRIPE_PRICE_ASSISTED_SUPPORT_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
-| STRIPE_PRICE_BASE_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
-| STRIPE_PRICE_HOSTING_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
-| STRIPE_PRICE_PRO_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
-| STRIPE_PRICE_PRO_PLUS_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
-| STRIPE_PRICE_USAGE_PACK | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
-| STRIPE_PRICE_VIRTUAL_PHONE_MONTHLY | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
-| STRIPE_PRICE_WEBSITE_SETUP | provider-dashboard-only | Stripe price ID may be used through billing config/provider dashboard. |
-| SUPABASE_AUTH_EXTERNAL_APPLE_SECRET | future | Supabase external Apple auth provider secret; confirm whether Apple auth is planned or active. |
-| SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN | unknown | Supabase Auth SMS Twilio token; confirm whether Supabase Auth SMS is active. |
+| Secret Name | Classification | Reason | Recommended Next Action | Deletion Status |
+| --- | --- | --- | --- | --- |
+| APP_BASE_URL | unknown | Legacy Worker runtime config may not be referenced by the current web app scan. | Confirm source of truth, active environment, and runtime consumer. | do_not_delete |
+| INTERNAL_FUNCTION_TOKEN | supabase-function-only | Used for Supabase function-to-function calls and may live only in Supabase function settings. | Confirm Supabase function settings and document active environments. | do_not_delete |
+| LEAD_ALERT_FROM_EMAIL | optional | Lead alert sender configuration may only be used when lead alerts are enabled. | Confirm whether lead alerts are active and document owner/source of truth. | do_not_delete |
+| LEAD_ALERT_TO_EMAIL | optional | Lead alert destination configuration may only be used when lead alerts are enabled. | Confirm whether lead email alerts are active and document owner/source of truth. | do_not_delete |
+| LEAD_ALERT_TO_PHONE | optional | Lead alert phone destination may only be used when SMS or phone lead alerts are enabled. | Confirm whether lead SMS/phone alerts are active and document owner/source of truth. | do_not_delete |
+| OPENAI_TEXT_MODEL | future | Listed for future or configured OpenAI text flows not currently detected in scanned code. | Confirm whether future text-generation flows still need this name. | do_not_delete |
+| PUBLIC_BASE_URL | supabase-function-only | Supabase order-link SMS function may use this from Supabase function settings. | Confirm Supabase function environment variables and active callback URLs. | do_not_delete |
+| PUBLIC_ORDER_BASE_URL | cloudflare-only | Cloudflare runtime config may be supplied through Wrangler vars and used by voice/order flows. | Confirm Cloudflare production and preview vars match expected public order domain. | do_not_delete |
+| S3_SECRET_KEY | unknown | Supabase storage/S3 config candidate is present in Supabase config but active usage is unclear. | Confirm source of truth, active environment, and runtime consumer. | do_not_delete |
+| SMS_COST_ESTIMATE | optional | Usage metering cost estimate may be a code default or optional runtime override, not a secret. | Confirm whether an environment override exists or should be removed from inventory later. | do_not_delete |
+| STRIPE_PRICE_ASSISTED_SUPPORT_MONTHLY | stripe-price-config | Stripe price identifier may be managed in Stripe dashboard or Cloudflare config rather than direct code references. | Confirm price exists in the intended Stripe environment and billing catalog. | do_not_delete |
+| STRIPE_PRICE_BASE_MONTHLY | stripe-price-config | Stripe price identifier may be managed in Stripe dashboard or Cloudflare config rather than direct code references. | Confirm price exists in the intended Stripe environment and billing catalog. | do_not_delete |
+| STRIPE_PRICE_HOSTING_MONTHLY | stripe-price-config | Stripe price identifier may be managed in Stripe dashboard or Cloudflare config rather than direct code references. | Confirm price exists in the intended Stripe environment and billing catalog. | do_not_delete |
+| STRIPE_PRICE_PRO_MONTHLY | stripe-price-config | Stripe price identifier may be managed in Stripe dashboard or Cloudflare config rather than direct code references. | Confirm price exists in the intended Stripe environment and billing catalog. | do_not_delete |
+| STRIPE_PRICE_PRO_PLUS_MONTHLY | stripe-price-config | Stripe price identifier may be managed in Stripe dashboard or Cloudflare config rather than direct code references. | Confirm price exists in the intended Stripe environment and billing catalog. | do_not_delete |
+| STRIPE_PRICE_USAGE_PACK | stripe-price-config | Stripe price identifier may be managed in Stripe dashboard or Cloudflare config rather than direct code references. | Confirm price exists in the intended Stripe environment and billing catalog. | do_not_delete |
+| STRIPE_PRICE_VIRTUAL_PHONE_MONTHLY | stripe-price-config | Stripe price identifier may be managed in Stripe dashboard or Cloudflare config rather than direct code references. | Confirm price exists in the intended Stripe environment and billing catalog. | do_not_delete |
+| STRIPE_PRICE_WEBSITE_SETUP | stripe-price-config | Stripe price identifier may be managed in Stripe dashboard or Cloudflare config rather than direct code references. | Confirm price exists in the intended Stripe environment and billing catalog. | do_not_delete |
+| SUPABASE_AUTH_EXTERNAL_APPLE_SECRET | future | Supabase external Apple auth provider secret is inventoried for a possible auth provider integration. | Confirm whether Apple auth is planned or active in Supabase auth settings. | do_not_delete |
+| SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN | provider-dashboard-only | Supabase Auth SMS integration may store this in Supabase auth settings instead of app code. | Confirm whether Supabase Auth SMS is active and document Twilio/Supabase ownership. | do_not_delete |
 
 ## Recovery Checklist
 
