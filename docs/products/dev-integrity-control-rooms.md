@@ -176,6 +176,45 @@ Dev Control Room:
 Audit Control Room:
 "Stage confidence is 100%. Production release is ready unless policy requires resolving one medium session warning."
 
+## Trend and Commentary Layer
+
+Each control room should show:
+
+- current score
+- previous score
+- delta
+- trend
+- 2-3 line executive commentary
+- blocker counts
+- next action
+
+History and commentary must be generated from structured evidence. They must not include raw source code, raw diffs, secret values, env values, customer data, payment data, session data, or private logs.
+
+Dev Control Room:
+
+- uses `docs/reviews/dev-integrity-review-history.json`
+- shows review confidence trend
+- shows whether code-change risk is improving, declining, blocked, or clean
+- explains whether Critical/High findings, confidence thresholds, or architecture context affected the run
+
+Audit Control Room:
+
+- may use future audit/exposure history
+- currently uses vault and architecture signals where applicable
+- should show whether release exposure is improving, declining, or blocked by policy
+
+Architecture Control Room:
+
+- uses `docs/architecture/architecture-confidence-history.json`
+- shows whether the project map is becoming more complete, more risky, or more chaotic
+- explains remaining unknowns, unclassified nodes, high-risk nodes, and runtime-proof gaps
+
+Vault Control Room:
+
+- uses `docs/architecture/vault-score-history.json`
+- shows whether secrets, inventory coverage, runtime binding, and recovery posture are improving or declining
+- explains missing inventory items, public secret-like warnings, unknown statuses, and recovery blockers
+
 ## Clickable Status Cells
 
 Each status cell should open a detail view.

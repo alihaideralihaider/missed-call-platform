@@ -350,6 +350,116 @@ Canonical status values:
 }
 ```
 
+## History Data
+
+Local generated history files:
+
+- `docs/architecture/architecture-confidence-history.json`
+- `docs/architecture/vault-score-history.json`
+- `docs/reviews/dev-integrity-review-history.json`
+
+These are generated artifacts for future dashboards. They show score changes over time and should store metrics, counts, statuses, and high-level routing data only.
+
+History files must not include:
+
+- raw source code
+- raw diffs
+- secret values
+- environment variable values
+- customer data
+- payment data
+- session data
+- private logs
+
+### ArchitectureConfidenceHistoryEntry
+
+```json
+{
+  "timestamp": "2026-05-17T00:00:00.000Z",
+  "commit_sha": "abc123",
+  "project": "saanaos",
+  "architecture_confidence": 60,
+  "total_files": 321,
+  "routes_count": 106,
+  "api_routes_count": 58,
+  "webhook_routes_count": 3,
+  "external_services_count": 11,
+  "env_vars_count": 35,
+  "high_risk_nodes_count": 12,
+  "unknowns_count": 62,
+  "unclassified_nodes_count": 0,
+  "service_role_paths_count": 36,
+  "tenant_scoped_routes_count": 40
+}
+```
+
+### VaultScoreHistoryEntry
+
+```json
+{
+  "timestamp": "2026-05-17T00:00:00.000Z",
+  "commit_sha": "abc123",
+  "project": "saanaos",
+  "vault_score": 67,
+  "inventory_found": true,
+  "inventoried_secret_names_count": 56,
+  "detected_env_vars_count": 35,
+  "used_not_in_inventory_count": 0,
+  "inventoried_not_used_count": 21,
+  "secret_like_public_env_count": 2,
+  "required_unknown_status_count": 1
+}
+```
+
+### DevIntegrityReviewHistoryEntry
+
+```json
+{
+  "timestamp": "2026-05-17T00:00:00.000Z",
+  "commit_sha": "abc123",
+  "project": "saanaos",
+  "trigger_type": "working_tree",
+  "confidence_score": 0.9,
+  "confidence_percent": 90,
+  "confidence_interpretation": "safe auto-fix candidate",
+  "selected_skills": ["saana-plan", "saana-guard"],
+  "critical_findings_count": 0,
+  "high_findings_count": 0,
+  "medium_findings_count": 0,
+  "low_findings_count": 0,
+  "changed_files_count": 1,
+  "project_map_used": true,
+  "architecture_confidence": 60,
+  "exit_reason": "passed"
+}
+```
+
+History writers should suppress duplicate entries when the latest run has the same commit, score, changed-file count, selected reviews, finding counts, and exit reason.
+
+## Executive Commentary
+
+`executive_commentary` is an array of 1-3 plain-English lines generated from structured data.
+
+Rules:
+
+- Generate commentary from scores, deltas, trends, blocker counts, unknowns, findings, and inventory coverage.
+- Do not invent facts manually.
+- Do not include secrets, raw source code, raw diffs, logs, env values, payment data, session data, or customer records.
+- Use commentary to explain highlights, risks, and next actions.
+- Show commentary in Dev Control Room, Audit Control Room, Architecture Control Room, and future Vault Control Room.
+
+Example:
+
+```json
+{
+  "executive_commentary": [
+    "The project file map is fully classified; no unclassified nodes remain.",
+    "Architecture confidence remains below 70 because runtime proof and webhook trust unknowns still need review.",
+    "Vault inventory covers all env vars currently detected in code."
+  ]
+}
+```
+
 ## MVP Data Requirements
 
 For first dashboard MVP, only require:

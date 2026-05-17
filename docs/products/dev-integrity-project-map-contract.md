@@ -28,11 +28,13 @@ Example:
   "created_at": "2026-05-16T00:00:00Z",
   "summary": {},
   "executive_commentary": [],
+  "architecture_history": {},
   "nodes": [],
   "edges": [],
   "flows": [],
   "external_services": [],
   "env_vars": [],
+  "vault_audit": {},
   "risk_summary": {},
   "unknowns": []
 }
@@ -59,6 +61,65 @@ Example:
   "Vault inventory covers all env vars currently detected in code."
 ]
 ```
+
+## Generated Local History
+
+The scanner may generate local ignored history artifacts:
+
+- `docs/architecture/architecture-confidence-history.json`
+- `docs/architecture/vault-score-history.json`
+
+These files support future Architecture Control Room and Vault Control Room trend views. They should store metrics and counts only, not source code, raw diffs, secret values, env values, customer data, payment data, session data, or private logs.
+
+Duplicate suppression should avoid noisy repeated entries when the latest run has the same commit and materially identical score/count state.
+
+## Architecture History
+
+`architecture_history` summarizes the local architecture confidence history for the current map.
+
+Example:
+
+```json
+{
+  "architecture_history": {
+    "history_path": "docs/architecture/architecture-confidence-history.json",
+    "entries_count": 3,
+    "previous_confidence": 55,
+    "confidence_delta": 5,
+    "trend": "improved"
+  }
+}
+```
+
+Trend values:
+
+- `improved`
+- `declined`
+- `unchanged`
+- `unknown`
+
+## Vault Audit History
+
+`vault_audit.history` summarizes the local Vault score history for the current map.
+
+Example:
+
+```json
+{
+  "vault_audit": {
+    "vault_score": 67,
+    "history": {
+      "history_path": "docs/architecture/vault-score-history.json",
+      "entries_count": 4,
+      "previous_score": 64,
+      "score_delta": 3,
+      "trend": "improved"
+    }
+  }
+}
+```
+
+Vault history stores inventory coverage counts, warning counts, and score changes only. It must not store secret values or environment variable values.
 
 ## Project Summary
 

@@ -485,6 +485,7 @@ Top hero:
 Primary tiles:
 
 - Architecture Confidence
+- Architecture Confidence Trend
 - High-Risk Nodes
 - Public API Routes
 - Tenant-Scoped Routes
@@ -497,6 +498,7 @@ Example:
 
 ```text
 [Architecture Confidence: 87%]
+[Trend: +5 improved]
 [High-Risk Nodes: 14]
 [Public APIs: 22]
 [Service-Role Paths: 8]
@@ -507,6 +509,57 @@ Example:
 Purpose:
 
 A founder or lead should see whether the project is understandable and whether risky areas are mapped.
+
+## Architecture Confidence History
+
+Architecture Control Room should show whether mapping quality is improving or declining over time.
+
+Generated local artifact:
+
+`docs/architecture/architecture-confidence-history.json`
+
+History entry signals:
+
+- architecture confidence
+- total files
+- route/API/webhook counts
+- external services count
+- env vars count
+- high-risk nodes count
+- unknowns count
+- unclassified nodes count
+- service-role paths count
+- tenant-scoped routes count
+
+The dashboard should show:
+
+- current Architecture Confidence
+- previous Architecture Confidence
+- confidence delta
+- trend: improved, declined, unchanged, or unknown
+- remaining unknowns that still need review
+- whether runtime proof is still missing for tenant or sensitive boundaries
+
+History stores metrics and counts only. It must not include raw source code, raw diffs, secret values, env values, customer data, payment data, session data, or private logs.
+
+## Executive Commentary
+
+Architecture Control Room should include 1-3 deterministic plain-English commentary lines generated from structured map data.
+
+Examples:
+
+- The project file map is fully classified; no unclassified nodes remain.
+- Architecture confidence remains below 70 because runtime proof, webhook trust, auth boundary, or file-upload unknowns still need review.
+- High-risk nodes remain in the map and should be reviewed before production-sensitive changes.
+
+Commentary should explain:
+
+- whether the map is becoming more complete
+- whether high-risk nodes remain
+- what still needs runtime proof
+- whether Vault inventory covers detected env vars
+
+Commentary must not include raw source code, raw diffs, secret values, env values, customer data, payment data, session data, or private logs.
 
 ## Suggested Status Colors
 
