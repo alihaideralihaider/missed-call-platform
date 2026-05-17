@@ -41,6 +41,9 @@ const ignoredExactFiles = new Set([
   "project-map-summary.md",
   "vault-score-history.json",
   "architecture-confidence-history.json",
+  "book_next.txt",
+  "debug_next.txt",
+  "out.html",
 ]);
 const ignoredPrefixes = ["docs/reviews/"];
 const binaryExtensions = new Set([
@@ -372,10 +375,77 @@ function isSecretLike(name) {
   return /SECRET|TOKEN|KEY|PASSWORD|PRIVATE|SERVICE_ROLE/i.test(name);
 }
 
+function isDocumentationFile(file) {
+  return (
+    file === "README.md" ||
+    file === "AGENTS.md" ||
+    file.endsWith("/README.md") ||
+    /^docs\//.test(file) ||
+    /\.mdx?$/i.test(file)
+  );
+}
+
+function isStaticAsset(file) {
+  return (
+    /^worker\/web\/public\//.test(file) ||
+    /^public\//.test(file) ||
+    /\.(svg|css|ico|txt|webmanifest)$/i.test(file)
+  );
+}
+
+function isConfigFile(file) {
+  const baseName = path.posix.basename(file).toLowerCase();
+  return (
+    baseName === ".gitignore" ||
+    baseName === ".editorconfig" ||
+    baseName === ".prettierrc" ||
+    /^\.vscode\/.+\.json$/i.test(file) ||
+    /\/\.vscode\/.+\.json$/i.test(file) ||
+    baseName === "package.json" ||
+    baseName === "package-lock.json" ||
+    baseName === "pnpm-lock.yaml" ||
+    baseName === "yarn.lock" ||
+    baseName === "tsconfig.json" ||
+    baseName === "authtoolkit.integrity.json" ||
+    /^next\.config\./i.test(baseName) ||
+    /^open-next\.config\./i.test(baseName) ||
+    /^opennext\.config\./i.test(baseName) ||
+    /^wrangler\./i.test(baseName) ||
+    /^(eslint|prettier|tailwind|postcss)\.config\./i.test(baseName)
+  );
+}
+
+function isDeploymentConfig(file) {
+  const baseName = path.posix.basename(file).toLowerCase();
+  return /^wrangler\./i.test(baseName) || /cloudflare|deploy|deployment|open-next|opennext/i.test(file);
+}
+
+function isTestFile(file) {
+  return /(^|\/)(__tests__|tests?|specs?)(\/|$)/i.test(file) || /\.(test|spec)\.(ts|tsx|js|jsx)$/i.test(file);
+}
+
+function isGeneratedArtifact(file) {
+  return (
+    file === "worker/web/0" ||
+    /(^|\/)(out|dist|build|coverage)\//i.test(file) ||
+    /(^|\/)(next-env|worker-configuration)\.d\.ts$/i.test(file) ||
+    /\.(tsbuildinfo|bak)$/i.test(file)
+  );
+}
+
+function isSupportingRouteFile(file) {
+  return /^worker\/web\/app\/.*\/(loading|error|not-found|template)\.(tsx|ts|jsx|js)$/i.test(file);
+}
+
+function isLayoutRouteFile(file) {
+  return /^worker\/web\/app\/.*\/layout\.(tsx|ts|jsx|js)$/i.test(file);
+}
+
 function shouldUseContentForServiceDetection(file) {
   const extension = path.posix.extname(file).toLowerCase();
   const baseName = path.posix.basename(file);
 
+  if (isDocumentationFile(file) || isStaticAsset(file)) return false;
   if ([".md", ".txt"].includes(extension)) return false;
   if (baseName === ".gitignore") return false;
   if (file.endsWith(".tsbuildinfo")) return false;
@@ -396,35 +466,51 @@ function detectServices(file, content, envVars) {
 function detectRiskTags(file, content, envVars, services) {
   const tags = new Set();
   const lowerPath = file.toLowerCase();
-  const lowerContent = content.toLowerCase();
+  const isDocumentation = isDocumentationFile(file);
+  const isStatic = isStaticAsset(file);
+  const isRuntimeRiskExcluded = isDocumentation || isStatic;
+  const riskContent = isRuntimeRiskExcluded ? "" : content;
 
-  if (hasAny(`${file}\n${content}`, authKeywords)) tags.add("auth");
+  if (isDocumentation) {
+    if (/^docs\/agents\/inventories\//i.test(file)) {
+      tags.add("vault");
+      tags.add("recovery");
+    }
+    return [...tags].sort();
+  }
+
+  if (isStatic) {
+    if (/^worker\/web\/public\//i.test(file) || /^public\//i.test(file)) tags.add("public");
+    return [...tags].sort();
+  }
+
+  if (hasAny(`${file}\n${riskContent}`, authKeywords)) tags.add("auth");
   if (routeParamPatterns.some((param) => file.includes(param))) tags.add("tenant-boundary");
   if (isNextApiRoute(file)) tags.add("api-exposure");
-  if (envVars.some(isSecretLike) || /secret|token|password|private/i.test(content)) tags.add("secrets");
-  if (/service[_-]?role/i.test(`${file}\n${content}\n${envVars.join("\n")}`)) tags.add("service-role");
+  if (envVars.some(isSecretLike) || /secret|token|password|private/i.test(riskContent)) tags.add("secrets");
+  if (/service[_-]?role/i.test(`${file}\n${riskContent}\n${envVars.join("\n")}`)) tags.add("service-role");
   if (
     envVars.length ||
     /(^|\/)\.env/i.test(file) ||
-    /secret|secrets|token|credential|credentials|service[_-]?role/i.test(`${file}\n${content}`)
+    /secret|secrets|token|credential|credentials|service[_-]?role/i.test(`${file}\n${riskContent}`)
   ) {
     tags.add("vault");
   }
-  if (/wrangler|cloudflare|opennext|open-next|binding|bindings|worker|routes?|callback|queue|r2|d1|kv|bucket|durable/i.test(`${file}\n${content}`)) {
+  if (/wrangler|cloudflare|opennext|open-next|binding|bindings|worker_self_reference|order_api_service|callback|queue|r2|d1|kv|bucket|durable/i.test(`${file}\n${riskContent}`)) {
     tags.add("runtime-binding");
   }
-  if (/bootstrap|setup|local|vault|password[_-]?manager|recovery|onboarding|deploy|deployment|runbook/i.test(`${file}\n${content}`)) {
+  if (/bootstrap|setup|local|vault|password[_-]?manager|recovery|onboarding|deploy|deployment|runbook/i.test(`${file}\n${riskContent}`)) {
     tags.add("recovery");
   }
-  if (hasAny(`${file}\n${content}`, customerDataKeywords)) tags.add("customer-data");
-  if (/stripe|checkout|billing|payment|subscription/i.test(`${file}\n${content}`)) tags.add("payment");
+  if (hasAny(`${file}\n${riskContent}`, customerDataKeywords)) tags.add("customer-data");
+  if (/stripe|checkout|billing|payment|subscription/i.test(`${file}\n${riskContent}`)) tags.add("payment");
   if (isWebhookRoute(file) || lowerPath.includes("webhook")) tags.add("webhook");
-  if (/twilio|sms|consent|missed-call|missed_call/i.test(`${file}\n${content}`)) tags.add("sms-consent");
-  if (/session|cookie|cookies/i.test(`${file}\n${content}`)) tags.add("session-cookie");
-  if (hasAny(`${file}\n${content}`, fileUploadKeywords)) tags.add("file-upload");
+  if (/twilio|sms|consent|missed-call|missed_call/i.test(`${file}\n${riskContent}`)) tags.add("sms-consent");
+  if (/session|cookie|cookies/i.test(`${file}\n${riskContent}`)) tags.add("session-cookie");
+  if (hasAny(`${file}\n${riskContent}`, fileUploadKeywords)) tags.add("file-upload");
   if (lowerPath.includes("/admin/") || lowerPath.includes("/api/admin/")) tags.add("admin");
   if (isNextPageRoute(file) && !lowerPath.includes("/admin/")) tags.add("public");
-  if (/wrangler|cloudflare|deploy|deployment|production/i.test(`${file}\n${content}`)) tags.add("production-deploy");
+  if (/wrangler|cloudflare|deploy|deployment|production/i.test(`${file}\n${riskContent}`)) tags.add("production-deploy");
 
   for (const service of services) {
     const definition = serviceDefinitions.find((item) => item.provider === service);
@@ -438,12 +524,21 @@ function detectType(file) {
   if (isWebhookRoute(file)) return "webhook_route";
   if (isNextApiRoute(file)) return "api_route";
   if (isNextPageRoute(file)) return "page_route";
+  if (isSupportingRouteFile(file) || isLayoutRouteFile(file)) return "supporting_route";
+  if (isDocumentationFile(file)) return "documentation";
+  if (isStaticAsset(file)) return "static_asset";
+  if (isTestFile(file)) return "test_file";
+  if (isGeneratedArtifact(file)) return "generated_artifact";
+  if (/^worker\/src\/.*\.(ts|tsx|js|jsx)$/i.test(file)) return "library";
+  if (/^worker\/web\/app\/(robots|sitemap)\.(ts|tsx|js|jsx)$/i.test(file)) return "supporting_route";
+  if (/\.html$/i.test(file)) return "static_asset";
   if (/\.(env|env\.example)$/.test(file) || path.posix.basename(file).startsWith(".env")) return "env_var";
+  if (isConfigFile(file)) return "config";
   if (/\/components?\//.test(file) || /component/i.test(file)) return "component";
-  if (/\/lib\/|\/utils?\/|\/helpers?\//.test(file)) return "library";
+  if (/^worker\/web\/app\/.*\.(tsx|jsx)$/i.test(file)) return "component";
+  if (/worker\/web\/lib\//.test(file) || /\/lib\/|\/utils?\/|\/helpers?\//.test(file)) return "library";
   if (/schema\.sql$|\/database\/|\/db\//.test(file)) return "database";
   if (/\/migrations?\//.test(file)) return "migration";
-  if (/(^|\/)(package\.json|tsconfig\.json|next\.config|wrangler|eslint|postcss|tailwind|authtoolkit\.integrity\.json)/i.test(file)) return "config";
   if (/^scripts\/|\/scripts\//.test(file)) return "script";
   return "file";
 }
@@ -452,16 +547,30 @@ function detectClassification(file, type, riskTags, content) {
   const lowerPath = file.toLowerCase();
 
   if (type === "webhook_route") return "provider_webhook";
+  if (type === "documentation") return "documentation";
+  if (type === "static_asset") return "static_asset";
+  if (type === "test_file") return "test_file";
+  if (type === "generated_artifact") return "generated_artifact";
+  if (type === "component") return "component";
+  if (type === "library") return /service[_-]?role/i.test(`${file}\n${content}`) ? "service_role_helper" : "library";
+  if (type === "script") return "script";
+  if (type === "migration") return "migration";
+  if (type === "env_var") return "env_var";
+  if (type === "config") {
+    return isDeploymentConfig(file) ? "deployment_file" : "config_file";
+  }
+  if (type === "database" || /supabase|db|database/i.test(file)) return "database_helper";
+  if (type === "supporting_route") {
+    if (isLayoutRouteFile(file)) return "layout";
+    return "supporting_route";
+  }
   if (lowerPath.includes("auth") || lowerPath.includes("login") || lowerPath.includes("otp")) return "auth_route";
   if (/checkout|billing|stripe|payment|subscription/.test(lowerPath)) return "payment_route";
   if (/twilio|sms|message|messaging|resend|email/.test(lowerPath)) return "messaging_route";
   if (/service[_-]?role/i.test(`${file}\n${content}`)) return "service_role_helper";
-  if (type === "database" || /supabase|db|database/i.test(file)) return "database_helper";
-  if (type === "config") {
-    return /wrangler|cloudflare|deploy|deployment/i.test(file) ? "deployment_file" : "config_file";
-  }
   if (type === "page_route") {
     if (lowerPath.includes("/admin/")) return "admin_page";
+    if (lowerPath.includes("/app/r/[slug]/")) return "restaurant_public_page";
     if (/session|getserver|middleware|requireauth|redirect\(["']\/login/i.test(content)) {
       return "protected_page";
     }
@@ -482,12 +591,21 @@ function detectClassification(file, type, riskTags, content) {
 }
 
 function detectTrustBoundary(file, classification, riskTags, content) {
+  if (classification === "documentation") return "internal";
+  if (classification === "static_asset") return "public";
+  if (classification === "config_file" || classification === "deployment_file") return "internal";
+  if (classification === "test_file" || classification === "generated_artifact") return "internal";
+  if (classification === "component" || classification === "library" || classification === "script") return "internal";
+  if (classification === "migration" || classification === "database_helper") return "internal";
+  if (classification === "layout" || classification === "supporting_route") {
+    return file.toLowerCase().includes("/app/admin/") ? "admin" : "public";
+  }
   if (classification === "provider_webhook") return "provider_webhook";
   if (classification === "tenant_scoped_admin_api") return "tenant_admin";
   if (classification === "tenant_scoped_api") return "authenticated";
   if (classification === "admin_page" || riskTags.includes("admin")) return "admin";
   if (classification === "service_role_helper" || riskTags.includes("service-role")) return "service_role";
-  if (classification === "public_page" || classification === "public_api") return "public";
+  if (classification === "restaurant_public_page" || classification === "public_page" || classification === "public_api") return "public";
   if (classification === "protected_page" || classification === "protected_api") return "authenticated";
   if (/internal|cron/i.test(`${file}\n${content}`)) return "internal";
   if (riskTags.includes("external-service")) return "external";
@@ -551,7 +669,7 @@ function routeMetadata(file, type, content) {
   const metadata = {};
 
   if (route) metadata.route = route;
-  if (type === "page_route" || type === "api_route" || type === "webhook_route") {
+  if (type === "page_route" || type === "api_route" || type === "webhook_route" || type === "supporting_route") {
     metadata.framework = "nextjs";
   }
   if (methods.length) metadata.methods = methods;
@@ -565,15 +683,16 @@ function routeMetadata(file, type, content) {
 function buildFolderNode(folder) {
   const nodeId = makeNodeId("node_folder", folder);
   const name = folder === "." ? "." : path.posix.basename(folder);
+  const classification = "folder";
 
   return {
     node_id: nodeId,
     type: "folder",
     name,
     path: folder,
-    classification: "unknown",
-    trust_boundary: "unknown",
-    access_level: "unknown",
+    classification,
+    trust_boundary: "internal",
+    access_level: "internal_only",
     risk_tags: [],
     review_packs: [],
     external_services: [],
@@ -738,7 +857,7 @@ function buildServiceNodes(externalServices) {
     type: "external_service",
     name: service.provider,
     path: null,
-    classification: "unknown",
+    classification: "external_service",
     trust_boundary: "external",
     access_level: "external_service",
     risk_tags: service.risk_tags,
