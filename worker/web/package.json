@@ -9,6 +9,7 @@
     "integrity:review": "node ../../scripts/dev-integrity-review.mjs",
     "integrity:review:evidence": "node ../../scripts/dev-integrity-review.mjs --write-evidence",
     "integrity:review:staged": "node ../../scripts/dev-integrity-review.mjs --staged",
+    "integrity:dashboard": "node ../../tools/dev-integrity-dashboard/server.mjs",
     "start": "next start",
     "lint": "eslint",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",

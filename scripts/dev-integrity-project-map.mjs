@@ -385,6 +385,10 @@ function isDocumentationFile(file) {
   );
 }
 
+function isDevIntegrityDashboardTool(file) {
+  return /^tools\/dev-integrity-dashboard\//i.test(file);
+}
+
 function isStaticAsset(file) {
   return (
     /^worker\/web\/public\//.test(file) ||
@@ -445,6 +449,7 @@ function shouldUseContentForServiceDetection(file) {
   const extension = path.posix.extname(file).toLowerCase();
   const baseName = path.posix.basename(file);
 
+  if (isDevIntegrityDashboardTool(file)) return false;
   if (isDocumentationFile(file) || isStaticAsset(file)) return false;
   if ([".md", ".txt"].includes(extension)) return false;
   if (baseName === ".gitignore") return false;
@@ -468,8 +473,13 @@ function detectRiskTags(file, content, envVars, services) {
   const lowerPath = file.toLowerCase();
   const isDocumentation = isDocumentationFile(file);
   const isStatic = isStaticAsset(file);
+  const isDashboardTool = isDevIntegrityDashboardTool(file);
   const isRuntimeRiskExcluded = isDocumentation || isStatic;
   const riskContent = isRuntimeRiskExcluded ? "" : content;
+
+  if (isDashboardTool) {
+    return [];
+  }
 
   if (isDocumentation) {
     if (/^docs\/agents\/inventories\//i.test(file)) {
@@ -525,6 +535,11 @@ function detectType(file) {
   if (isNextApiRoute(file)) return "api_route";
   if (isNextPageRoute(file)) return "page_route";
   if (isSupportingRouteFile(file) || isLayoutRouteFile(file)) return "supporting_route";
+  if (isDevIntegrityDashboardTool(file)) {
+    if (/README\.md$/i.test(file)) return "documentation";
+    if (/\.(html|css)$/i.test(file)) return "static_asset";
+    return "script";
+  }
   if (isDocumentationFile(file)) return "documentation";
   if (isStaticAsset(file)) return "static_asset";
   if (isTestFile(file)) return "test_file";

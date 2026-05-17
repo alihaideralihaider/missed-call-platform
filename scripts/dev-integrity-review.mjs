@@ -726,11 +726,13 @@ function architectureReasonForContext(context) {
 function isDevIntegrityToolingOrDocs(file) {
   return (
     /^scripts\/dev-integrity-/i.test(file) ||
+    /^tools\/dev-integrity-dashboard\//i.test(file) ||
     /^docs\/products\//i.test(file) ||
     /^docs\/agents\//i.test(file) ||
     /^docs\/reviews\//i.test(file) ||
     file === "docs/architecture/project-map.json" ||
     file === "docs/architecture/project-map-summary.md" ||
+    file === "worker/web/package.json" ||
     file === "authtoolkit.integrity.json"
   );
 }

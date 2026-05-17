@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AuthToolkit Dev Integrity Control Room</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <div class="badge">Local prototype</div>
+        <h1>AuthToolkit Dev Integrity Control Room</h1>
+        <p class="hero-line">Map the system first. Ship with confidence.</p>
+        <p class="hero-subline">Before you trust AI-written code, understand the system it created.</p>
+      </div>
+      <p class="privacy-note">
+        This dashboard reads local generated artifacts only. It does not upload code, diffs, secrets,
+        env values, customer data, payment data, or logs.
+      </p>
+    </header>
+
+    <main>
+      <section id="missing-data" class="notice hidden">
+        Run <code>npm run integrity:map</code> and <code>npm run integrity:review</code> first.
+      </section>
+
+      <section id="tiles" class="tiles" aria-label="Control room summary tiles"></section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Executive Commentary</h2>
+        </div>
+        <ul id="executive-commentary" class="commentary"></ul>
+      </section>
+
+      <section class="grid two">
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>Architecture Control Room</h2>
+          </div>
+          <div id="architecture-room" class="metric-grid"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>Vault Control Room</h2>
+          </div>
+          <div id="vault-room" class="metric-grid"></div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Dev Control Room</h2>
+        </div>
+        <div id="dev-room" class="metric-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Risk Tables</h2>
+        </div>
+        <div id="risk-tables" class="risk-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Architecture Map Preview</h2>
+          <span class="muted">First 50 nodes</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Type</th>
+                <th>Classification</th>
+                <th>Trust Boundary</th>
+                <th>Risk Tags</th>
+                <th>Confidence</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="node-preview"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/dashboard.js"></script>
+  </body>
+</html>
