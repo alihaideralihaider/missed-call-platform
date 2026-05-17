@@ -6,7 +6,7 @@
     <title>AuthToolkit Dev Integrity Control Room</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
-  <body>
+  <body data-view="builder">
     <header class="hero">
       <div>
         <div class="badge">Local prototype</div>
@@ -25,68 +25,168 @@
         Run <code>npm run integrity:map</code> and <code>npm run integrity:review</code> first.
       </section>
 
-      <section id="tiles" class="tiles" aria-label="Control room summary tiles"></section>
-
-      <section class="panel">
-        <div class="panel-heading">
-          <h2>Executive Commentary</h2>
-        </div>
-        <ul id="executive-commentary" class="commentary"></ul>
+      <section class="view-switcher" aria-label="Dashboard view mode">
+        <button class="view-option" type="button" data-view-option="simple">
+          <span>Simple View</span>
+          <small>Plain-English confidence, blockers, and next actions.</small>
+        </button>
+        <button class="view-option active" type="button" data-view-option="builder">
+          <span>Builder View</span>
+          <small>Operational detail for builders, agencies, and technical founders.</small>
+        </button>
+        <button class="view-option" type="button" data-view-option="developer">
+          <span>Developer View</span>
+          <small>Full routes, trust boundaries, risk tags, histories, and review data.</small>
+        </button>
       </section>
 
-      <section class="grid two">
-        <article class="panel">
+      <nav class="tabs" aria-label="Control rooms">
+        <button class="tab active" type="button" data-tab="overview">Overview</button>
+        <button class="tab" type="button" data-tab="dev">Dev Control Room</button>
+        <button class="tab" type="button" data-tab="architecture">Architecture Control Room</button>
+        <button class="tab" type="button" data-tab="vault">Vault Control Room</button>
+      </nav>
+
+      <section id="tab-overview" class="tab-panel active">
+        <section id="overview-tiles" class="tiles" aria-label="Control room summary tiles"></section>
+
+        <section class="panel">
           <div class="panel-heading">
-            <h2>Architecture Control Room</h2>
+            <h2>Executive Commentary</h2>
           </div>
-          <div id="architecture-room" class="metric-grid"></div>
-        </article>
+          <ul id="executive-commentary" class="commentary"></ul>
+        </section>
 
-        <article class="panel">
+        <section id="simple-status" class="grid two simple-only"></section>
+
+        <section class="panel simple-only">
           <div class="panel-heading">
-            <h2>Vault Control Room</h2>
+            <h2>Top 3 Risks</h2>
           </div>
-          <div id="vault-room" class="metric-grid"></div>
-        </article>
+          <div id="simple-risks" class="risk-grid"></div>
+        </section>
+
+        <section class="panel simple-only">
+          <div class="panel-heading">
+            <h2>Suggested Next Actions</h2>
+          </div>
+          <div id="simple-actions" class="action-row"></div>
+        </section>
+
+        <section class="panel builder-developer-only">
+          <div class="panel-heading">
+            <h2>Biggest Blockers / Unknowns</h2>
+          </div>
+          <div id="overview-blockers" class="risk-grid"></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <div class="panel-heading">
-          <h2>Dev Control Room</h2>
-        </div>
-        <div id="dev-room" class="metric-grid"></div>
+      <section id="tab-dev" class="tab-panel">
+        <section id="dev-tiles" class="tiles compact" aria-label="Dev control room metrics"></section>
+
+        <section class="panel developer-only">
+          <div class="panel-heading">
+            <h2>Review History</h2>
+            <span class="muted">Latest entries</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Commit</th>
+                  <th>Confidence</th>
+                  <th>Trend</th>
+                  <th>Skills</th>
+                  <th>Findings</th>
+                  <th>Changed Files</th>
+                  <th>Exit</th>
+                </tr>
+              </thead>
+              <tbody id="review-history-table"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
-      <section class="panel">
-        <div class="panel-heading">
-          <h2>Risk Tables</h2>
-        </div>
-        <div id="risk-tables" class="risk-grid"></div>
+      <section id="tab-architecture" class="tab-panel">
+        <section id="architecture-tiles" class="tiles compact" aria-label="Architecture control room metrics"></section>
+
+        <section class="grid two">
+          <article class="panel developer-only">
+            <div class="panel-heading">
+              <h2>Architecture Map Preview</h2>
+              <span class="muted">First 50 nodes</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Path</th>
+                    <th>Type</th>
+                    <th>Classification</th>
+                    <th>Trust Boundary</th>
+                    <th>Risk Tags</th>
+                    <th>Confidence</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="node-preview"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-heading">
+              <h2>High-Risk Nodes</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Path</th>
+                    <th>Classification</th>
+                    <th>Boundary</th>
+                    <th>Risk Tags</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="high-risk-node-table"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel developer-only">
+          <div class="panel-heading">
+            <h2>Unknowns</h2>
+          </div>
+          <div id="architecture-unknowns" class="risk-grid"></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <div class="panel-heading">
-          <h2>Architecture Map Preview</h2>
-          <span class="muted">First 50 nodes</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Path</th>
-                <th>Type</th>
-                <th>Classification</th>
-                <th>Trust Boundary</th>
-                <th>Risk Tags</th>
-                <th>Confidence</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="node-preview"></tbody>
-          </table>
-        </div>
+      <section id="tab-vault" class="tab-panel">
+        <section id="vault-tiles" class="tiles compact" aria-label="Vault control room metrics"></section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>Vault Gaps</h2>
+          </div>
+          <div id="vault-risk-tables" class="risk-grid"></div>
+        </section>
       </section>
     </main>
+
+    <aside id="detail-drawer" class="drawer" aria-hidden="true">
+      <div class="drawer-header">
+        <div>
+          <div id="drawer-status" class="drawer-status gray">No selection</div>
+          <h2 id="drawer-title">Detail</h2>
+        </div>
+        <button id="drawer-close" class="drawer-close" type="button" aria-label="Close detail drawer">Close</button>
+      </div>
+      <div id="drawer-body" class="drawer-body"></div>
+    </aside>
 
     <script src="/dashboard.js"></script>
   </body>
