@@ -188,7 +188,11 @@ Hero metrics:
   "critical_high_blockers": 0,
   "runs_needing_approval": 1,
   "ready_to_ship": true,
-  "confidence_delta": 46
+  "confidence_delta": 46,
+  "executive_commentary": [
+    "The latest Dev Integrity run has no Critical or High blockers.",
+    "Vault inventory covers all env vars currently detected in code."
+  ]
 }
 ```
 
@@ -213,6 +217,9 @@ Grid row:
     "delta": 46
   },
   "final_decision": "approved_after_review",
+  "executive_commentary": [
+    "High-risk files changed, but required review packs passed after fix."
+  ],
   "evidence_url": "docs/reviews/example.md"
 }
 ```
@@ -232,7 +239,11 @@ Hero metrics:
     "low": 5
   },
   "release_readiness": "blocked",
-  "open_alerts": 2
+  "open_alerts": 2,
+  "executive_commentary": [
+    "Production remains blocked because one exposure warning still needs review.",
+    "Runtime proof is still needed for tenant or sensitive boundary verification."
+  ]
 }
 ```
 
@@ -250,6 +261,9 @@ Grid row:
   "webhooks": "passed",
   "admin_routes": "passed",
   "exposure_score": 92,
+  "executive_commentary": [
+    "Public APIs are mapped, but session and cookie findings still need review."
+  ],
   "production_release": "blocked"
 }
 ```
@@ -288,6 +302,9 @@ Payload:
     }
   ],
   "remaining_risk": "Live two-tenant runtime proof still needed before production deploy.",
+  "executive_commentary": [
+    "This finding touches tenant authorization and should stay linked to runtime proof evidence."
+  ],
   "next_action": "Run runtime two-tenant proof."
 }
 ```

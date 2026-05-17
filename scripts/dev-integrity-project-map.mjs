@@ -1607,6 +1607,41 @@ function buildSuggestedChecks(projectMap) {
   return checks;
 }
 
+function buildExecutiveCommentary(projectMap) {
+  const lines = [];
+  const unknownTypes = new Set(projectMap.unknowns.map((unknown) => unknown.type));
+
+  if (projectMap.summary.unclassified_nodes_count === 0) {
+    lines.push("The project file map is fully classified; no unclassified nodes remain.");
+  } else {
+    lines.push("Some project files remain unclassified and should be reviewed before relying on the map for routing.");
+  }
+
+  if (projectMap.summary.architecture_confidence < 70) {
+    lines.push("Architecture confidence remains below 70 because runtime proof, webhook trust, auth boundary, or file-upload unknowns still need review.");
+  } else if (projectMap.architecture_history?.trend === "improved") {
+    lines.push("Architecture confidence improved compared with the previous scan.");
+  }
+
+  if (projectMap.summary.high_risk_nodes_count > 0) {
+    lines.push("High-risk nodes remain in the map and should be reviewed before production-sensitive changes.");
+  }
+
+  if (projectMap.vault_audit?.used_not_in_inventory?.length === 0) {
+    lines.push("Vault inventory covers all env vars currently detected in code.");
+  }
+
+  if (projectMap.vault_audit?.history?.trend === "improved") {
+    lines.push("Vault score improved compared with the previous scan.");
+  }
+
+  if (unknownTypes.has("runtime_proof_missing")) {
+    lines.push("Runtime proof is still needed for tenant or sensitive boundary verification.");
+  }
+
+  return lines.slice(0, 3);
+}
+
 function buildMarkdownSummary(projectMap) {
   const lines = [];
   const routeNodes = projectMap.nodes.filter((node) =>
@@ -1657,6 +1692,16 @@ function buildMarkdownSummary(projectMap) {
   };
 
   lines.push("# Architecture Project Map Summary", "");
+  lines.push("## Executive Commentary", "");
+  if (projectMap.executive_commentary?.length) {
+    for (const line of projectMap.executive_commentary) {
+      lines.push(`- ${line}`);
+    }
+  } else {
+    lines.push("- No executive commentary generated for this scan.");
+  }
+  lines.push("");
+
   lines.push("## Project", "");
   lines.push(`- Project: ${projectMap.project}`);
   lines.push(`- Stack: ${projectMap.stack}`);
@@ -1922,6 +1967,7 @@ function main() {
     projectMap.unknowns.length
   );
   projectMap.architecture_history = architectureHistoryContext.history;
+  projectMap.executive_commentary = buildExecutiveCommentary(projectMap);
 
   mkdirSync(path.dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(projectMap, null, 2)}\n`);

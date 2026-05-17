@@ -27,6 +27,7 @@ Example:
   "commit_sha": "abc123",
   "created_at": "2026-05-16T00:00:00Z",
   "summary": {},
+  "executive_commentary": [],
   "nodes": [],
   "edges": [],
   "flows": [],
@@ -35,6 +36,28 @@ Example:
   "risk_summary": {},
   "unknowns": []
 }
+```
+
+## Executive Commentary
+
+`executive_commentary` is a short list of plain-English summary lines generated from structured project-map data.
+
+Rules:
+
+- Generate commentary from counts, trends, risk summaries, vault audit results, and unknown types.
+- Do not invent facts manually.
+- Do not include secrets, raw env values, customer records, logs, or raw source snippets.
+- Limit the list to 1-3 lines for dashboard hero use.
+- Use commentary to explain the current map state, not to replace evidence.
+
+Example:
+
+```json
+[
+  "The project file map is fully classified; no unclassified nodes remain.",
+  "Architecture confidence remains below 70 because runtime proof, webhook trust, auth boundary, or file-upload unknowns still need review.",
+  "Vault inventory covers all env vars currently detected in code."
+]
 ```
 
 ## Project Summary
