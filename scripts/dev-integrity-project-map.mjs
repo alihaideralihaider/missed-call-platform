@@ -17,6 +17,8 @@ const outputPath = path.join(repoRoot, "docs", "architecture", "project-map.json
 const summaryOutputPath = path.join(repoRoot, "docs", "architecture", "project-map-summary.md");
 const vaultScoreHistoryRelativePath = "docs/architecture/vault-score-history.json";
 const vaultScoreHistoryPath = path.join(repoRoot, vaultScoreHistoryRelativePath);
+const architectureConfidenceHistoryRelativePath = "docs/architecture/architecture-confidence-history.json";
+const architectureConfidenceHistoryPath = path.join(repoRoot, architectureConfidenceHistoryRelativePath);
 const secretInventoryRelativePath = "docs/agents/inventories/saanaos-secret-inventory.md";
 const secretInventoryPath = path.join(repoRoot, secretInventoryRelativePath);
 const schemaVersion = "0.1";
@@ -38,6 +40,7 @@ const ignoredExactFiles = new Set([
   "project-map.json",
   "project-map-summary.md",
   "vault-score-history.json",
+  "architecture-confidence-history.json",
 ]);
 const ignoredPrefixes = ["docs/reviews/"];
 const binaryExtensions = new Set([
@@ -1284,6 +1287,103 @@ function updateVaultScoreHistory(vaultAudit, project, commitSha, timestamp) {
   };
 }
 
+function sameArchitectureHistoryState(entry, nextEntry) {
+  return (
+    entry?.commit_sha === nextEntry.commit_sha &&
+    entry?.architecture_confidence === nextEntry.architecture_confidence &&
+    entry?.total_files === nextEntry.total_files &&
+    entry?.routes_count === nextEntry.routes_count &&
+    entry?.api_routes_count === nextEntry.api_routes_count &&
+    entry?.high_risk_nodes_count === nextEntry.high_risk_nodes_count &&
+    entry?.unknowns_count === nextEntry.unknowns_count &&
+    entry?.unclassified_nodes_count === nextEntry.unclassified_nodes_count
+  );
+}
+
+function confidenceTrend(confidenceDelta) {
+  if (!Number.isFinite(confidenceDelta)) return "unknown";
+  if (confidenceDelta > 0) return "improved";
+  if (confidenceDelta < 0) return "declined";
+  return "unchanged";
+}
+
+function loadArchitectureConfidenceHistory() {
+  const stat = statSync(architectureConfidenceHistoryPath, { throwIfNoEntry: false });
+
+  if (!stat?.isFile()) {
+    return {
+      history: [],
+      warning: null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(architectureConfidenceHistoryPath, "utf8"));
+    return {
+      history: Array.isArray(parsed) ? parsed : [],
+      warning: Array.isArray(parsed)
+        ? null
+        : "Warning: architecture confidence history was not an array; starting a new history.",
+    };
+  } catch (error) {
+    return {
+      history: [],
+      warning: `Warning: failed to read ${architectureConfidenceHistoryRelativePath}; starting a new history.`,
+    };
+  }
+}
+
+function updateArchitectureConfidenceHistory(summary, project, commitSha, timestamp, unknownsCount) {
+  const { history, warning } = loadArchitectureConfidenceHistory();
+  const nextEntry = {
+    timestamp,
+    commit_sha: commitSha,
+    project,
+    architecture_confidence: summary.architecture_confidence,
+    total_files: summary.total_files,
+    routes_count: summary.routes_count,
+    api_routes_count: summary.api_routes_count,
+    webhook_routes_count: summary.webhook_routes_count,
+    external_services_count: summary.external_services_count,
+    env_vars_count: summary.env_vars_count,
+    high_risk_nodes_count: summary.high_risk_nodes_count,
+    unknowns_count: unknownsCount,
+    unclassified_nodes_count: summary.unclassified_nodes_count,
+    service_role_paths_count: summary.service_role_paths_count,
+    tenant_scoped_routes_count: summary.tenant_scoped_routes_count,
+  };
+  const latestEntry = history[history.length - 1] || null;
+  const duplicate = sameArchitectureHistoryState(latestEntry, nextEntry);
+  const previousEntry = duplicate
+    ? history[history.length - 2] || null
+    : latestEntry;
+  const nextHistory = duplicate ? history : [...history, nextEntry].slice(-100);
+  const previousConfidence = Number.isFinite(previousEntry?.architecture_confidence)
+    ? previousEntry.architecture_confidence
+    : null;
+  const confidenceDelta =
+    previousConfidence === null
+      ? null
+      : summary.architecture_confidence - previousConfidence;
+
+  mkdirSync(path.dirname(architectureConfidenceHistoryPath), { recursive: true });
+  if (!duplicate) {
+    writeFileSync(architectureConfidenceHistoryPath, `${JSON.stringify(nextHistory, null, 2)}\n`);
+  }
+
+  return {
+    warning,
+    unchanged: duplicate,
+    history: {
+      history_path: architectureConfidenceHistoryRelativePath,
+      entries_count: nextHistory.length,
+      previous_confidence: previousConfidence,
+      confidence_delta: confidenceDelta,
+      trend: confidenceTrend(confidenceDelta),
+    },
+  };
+}
+
 function calculateArchitectureConfidence(riskContext) {
   let confidence = 100;
   confidence -= Math.min(riskContext.unclassifiedRoutesCount * 5, 20);
@@ -1467,6 +1567,17 @@ function buildMarkdownSummary(projectMap) {
     lines.push("  - none");
   }
   lines.push("");
+
+  lines.push("## Architecture Confidence Trend", "");
+  lines.push(`- History path: ${projectMap.architecture_history?.history_path || architectureConfidenceHistoryRelativePath}`);
+  lines.push(`- Entries count: ${projectMap.architecture_history?.entries_count ?? 0}`);
+  lines.push(`- Current Architecture Confidence: ${projectMap.summary.architecture_confidence}`);
+  lines.push(`- Previous Architecture Confidence: ${projectMap.architecture_history?.previous_confidence ?? "n/a"}`);
+  lines.push(`- Confidence delta: ${projectMap.architecture_history?.confidence_delta ?? "n/a"}`);
+  lines.push(`- Trend: ${projectMap.architecture_history?.trend || "unknown"}`);
+  lines.push(`- High-risk nodes count: ${projectMap.summary.high_risk_nodes_count}`);
+  lines.push(`- Unknowns count: ${projectMap.unknowns.length}`);
+  lines.push(`- Unclassified nodes count: ${projectMap.summary.unclassified_nodes_count}`, "");
 
   lines.push("## High-Risk Nodes", "");
   if (highRiskNodes.length) {
@@ -1684,6 +1795,14 @@ function main() {
     risk_summary: riskContext.riskSummary,
     unknowns: [...riskContext.unknowns, ...vaultAuditContext.unknowns],
   };
+  const architectureHistoryContext = updateArchitectureConfidenceHistory(
+    summary,
+    project,
+    commitSha,
+    createdAt,
+    projectMap.unknowns.length
+  );
+  projectMap.architecture_history = architectureHistoryContext.history;
 
   mkdirSync(path.dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(projectMap, null, 2)}\n`);
@@ -1707,6 +1826,12 @@ function main() {
   if (vaultHistoryContext.unchanged) {
     console.log("Vault history unchanged for this commit/state.");
   }
+  if (architectureHistoryContext.warning) {
+    console.log(architectureHistoryContext.warning);
+  }
+  if (architectureHistoryContext.unchanged) {
+    console.log("Architecture confidence history unchanged for this commit/state.");
+  }
   console.log(`Vault score: ${projectMap.vault_audit.vault_score}`);
   console.log(`Previous Vault score: ${projectMap.vault_audit.history.previous_score ?? "n/a"}`);
   console.log(`Vault score delta: ${projectMap.vault_audit.history.score_delta ?? "n/a"}`);
@@ -1717,6 +1842,10 @@ function main() {
   console.log(`High-risk nodes: ${summary.high_risk_nodes_count}`);
   console.log(`Unknowns: ${projectMap.unknowns.length}`);
   console.log(`Architecture confidence: ${summary.architecture_confidence}`);
+  console.log(`Previous Architecture confidence: ${projectMap.architecture_history.previous_confidence ?? "n/a"}`);
+  console.log(`Architecture confidence delta: ${projectMap.architecture_history.confidence_delta ?? "n/a"}`);
+  console.log(`Architecture trend: ${projectMap.architecture_history.trend}`);
+  console.log(`Architecture history path: ${projectMap.architecture_history.history_path}`);
   console.log(`JSON output: ${relativeOutputPath}`);
   console.log(`Summary output: ${relativeSummaryOutputPath}`);
 }
