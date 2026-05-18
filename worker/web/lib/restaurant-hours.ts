@@ -79,6 +79,15 @@ const WEEKDAY_INDEX_BY_SHORT_LABEL: Record<string, number> = {
   Sat: 6,
 };
 
+export function getDemoRestaurantPickupHours(): RestaurantHourRow[] {
+  return Array.from({ length: 7 }, (_, dayOfWeek) => ({
+    day_of_week: dayOfWeek,
+    open_time: "00:00:00",
+    close_time: "23:59:00",
+    is_closed: false,
+  }));
+}
+
 function getSafeTimeZone(timeZone?: string | null): string {
   const candidate = String(timeZone || "").trim();
 

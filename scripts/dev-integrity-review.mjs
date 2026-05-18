@@ -801,6 +801,29 @@ function createFinding({
   };
 }
 
+function isAllowedPublicClientEnvName(name) {
+  return [
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+  ].includes(name);
+}
+
+function extractNextPublicEnvNames(line) {
+  return line.match(/\bNEXT_PUBLIC_[A-Z0-9_]+\b/g) || [];
+}
+
+function isSecretLikePublicEnvName(name) {
+  if (isAllowedPublicClientEnvName(name)) {
+    return false;
+  }
+
+  return (
+    /(?:SERVICE_ROLE|SECRET|TOKEN|PASSWORD|PRIVATE|WEBHOOK|AUTH_TOKEN)/.test(name) ||
+    /(?:STRIPE_SECRET|STRIPE_WEBHOOK|OPENAI|RESEND|TWILIO_AUTH|API_KEY)/.test(name)
+  );
+}
+
 function runSecurityRunner(files, diffAddedLines) {
   const findings = [];
 
@@ -831,19 +854,21 @@ function runSecurityRunner(files, diffAddedLines) {
         );
       }
 
-      if (/NEXT_PUBLIC_[A-Z0-9_]*(SECRET|TOKEN|KEY|PASSWORD|PRIVATE)/.test(line)) {
-        findings.push(
-          createFinding({
-            runner: "security",
-            severity: "Critical",
-            file,
-            line: diffLine.line,
-            scope,
-            message: "NEXT_PUBLIC variable name appears secret-like.",
-            suggestedAction:
-              "Move secret-like values to server-only environment variables and keep them out of client bundles.",
-          })
-        );
+      for (const envName of extractNextPublicEnvNames(line)) {
+        if (isSecretLikePublicEnvName(envName)) {
+          findings.push(
+            createFinding({
+              runner: "security",
+              severity: "Critical",
+              file,
+              line: diffLine.line,
+              scope,
+              message: `${envName} appears to expose a secret-like value to the client bundle.`,
+              suggestedAction:
+                "Move true secrets to server-only environment variables. Public client keys must be explicitly safe by provider design.",
+            })
+          );
+        }
       }
 
       if (
@@ -1162,6 +1187,57 @@ function runBrowserQaRunner(files) {
   );
 }
 
+function runCheckoutScheduleAvailabilityCanary(files) {
+  const changedCheckoutSchedule = files.some((file) =>
+    /(app\/r\/\[slug\]\/checkout\/page\.tsx|lib\/restaurant-hours|checkout-schedule-availability-canary)/i.test(file)
+  );
+
+  if (!changedCheckoutSchedule) {
+    return [];
+  }
+
+  try {
+    execFileSync(
+      "node",
+      ["--experimental-strip-types", "lib/checkout-schedule-availability-canary.mjs"],
+      {
+        cwd: path.join(repoRoot, "worker/web"),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    );
+
+    return [
+      createFinding({
+        runner: "checkout-schedule-availability-canary",
+        severity: "Low",
+        file: "worker/web/lib/checkout-schedule-availability-canary.mjs",
+        scope: "file-level",
+        message:
+          "Demo Restaurant checkout schedule availability canary passed.",
+        suggestedAction:
+          "Keep this canary passing before release when checkout scheduling changes.",
+      }),
+    ];
+  } catch (error) {
+    const stderr = error?.stderr ? String(error.stderr).trim() : "";
+    const stdout = error?.stdout ? String(error.stdout).trim() : "";
+
+    return [
+      createFinding({
+        runner: "checkout-schedule-availability-canary",
+        severity: "High",
+        file: "worker/web/lib/checkout-schedule-availability-canary.mjs",
+        scope: "file-level",
+        message:
+          "Demo Restaurant produced zero future pickup slots or failed schedule availability checks.",
+        suggestedAction:
+          `Fix checkout schedule generation before release. Canary output: ${stdout || stderr || "no output"}`,
+      }),
+    ];
+  }
+}
+
 function runDeterministicRunners(selectedSkills, changedFiles, diffAddedLines) {
   const findings = [];
 
@@ -1180,6 +1256,8 @@ function runDeterministicRunners(selectedSkills, changedFiles, diffAddedLines) {
   if (hasSkill(selectedSkills, "saana-browser-qa")) {
     findings.push(...runBrowserQaRunner(changedFiles));
   }
+
+  findings.push(...runCheckoutScheduleAvailabilityCanary(changedFiles));
 
   return findings;
 }

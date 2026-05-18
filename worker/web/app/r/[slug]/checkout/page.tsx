@@ -13,6 +13,7 @@ import {
 } from "@/lib/cart";
 import {
   evaluateRestaurantHours,
+  getDemoRestaurantPickupHours,
   type PickupOption,
   type RestaurantHourRow,
 } from "@/lib/restaurant-hours";
@@ -75,6 +76,21 @@ function cartHasCateringItem(items: CartItem[]): boolean {
         .trim()
         .toLowerCase() === "catering"
   );
+}
+
+function getCheckoutRestaurantHours(
+  restaurantSlug: string,
+  hours: RestaurantHourRow[]
+): RestaurantHourRow[] {
+  if (hours.length > 0) {
+    return hours;
+  }
+
+  if (restaurantSlug === "demo-restaurant") {
+    return getDemoRestaurantPickupHours();
+  }
+
+  return [];
 }
 
 function evaluateStaticPromoCode(
@@ -292,7 +308,10 @@ export default function CheckoutPage({ params }: PageProps) {
           );
           setNow(new Date());
           setRestaurantHours(
-            hoursError ? [] : ((hoursData as RestaurantHourRow[] | null) || [])
+            getCheckoutRestaurantHours(
+              slug,
+              hoursError ? [] : ((hoursData as RestaurantHourRow[] | null) || [])
+            )
           );
         }
       } finally {
@@ -589,8 +608,6 @@ export default function CheckoutPage({ params }: PageProps) {
           modifiers: Array.isArray(item.modifiers) ? item.modifiers : [],
         })),
       };
-
-      console.log("CHECKOUT_PAYLOAD_ITEMS", payload.items);
 
       const res = await fetch("/api/orders", {
         method: "POST",
