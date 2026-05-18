@@ -1,5 +1,3 @@
-import { NextResponse } from "next/server";
-
 export const runtime = "edge";
 
 function readPublicSupabaseConfig() {
@@ -18,7 +16,7 @@ export async function GET() {
   const supabase = readPublicSupabaseConfig();
 
   if (!supabase.url || !supabase.anonKey) {
-    return NextResponse.json(
+    return Response.json(
       {
         error: "Public Supabase runtime config is unavailable.",
         supabase: {
@@ -35,7 +33,7 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json(
+  return Response.json(
     {
       supabase,
       exposure: {
