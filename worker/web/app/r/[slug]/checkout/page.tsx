@@ -22,6 +22,11 @@ type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
+type PublicSupabaseRuntimeConfig = {
+  url: string;
+  anonKey: string;
+};
+
 type AppliedPromo = {
   code: string;
   type: "percent" | "fixed" | "manual" | "source";
@@ -91,6 +96,39 @@ function getCheckoutRestaurantHours(
   }
 
   return [];
+}
+
+async function getPublicSupabaseRuntimeConfig(): Promise<PublicSupabaseRuntimeConfig> {
+  const buildTimeConfig = {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+  };
+
+  if (buildTimeConfig.url && buildTimeConfig.anonKey) {
+    return buildTimeConfig;
+  }
+
+  const res = await fetch("/api/public/runtime-config", {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Public Supabase runtime config is unavailable.");
+  }
+
+  const data = await res.json();
+  const runtimeConfig = {
+    url: String(data?.supabase?.url || "").trim(),
+    anonKey: String(data?.supabase?.anonKey || "").trim(),
+  };
+
+  if (!runtimeConfig.url || !runtimeConfig.anonKey) {
+    throw new Error("Public Supabase runtime config is incomplete.");
+  }
+
+  return runtimeConfig;
 }
 
 function evaluateStaticPromoCode(
@@ -260,10 +298,14 @@ export default function CheckoutPage({ params }: PageProps) {
       setLoadingPickupOptions(true);
 
       try {
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
+        if (slug === "demo-restaurant" && !cancelled) {
+          setRestaurantTimezone("America/New_York");
+          setRestaurantHours(getDemoRestaurantPickupHours());
+          setNow(new Date());
+        }
+
+        const supabaseConfig = await getPublicSupabaseRuntimeConfig();
+        const supabase = createClient(supabaseConfig.url, supabaseConfig.anonKey);
 
         const { data: restaurantData, error: restaurantError } = await supabase
           .schema("food_ordering")
@@ -275,7 +317,7 @@ export default function CheckoutPage({ params }: PageProps) {
         if (restaurantError || !restaurantData?.id) {
           if (!cancelled) {
             setRestaurantId(null);
-            setRestaurantHours([]);
+            setRestaurantHours(getCheckoutRestaurantHours(slug, []));
             setLoadingPickupOptions(false);
           }
           return;
@@ -313,6 +355,11 @@ export default function CheckoutPage({ params }: PageProps) {
               hoursError ? [] : ((hoursData as RestaurantHourRow[] | null) || [])
             )
           );
+        }
+      } catch {
+        if (!cancelled) {
+          setRestaurantId(null);
+          setRestaurantHours(getCheckoutRestaurantHours(slug, []));
         }
       } finally {
         if (!cancelled) {

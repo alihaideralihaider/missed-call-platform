@@ -323,8 +323,6 @@ export function getCartItems(): CartItem[] {
     }),
   }));
 
-  console.log("GET_CART_ITEMS", items);
-
   return items;
 }
 

@@ -10,6 +10,7 @@
     "integrity:review:evidence": "node ../../scripts/dev-integrity-review.mjs --write-evidence",
     "integrity:review:staged": "node ../../scripts/dev-integrity-review.mjs --staged",
     "integrity:checkout-schedule-availability-canary": "node --experimental-strip-types lib/checkout-schedule-availability-canary.mjs",
+    "integrity:production-runtime-config-canary": "node lib/production-runtime-config-canary.mjs",
     "test:restaurant-hours": "node --experimental-strip-types lib/restaurant-hours.test.mjs",
     "integrity:dashboard": "node ../../tools/dev-integrity-dashboard/server.mjs",
     "start": "next start",
